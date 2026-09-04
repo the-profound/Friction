@@ -1,5 +1,15 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, isNotNull, isNull, ne, notExists, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  isNotNull,
+  isNull,
+  ne,
+  notExists,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   db,
@@ -11,8 +21,16 @@ import {
   type ThoughtStatus,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
-import { CreateThoughtBody, UpdateThoughtBody, isMeaningfulThoughtMarkdown } from "@workspace/api-zod";
-import { generateDenseEmbedding, generateSparseEmbedding } from "../lib/embeddings";
+import {
+  CreateThoughtBody,
+  PromoteThoughtBody,
+  UpdateThoughtBody,
+  isMeaningfulThoughtMarkdown,
+} from "@workspace/api-zod";
+import {
+  generateDenseEmbedding,
+  generateSparseEmbedding,
+} from "../lib/embeddings";
 import { analyzeThoughtExpansion } from "../services/analyze-thought-expansion";
 import { generatePreliminaryThoughtQuestion } from "../services/generate-preliminary-thought-question";
 import { generateRandomPreliminaryThoughtQuestion } from "../services/generate-random-preliminary-thought-question";
@@ -37,10 +55,15 @@ const QUESTION_QUEUE_SOURCE_CANDIDATE_LIMIT = QUESTION_QUEUE_TARGET_SIZE * 3;
 type ThoughtRow = typeof thoughtsTable.$inferSelect;
 const questionSourceThought = alias(thoughtsTable, "question_source_thought");
 
-async function lockQuestionQueue(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], userId: string) {
+async function lockQuestionQueue(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
   // Queue mutations for one user must serialize. This prevents concurrent
   // display/refresh retries from creating two "next" questions.
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-question-queue:${userId}`}))`);
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-question-queue:${userId}`}))`,
+  );
 }
 
 async function getQueuedQuestions(
@@ -54,7 +77,10 @@ async function getQueuedQuestions(
       thought: thoughtsTable,
     })
     .from(thoughtQuestionQueueTable)
-    .innerJoin(thoughtsTable, eq(thoughtQuestionQueueTable.thoughtId, thoughtsTable.id))
+    .innerJoin(
+      thoughtsTable,
+      eq(thoughtQuestionQueueTable.thoughtId, thoughtsTable.id),
+    )
     .where(
       and(
         eq(thoughtQuestionQueueTable.userId, userId),
@@ -166,11 +192,17 @@ async function fillQuestionQueue(
             .from(thoughtQuestionSourcesTable)
             .innerJoin(
               questionSourceThought,
-              eq(thoughtQuestionSourcesTable.questionThoughtId, questionSourceThought.id),
+              eq(
+                thoughtQuestionSourcesTable.questionThoughtId,
+                questionSourceThought.id,
+              ),
             )
             .where(
               and(
-                eq(thoughtQuestionSourcesTable.sourceThoughtId, thoughtsTable.id),
+                eq(
+                  thoughtQuestionSourcesTable.sourceThoughtId,
+                  thoughtsTable.id,
+                ),
                 eq(questionSourceThought.authorId, userId),
               ),
             ),
@@ -186,9 +218,8 @@ async function fillQuestionQueue(
       !isQuestionThoughtMarkdown(candidate.content),
   );
 
-  const sourceGroups = Array.from(
-    { length: needed },
-    (_, index) => sourceCandidates.slice(index * 3, index * 3 + 3),
+  const sourceGroups = Array.from({ length: needed }, (_, index) =>
+    sourceCandidates.slice(index * 3, index * 3 + 3),
   ).filter((sources) => sources.length > 0);
 
   for (const selectedSources of sourceGroups) {
@@ -206,7 +237,10 @@ async function fillQuestionQueue(
       .insert(thoughtsTable)
       .values({
         authorId: userId,
-        content: formatPreliminaryQuestionMarkdown(generated.title, generated.description),
+        content: formatPreliminaryQuestionMarkdown(
+          generated.title,
+          generated.description,
+        ),
         createdFrom: "question",
         status: "PRELIMINARY",
       })
@@ -217,27 +251,42 @@ async function fillQuestionQueue(
         questionThoughtId: question.id,
         sourceThoughtId: source.id,
       })),
-      ...Array.from(new Set(selectedSources.map((source) => source.sourceArticleId).filter(Boolean))).map(
-        (sourceArticleId) => ({
-          questionThoughtId: question.id,
-          sourceArticleId: sourceArticleId!,
-        }),
-      ),
-      ...Array.from(new Set(selectedSources.map((source) => source.sourceStoredSentenceId).filter(Boolean))).map(
-        (sourceStoredSentenceId) => ({
-          questionThoughtId: question.id,
-          sourceStoredSentenceId: sourceStoredSentenceId!,
-        }),
-      ),
+      ...Array.from(
+        new Set(
+          selectedSources
+            .map((source) => source.sourceArticleId)
+            .filter(Boolean),
+        ),
+      ).map((sourceArticleId) => ({
+        questionThoughtId: question.id,
+        sourceArticleId: sourceArticleId!,
+      })),
+      ...Array.from(
+        new Set(
+          selectedSources
+            .map((source) => source.sourceStoredSentenceId)
+            .filter(Boolean),
+        ),
+      ).map((sourceStoredSentenceId) => ({
+        questionThoughtId: question.id,
+        sourceStoredSentenceId: sourceStoredSentenceId!,
+      })),
     ];
-    if (provenance.length > 0) await tx.insert(thoughtQuestionSourcesTable).values(provenance);
+    if (provenance.length > 0)
+      await tx.insert(thoughtQuestionSourcesTable).values(provenance);
 
     const lastPosition = queued.at(-1)?.position ?? -1;
     const [queueRow] = await tx
       .insert(thoughtQuestionQueueTable)
       .values({ userId, thoughtId: question.id, position: lastPosition + 1 })
-      .returning({ id: thoughtQuestionQueueTable.id, position: thoughtQuestionQueueTable.position });
-    queued = [...queued, { queueId: queueRow.id, position: queueRow.position, thought: question }];
+      .returning({
+        id: thoughtQuestionQueueTable.id,
+        position: thoughtQuestionQueueTable.position,
+      });
+    queued = [
+      ...queued,
+      { queueId: queueRow.id, position: queueRow.position, thought: question },
+    ];
   }
 
   // A user should still have a useful minimum backlog when there are not
@@ -250,14 +299,19 @@ async function fillQuestionQueue(
       .filter((title): title is string => Boolean(title)),
   );
   while (queued.length < QUESTION_QUEUE_MIN_SIZE) {
-    const generated = generateRandomPreliminaryThoughtQuestion(existingQuestionTitles);
+    const generated = generateRandomPreliminaryThoughtQuestion(
+      existingQuestionTitles,
+    );
     if (!generated) break;
 
     const [question] = await tx
       .insert(thoughtsTable)
       .values({
         authorId: userId,
-        content: formatPreliminaryQuestionMarkdown(generated.title, generated.description),
+        content: formatPreliminaryQuestionMarkdown(
+          generated.title,
+          generated.description,
+        ),
         createdFrom: "question",
         status: "PRELIMINARY",
       })
@@ -267,8 +321,14 @@ async function fillQuestionQueue(
     const [queueRow] = await tx
       .insert(thoughtQuestionQueueTable)
       .values({ userId, thoughtId: question.id, position: lastPosition + 1 })
-      .returning({ id: thoughtQuestionQueueTable.id, position: thoughtQuestionQueueTable.position });
-    queued = [...queued, { queueId: queueRow.id, position: queueRow.position, thought: question }];
+      .returning({
+        id: thoughtQuestionQueueTable.id,
+        position: thoughtQuestionQueueTable.position,
+      });
+    queued = [
+      ...queued,
+      { queueId: queueRow.id, position: queueRow.position, thought: question },
+    ];
     existingQuestionTitles.add(generated.title);
   }
 
@@ -318,7 +378,10 @@ export function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
     titleLines.push(lines[cursor]);
     cursor += 1;
   }
-  titleLines[titleLines.length - 1] = titleLines[titleLines.length - 1].replace(/[ \t]{2,}$/, "");
+  titleLines[titleLines.length - 1] = titleLines[titleLines.length - 1].replace(
+    /[ \t]{2,}$/,
+    "",
+  );
 
   const title = titleLines
     .map((line) => {
@@ -343,8 +406,9 @@ export function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
             ? String.fromCodePoint(value)
             : match;
         })
-        .replace(/\uE000(\d+)\uE001/g, (_match, index: string) =>
-          escapedCharacters[Number(index)] ?? "",
+        .replace(
+          /\uE000(\d+)\uE001/g,
+          (_match, index: string) => escapedCharacters[Number(index)] ?? "",
         );
     })
     .join("\n");
@@ -369,22 +433,107 @@ export function formatThoughtMarkdown(title: string, body: string): string {
         "\\$1",
       );
       return escaped.replace(/^\s+|\s+$/g, (whitespace) =>
-        [...whitespace].map((character) => `&#${character.codePointAt(0)};`).join(""),
+        [...whitespace]
+          .map((character) => `&#${character.codePointAt(0)};`)
+          .join(""),
       );
     })
     .join("  \n");
   return `# ${titleMarkdown}\n\n${normalizedBody}`;
 }
 
+type TransitionSnapshot = {
+  title: string;
+  content: string;
+  expectedUpdatedAt: Date;
+  requestId?: string;
+};
+
+export function validateTransitionSnapshot(data: {
+  title?: string;
+  content?: string;
+  expectedUpdatedAt?: string;
+}):
+  | { snapshot: TransitionSnapshot }
+  | { error: string; code: "INVALID_SNAPSHOT" }
+  | null {
+  const hasSnapshotField =
+    data.title !== undefined ||
+    data.content !== undefined ||
+    data.expectedUpdatedAt !== undefined;
+  if (!hasSnapshotField) return null;
+
+  if (
+    data.title === undefined ||
+    data.content === undefined ||
+    data.expectedUpdatedAt === undefined
+  ) {
+    return {
+      error: "title, content, and expectedUpdatedAt must be supplied together",
+      code: "INVALID_SNAPSHOT",
+    };
+  }
+  if (!data.title.trim()) {
+    return {
+      error: "Snapshot title must not be empty",
+      code: "INVALID_SNAPSHOT",
+    };
+  }
+  if (
+    data.title
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .some((line) => line.trim() === "")
+  ) {
+    return {
+      error: "Snapshot title cannot contain an empty line",
+      code: "INVALID_SNAPSHOT",
+    };
+  }
+  const expectedUpdatedAt = new Date(data.expectedUpdatedAt);
+  if (!Number.isFinite(expectedUpdatedAt.getTime())) {
+    return {
+      error: "expectedUpdatedAt must be a valid ISO timestamp",
+      code: "INVALID_SNAPSHOT",
+    };
+  }
+  if (
+    !data.content.trim() ||
+    !isMeaningfulThoughtMarkdown(data.content) ||
+    !isMeaningfulThoughtMarkdown(
+      formatThoughtMarkdown(data.title, data.content),
+    )
+  ) {
+    return {
+      error: "Snapshot content must include text or an image",
+      code: "INVALID_SNAPSHOT",
+    };
+  }
+
+  return {
+    snapshot: {
+      title: data.title,
+      content: data.content,
+      expectedUpdatedAt,
+    },
+  };
+}
+
 function getQuestionTitle(markdown: string | null): string | null {
-  const title = markdown?.split(/\r?\n/, 1)[0]?.trim().replace(/^#\s+Q\.\s*/i, "");
+  const title = markdown
+    ?.split(/\r?\n/, 1)[0]
+    ?.trim()
+    .replace(/^#\s+Q\.\s*/i, "");
   return title || null;
 }
 
 router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const { id } = req.params;
-  const limit = Math.max(1, Math.min(parseInt(String(req.query.limit ?? "15"), 10) || 15, 100));
+  const limit = Math.max(
+    1,
+    Math.min(parseInt(String(req.query.limit ?? "15"), 10) || 15, 100),
+  );
 
   const [source] = await db
     .select({
@@ -393,7 +542,13 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
       textEmbeddingDense: thoughtsTable.textEmbeddingDense,
     })
     .from(thoughtsTable)
-    .where(and(eq(thoughtsTable.id, id), eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)));
+    .where(
+      and(
+        eq(thoughtsTable.id, id),
+        eq(thoughtsTable.authorId, userId),
+        isNull(thoughtsTable.deletedAt),
+      ),
+    );
 
   if (!source) {
     res.status(404).json({ error: "Thought not found" });
@@ -427,7 +582,7 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
         isNull(thoughtsTable.deletedAt),
         ne(thoughtsTable.id, id),
         isNotNull(thoughtsTable.textEmbeddingDense),
-      )
+      ),
     )
     .orderBy(sql`text_embedding_dense <=> ${vectorLiteral}::vector`)
     .limit(limit);
@@ -438,7 +593,10 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
   }
 
   const nullAnalysis = { r: null, k: null, h: null };
-  let analysisMap: Record<string, { r: string | null; k: string[] | null; h: string[] | null }> = {};
+  let analysisMap: Record<
+    string,
+    { r: string | null; k: string[] | null; h: string[] | null }
+  > = {};
 
   if (source.content && process.env.OPENROUTER_API_KEY) {
     try {
@@ -456,7 +614,10 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
         }
       }
     } catch (err) {
-      req.log?.warn({ err }, "[thoughts/similar] AI analysis failed — returning null r/k/h");
+      req.log?.warn(
+        { err },
+        "[thoughts/similar] AI analysis failed — returning null r/k/h",
+      );
     }
   }
 
@@ -479,35 +640,40 @@ router.get("/thoughts/question-queue", requireAuth, async (req, res) => {
   res.json(snapshot);
 });
 
-router.post("/thoughts/question-queue/refresh", requireAuth, async (req, res) => {
-  const userId = req.user!.id;
-  const currentThoughtId = (req.body as Record<string, unknown> | undefined)?.currentThoughtId;
-  if (typeof currentThoughtId !== "string") {
-    res.status(400).json({ error: "currentThoughtId must be a UUID string" });
-    return;
-  }
-
-  const result = await db.transaction(async (tx) => {
-    await lockQuestionQueue(tx, userId);
-    const before = await normalizeQuestionQueue(tx, userId);
-    const current = before[0];
-    if (!current || current.thought.id !== currentThoughtId) {
-      return { ...(await queueSnapshot(tx, userId)), requeued: false };
+router.post(
+  "/thoughts/question-queue/refresh",
+  requireAuth,
+  async (req, res) => {
+    const userId = req.user!.id;
+    const currentThoughtId = (req.body as Record<string, unknown> | undefined)
+      ?.currentThoughtId;
+    if (typeof currentThoughtId !== "string") {
+      res.status(400).json({ error: "currentThoughtId must be a UUID string" });
+      return;
     }
 
-    await cleanupQuestionQueue(tx, userId);
-    const lastPosition = before.at(-1)?.position ?? current.position;
-    await tx
-      .update(thoughtQuestionQueueTable)
-      .set({ position: lastPosition + 1 })
-      .where(eq(thoughtQuestionQueueTable.id, current.queueId));
-    await compactQuestionQueue(tx, userId);
-    await fillQuestionQueue(tx, userId);
-    return { ...(await queueSnapshot(tx, userId)), requeued: true };
-  });
+    const result = await db.transaction(async (tx) => {
+      await lockQuestionQueue(tx, userId);
+      const before = await normalizeQuestionQueue(tx, userId);
+      const current = before[0];
+      if (!current || current.thought.id !== currentThoughtId) {
+        return { ...(await queueSnapshot(tx, userId)), requeued: false };
+      }
 
-  res.json(result);
-});
+      await cleanupQuestionQueue(tx, userId);
+      const lastPosition = before.at(-1)?.position ?? current.position;
+      await tx
+        .update(thoughtQuestionQueueTable)
+        .set({ position: lastPosition + 1 })
+        .where(eq(thoughtQuestionQueueTable.id, current.queueId));
+      await compactQuestionQueue(tx, userId);
+      await fillQuestionQueue(tx, userId);
+      return { ...(await queueSnapshot(tx, userId)), requeued: true };
+    });
+
+    res.json(result);
+  },
+);
 
 router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
   const userId = req.user!.id;
@@ -519,27 +685,49 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
     const [thought] = await tx
       .select()
       .from(thoughtsTable)
-      .where(and(eq(thoughtsTable.id, thoughtId), eq(thoughtsTable.authorId, userId), isNull(thoughtsTable.deletedAt)))
+      .where(
+        and(
+          eq(thoughtsTable.id, thoughtId),
+          eq(thoughtsTable.authorId, userId),
+          isNull(thoughtsTable.deletedAt),
+        ),
+      )
       .limit(1);
 
-    if (!thought) return { status: 404, body: { error: "Thought not found" } } as const;
+    if (!thought)
+      return { status: 404, body: { error: "Thought not found" } } as const;
 
     const [queued] = await tx
       .select({ id: thoughtQuestionQueueTable.id })
       .from(thoughtQuestionQueueTable)
-      .where(and(eq(thoughtQuestionQueueTable.userId, userId), eq(thoughtQuestionQueueTable.thoughtId, thoughtId)))
+      .where(
+        and(
+          eq(thoughtQuestionQueueTable.userId, userId),
+          eq(thoughtQuestionQueueTable.thoughtId, thoughtId),
+        ),
+      )
       .limit(1);
 
     // A network retry after a successful activation sees the same normal
     // thought and returns the queue snapshot without a second refill.
-    if (!queued && thought.status === "NORMAL" && thought.createdFrom === "question") {
+    if (
+      !queued &&
+      thought.status === "NORMAL" &&
+      thought.createdFrom === "question"
+    ) {
       return {
         status: 200,
-        body: { activatedThought: thought, ...(await queueSnapshot(tx, userId)) },
+        body: {
+          activatedThought: thought,
+          ...(await queueSnapshot(tx, userId)),
+        },
       } as const;
     }
     if (!queued || thought.status !== "PRELIMINARY") {
-      return { status: 409, body: { error: "Thought is not an active queued question" } } as const;
+      return {
+        status: 409,
+        body: { error: "Thought is not an active queued question" },
+      } as const;
     }
 
     const [activatedThought] = await tx
@@ -547,7 +735,9 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
       .set({ status: "NORMAL", updatedAt: new Date() })
       .where(eq(thoughtsTable.id, thought.id))
       .returning();
-    await tx.delete(thoughtQuestionQueueTable).where(eq(thoughtQuestionQueueTable.id, queued.id));
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(eq(thoughtQuestionQueueTable.id, queued.id));
     await compactQuestionQueue(tx, userId);
     await fillQuestionQueue(tx, userId);
 
@@ -562,7 +752,10 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
 
 router.get("/thoughts", requireAuth, async (req, res) => {
   const userId = req.user!.id;
-  const sourceArticleId = typeof req.query.sourceArticleId === "string" ? req.query.sourceArticleId : undefined;
+  const sourceArticleId =
+    typeof req.query.sourceArticleId === "string"
+      ? req.query.sourceArticleId
+      : undefined;
 
   const conditions = [
     eq(thoughtsTable.authorId, userId),
@@ -576,7 +769,9 @@ router.get("/thoughts", requireAuth, async (req, res) => {
         .from(thoughtPromotionsTable)
         .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtsTable.id)),
     ),
-    ...(sourceArticleId ? [eq(thoughtsTable.sourceArticleId, sourceArticleId)] : []),
+    ...(sourceArticleId
+      ? [eq(thoughtsTable.sourceArticleId, sourceArticleId)]
+      : []),
   ];
 
   const thoughts = await db
@@ -602,13 +797,24 @@ router.get("/thoughts", requireAuth, async (req, res) => {
 router.post("/thoughts", requireAuth, async (req, res) => {
   const parsed = CreateThoughtBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    res
+      .status(400)
+      .json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { clientId, content, createdFrom, sourceArticleId, sourceStoredSentenceId, status } = parsed.data;
+  const {
+    clientId,
+    content,
+    createdFrom,
+    sourceArticleId,
+    sourceStoredSentenceId,
+    status,
+  } = parsed.data;
   const authorId = req.user!.id;
   if (!isMeaningfulThoughtMarkdown(content)) {
-    res.status(400).json({ error: "Thought content must include text or an image" });
+    res
+      .status(400)
+      .json({ error: "Thought content must include text or an image" });
     return;
   }
 
@@ -622,30 +828,74 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     status: (status ?? "NORMAL") as ThoughtStatus,
   };
 
-  let [thought] = clientId
-    ? await db
+  let thought;
+  if (clientId) {
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${clientId}`}))`,
+      );
+      const [inserted] = await tx
         .insert(thoughtsTable)
         .values(insertValues)
         .onConflictDoNothing({ target: thoughtsTable.id })
-        .returning()
-    : await db.insert(thoughtsTable).values(insertValues).returning();
+        .returning();
+      if (inserted) return { status: 201, thought: inserted } as const;
 
-  if (!thought && clientId) {
-    const [ownedExisting] = await db
-      .select({ id: thoughtsTable.id })
-      .from(thoughtsTable)
-      .where(and(eq(thoughtsTable.id, clientId), eq(thoughtsTable.authorId, authorId)))
-      .limit(1);
-    if (!ownedExisting) {
-      res.status(409).json({ error: "Thought id is already in use" });
+      const [existing] = await tx
+        .select()
+        .from(thoughtsTable)
+        .where(eq(thoughtsTable.id, clientId))
+        .for("update");
+      if (!existing || existing.authorId !== authorId) {
+        return {
+          status: 409,
+          error: "Thought id is already in use",
+        } as const;
+      }
+
+      const [activePromotion] = await tx
+        .select({ id: thoughtPromotionsTable.id })
+        .from(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.fromThoughtId, clientId))
+        .limit(1);
+      if (
+        activePromotion ||
+        existing.deletedAt ||
+        existing.migratedFromArticleId
+      ) {
+        return {
+          status: 409,
+          error: "Thought can no longer accept a create retry",
+        } as const;
+      }
+
+      const [updated] = await tx
+        .update(thoughtsTable)
+        .set({ content, updatedAt: new Date() })
+        .where(
+          and(
+            eq(thoughtsTable.id, clientId),
+            eq(thoughtsTable.authorId, authorId),
+            isNull(thoughtsTable.deletedAt),
+          ),
+        )
+        .returning();
+      if (!updated) {
+        return {
+          status: 409,
+          error: "Thought changed before the create retry completed",
+        } as const;
+      }
+      return { status: 201, thought: updated } as const;
+    });
+
+    if ("error" in result) {
+      res.status(result.status).json({ error: result.error });
       return;
     }
-
-    [thought] = await db
-      .update(thoughtsTable)
-      .set({ content, updatedAt: new Date() })
-      .where(and(eq(thoughtsTable.id, clientId), eq(thoughtsTable.authorId, authorId)))
-      .returning();
+    thought = result.thought;
+  } else {
+    [thought] = await db.insert(thoughtsTable).values(insertValues).returning();
   }
 
   if (!thought) {
@@ -662,13 +912,20 @@ router.post("/thoughts", requireAuth, async (req, res) => {
             db
               .update(thoughtsTable)
               .set({ textEmbeddingDense: vector })
-              .where(eq(thoughtsTable.id, thought.id))
+              .where(eq(thoughtsTable.id, thought.id)),
           )
           .catch((err) => {
-            console.error("[embeddings/dense] Failed for thought", thought.id, err);
+            console.error(
+              "[embeddings/dense] Failed for thought",
+              thought.id,
+              err,
+            );
           })
       : Promise.resolve(
-          console.warn("[embeddings/dense] OPENROUTER_API_KEY not set — skipping for thought", thought.id)
+          console.warn(
+            "[embeddings/dense] OPENROUTER_API_KEY not set — skipping for thought",
+            thought.id,
+          ),
         );
 
     const sparseTask = (async () => {
@@ -679,7 +936,11 @@ router.post("/thoughts", requireAuth, async (req, res) => {
           .set({ textEmbeddingSparse: sparse })
           .where(eq(thoughtsTable.id, thought.id));
       } catch (err) {
-        console.error("[embeddings/sparse] Failed for thought", thought.id, err);
+        console.error(
+          "[embeddings/sparse] Failed for thought",
+          thought.id,
+          err,
+        );
       }
     })();
 
@@ -724,17 +985,23 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
   const parsed = UpdateThoughtBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    res
+      .status(400)
+      .json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
   const { content } = parsed.data;
   if (!isMeaningfulThoughtMarkdown(content)) {
-    res.status(400).json({ error: "Thought content must include text or an image" });
+    res
+      .status(400)
+      .json({ error: "Thought content must include text or an image" });
     return;
   }
 
   const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
+    );
     const [existing] = await tx
       .select({
         id: thoughtsTable.id,
@@ -745,7 +1012,8 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
       .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
       .for("update");
 
-    if (!existing) return { status: 404, body: { error: "Thought not found" } } as const;
+    if (!existing)
+      return { status: 404, body: { error: "Thought not found" } } as const;
     if (existing.authorId !== userId) {
       return { status: 403, body: { error: "Forbidden" } } as const;
     }
@@ -763,7 +1031,9 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
     if (activePromotion) {
       return {
         status: 409,
-        body: { error: "A promoted thought must be edited through its review article" },
+        body: {
+          error: "A promoted thought must be edited through its review article",
+        },
       } as const;
     }
 
@@ -776,7 +1046,10 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
           eq(thoughtsTable.authorId, userId),
           isNull(thoughtsTable.deletedAt),
           existing.migratedFromArticleId
-            ? eq(thoughtsTable.migratedFromArticleId, existing.migratedFromArticleId)
+            ? eq(
+                thoughtsTable.migratedFromArticleId,
+                existing.migratedFromArticleId,
+              )
             : isNull(thoughtsTable.migratedFromArticleId),
         ),
       )
@@ -795,7 +1068,9 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
     if (!updated) {
       return {
         status: 409,
-        body: { error: "Thought changed while it was being updated. Please retry." },
+        body: {
+          error: "Thought changed while it was being updated. Please retry.",
+        },
       } as const;
     }
     return { status: 200, body: updated } as const;
@@ -815,34 +1090,116 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
 router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const thoughtId = req.params.id;
+  const parsedBody = PromoteThoughtBody.safeParse(req.body ?? {});
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: parsedBody.error.issues[0]?.message ?? "Validation error",
+      code: "INVALID_SNAPSHOT",
+    });
+    return;
+  }
+  const snapshotResult = validateTransitionSnapshot(parsedBody.data);
+  if (snapshotResult && "error" in snapshotResult) {
+    res.status(400).json(snapshotResult);
+    return;
+  }
+  const snapshot = snapshotResult?.snapshot ?? null;
 
   try {
     const result = await db.transaction(async (tx) => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${thoughtId}`}))`);
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${thoughtId}`}))`,
+      );
       const [thought] = await tx
         .select()
         .from(thoughtsTable)
-        .where(and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)))
+        .where(
+          and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)),
+        )
         .for("update");
 
-      if (!thought) return { status: 404, body: { error: "Thought not found" } } as const;
-      if (thought.authorId !== userId) return { status: 403, body: { error: "Forbidden" } } as const;
-
-      const parsedMarkdown = parseThoughtMarkdown(thought.content ?? "");
-      if (!parsedMarkdown) {
-        return {
-          status: 400,
-          body: { error: "Thought must start with a non-empty H1 title and contain a non-empty body" },
-        } as const;
-      }
+      if (!thought)
+        return { status: 404, body: { error: "Thought not found" } } as const;
+      if (thought.authorId !== userId)
+        return { status: 403, body: { error: "Forbidden" } } as const;
 
       const [existingPromotion] = await tx
-        .select({ id: thoughtPromotionsTable.id, articleId: thoughtPromotionsTable.toDraftId })
+        .select({
+          articleId: thoughtPromotionsTable.toDraftId,
+          promotionType: thoughtPromotionsTable.promotionType,
+        })
         .from(thoughtPromotionsTable)
         .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtId))
         .limit(1);
       if (existingPromotion) {
-        return { status: 409, body: { error: "Thought has already been promoted" } } as const;
+        if (existingPromotion.promotionType !== "promote") {
+          return {
+            status: 409,
+            body: { error: "Thought has already been promoted" },
+          } as const;
+        }
+        const [existingArticle] = await tx
+          .select()
+          .from(articlesTable)
+          .where(
+            and(
+              eq(articlesTable.id, existingPromotion.articleId),
+              eq(articlesTable.authorId, userId),
+              isNull(articlesTable.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!existingArticle) {
+          return {
+            status: 409,
+            body: { error: "Thought promotion result is unavailable" },
+          } as const;
+        }
+        // The promotion row is the durable completion marker. Returning its
+        // article makes a response-loss retry safe without another insert.
+        return { status: 200, body: existingArticle } as const;
+      }
+
+      if (
+        thought.status !== "NORMAL" &&
+        thought.migratedFromArticleId === null
+      ) {
+        return {
+          status: 409,
+          body: {
+            error: "Thought is not in a stage that can be promoted",
+            code: "INVALID_STAGE",
+          },
+        } as const;
+      }
+
+      if (
+        snapshot &&
+        snapshot.expectedUpdatedAt.getTime() !== thought.updatedAt.getTime()
+      ) {
+        return {
+          status: 409,
+          body: {
+            error:
+              "Snapshot is older than the current thought; refresh before promoting",
+            code: "STALE_SNAPSHOT",
+          },
+        } as const;
+      }
+
+      const thoughtContent = snapshot
+        ? formatThoughtMarkdown(snapshot.title, snapshot.content)
+        : (thought.content ?? "");
+      const parsedMarkdown = parseThoughtMarkdown(thoughtContent);
+      if (!parsedMarkdown) {
+        return {
+          status: 400,
+          body: {
+            error:
+              "Thought must start with a non-empty H1 title and contain a non-empty body",
+            code: "INVALID_SNAPSHOT",
+          },
+        } as const;
       }
 
       // Always create a fresh DIVIDING article. Legacy DRAFT rows are
@@ -865,7 +1222,12 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
       });
       const [updatedThought] = await tx
         .update(thoughtsTable)
-        .set({ status: "NORMAL", migratedFromArticleId: null, updatedAt: new Date() })
+        .set({
+          ...(snapshot ? { content: thoughtContent } : {}),
+          status: "NORMAL",
+          migratedFromArticleId: null,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(thoughtsTable.id, thought.id),
@@ -873,7 +1235,10 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
             isNull(thoughtsTable.deletedAt),
             eq(thoughtsTable.status, thought.status),
             thought.migratedFromArticleId
-              ? eq(thoughtsTable.migratedFromArticleId, thought.migratedFromArticleId)
+              ? eq(
+                  thoughtsTable.migratedFromArticleId,
+                  thought.migratedFromArticleId,
+                )
               : isNull(thoughtsTable.migratedFromArticleId),
           ),
         )
@@ -901,8 +1266,14 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
         res.status(409).json({ error: "Thought has already been promoted" });
         return;
       }
-      req.log.error({ err: error, thoughtId }, "Unique constraint blocked thought promotion");
-      res.status(409).json({ error: "Thought promotion conflicted with an active record. Please retry." });
+      req.log.error(
+        { err: error, thoughtId },
+        "Unique constraint blocked thought promotion",
+      );
+      res.status(409).json({
+        error:
+          "Thought promotion conflicted with an active record. Please retry.",
+      });
       return;
     }
     req.log.error({ err: error, thoughtId }, "Error promoting thought");
@@ -915,7 +1286,9 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
 
   const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
+    );
     const [existing] = await tx
       .select({
         id: thoughtsTable.id,
@@ -951,7 +1324,10 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
           eq(thoughtsTable.authorId, userId),
           isNull(thoughtsTable.deletedAt),
           existing.migratedFromArticleId
-            ? eq(thoughtsTable.migratedFromArticleId, existing.migratedFromArticleId)
+            ? eq(
+                thoughtsTable.migratedFromArticleId,
+                existing.migratedFromArticleId,
+              )
             : isNull(thoughtsTable.migratedFromArticleId),
         ),
       )
@@ -959,7 +1335,12 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
     if (!deleted) return "conflict" as const;
     await tx
       .delete(thoughtQuestionQueueTable)
-      .where(and(eq(thoughtQuestionQueueTable.userId, userId), eq(thoughtQuestionQueueTable.thoughtId, id)));
+      .where(
+        and(
+          eq(thoughtQuestionQueueTable.userId, userId),
+          eq(thoughtQuestionQueueTable.thoughtId, id),
+        ),
+      );
     return "deleted" as const;
   });
 
@@ -972,11 +1353,15 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
     return;
   }
   if (result === "conflict") {
-    res.status(409).json({ error: "Thought changed before it could be deleted. Please retry." });
+    res.status(409).json({
+      error: "Thought changed before it could be deleted. Please retry.",
+    });
     return;
   }
   if (result === "promoted") {
-    res.status(409).json({ error: "A promoted thought must be deleted through its review article" });
+    res.status(409).json({
+      error: "A promoted thought must be deleted through its review article",
+    });
     return;
   }
   res.status(204).send();
@@ -997,16 +1382,26 @@ router.post("/thoughts/expand", requireAuth, async (req, res) => {
   const candidates = body?.candidates;
 
   if (!isNoteObject(targetNote)) {
-    res.status(400).json({ error: "targetNote must have id and content fields" });
+    res
+      .status(400)
+      .json({ error: "targetNote must have id and content fields" });
     return;
   }
-  if (!Array.isArray(candidates) || candidates.length === 0 || !candidates.every(isNoteObject)) {
-    res.status(400).json({ error: "candidates must be a non-empty array of {id, content} objects" });
+  if (
+    !Array.isArray(candidates) ||
+    candidates.length === 0 ||
+    !candidates.every(isNoteObject)
+  ) {
+    res.status(400).json({
+      error: "candidates must be a non-empty array of {id, content} objects",
+    });
     return;
   }
 
   if (!process.env.OPENROUTER_API_KEY) {
-    res.status(500).json({ error: "OPENROUTER_API_KEY is not configured on the server" });
+    res
+      .status(500)
+      .json({ error: "OPENROUTER_API_KEY is not configured on the server" });
     return;
   }
 

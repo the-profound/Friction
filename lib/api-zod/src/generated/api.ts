@@ -617,12 +617,38 @@ export const TransitionArticleStatusResponse = zod.object({
 });
 
 /**
- * Atomically copies the latest article title and body into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the DIVIDING article. Retrying a completed request returns the same thought.
+ * Atomically applies an optional latest title/body snapshot to the DIVIDING article, copies it into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the article. Retrying a completed request returns the same thought.
  * @summary Return a DIVIDING article to its original thought
  */
 export const RevertArticleToThoughtParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
+
+export const RevertArticleToThoughtBody = zod
+  .object({
+    title: zod
+      .string()
+      .min(1)
+      .optional()
+      .describe("Latest title (the thought's first H1 title)."),
+    content: zod
+      .string()
+      .min(1)
+      .optional()
+      .describe("Latest body content, excluding the title."),
+    expectedUpdatedAt: zod
+      .string()
+      .optional()
+      .describe("ISO timestamp version read with the editor snapshot."),
+    requestId: zod
+      .string()
+      .uuid()
+      .optional()
+      .describe("Optional client-generated identifier for safe retries."),
+  })
+  .describe(
+    "Optional latest editor snapshot for the thought\/review transition. Omit the body to preserve the legacy behavior. When any snapshot field is supplied, title, content, and expectedUpdatedAt must be supplied together. requestId is a client-generated retry identifier.\n",
+  );
 
 export const RevertArticleToThoughtResponse = zod.object({
   id: zod.string().uuid(),
@@ -4758,11 +4784,101 @@ export const DeleteThoughtParams = zod.object({
 });
 
 /**
- * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again.
+ * Atomically applies an optional latest title/body snapshot to the thought, validates its title and body, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again.
  * @summary Promote a Markdown thought to the DIVIDING article stage
  */
 export const PromoteThoughtParams = zod.object({
   id: zod.coerce.string().uuid(),
+});
+
+export const PromoteThoughtBody = zod
+  .object({
+    title: zod
+      .string()
+      .min(1)
+      .optional()
+      .describe("Latest title (the thought's first H1 title)."),
+    content: zod
+      .string()
+      .min(1)
+      .optional()
+      .describe("Latest body content, excluding the title."),
+    expectedUpdatedAt: zod
+      .string()
+      .optional()
+      .describe("ISO timestamp version read with the editor snapshot."),
+    requestId: zod
+      .string()
+      .uuid()
+      .optional()
+      .describe("Optional client-generated identifier for safe retries."),
+  })
+  .describe(
+    "Optional latest editor snapshot for the thought\/review transition. Omit the body to preserve the legacy behavior. When any snapshot field is supplied, title, content, and expectedUpdatedAt must be supplied together. requestId is a client-generated retry identifier.\n",
+  );
+
+export const promoteThoughtResponseCoverFontFamilyDefault = `sans`;
+
+export const PromoteThoughtResponse = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
+  collectionName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+    ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  title: zod.string(),
+  content: zod.string(),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
+  pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
+  style: zod.object({}).passthrough().nullish(),
+  cover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .url()
+        .optional()
+        .describe("Cover image URL (used when type=image)"),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(promoteThoughtResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
+      align: zod.enum(["left", "center"]),
+    })
+    .nullish()
+    .describe("Article cover display settings. null means default cover."),
+  letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
 });
 
 /**

@@ -27,7 +27,10 @@ describe("thought create idempotency contract", () => {
 
     expect(createRoute).toContain(".onConflictDoNothing({ target: thoughtsTable.id })");
     expect(createRoute).toContain("eq(thoughtsTable.authorId, authorId)");
+    expect(createRoute).toContain("pg_advisory_xact_lock");
+    expect(createRoute).toContain("activePromotion");
+    expect(createRoute).toContain("existing.migratedFromArticleId");
     expect(createRoute).toContain(".set({ content, updatedAt: new Date() })");
-    expect(createRoute).toContain('res.status(409).json({ error: "Thought id is already in use" })');
+    expect(createRoute).toContain('error: "Thought id is already in use"');
   });
 });

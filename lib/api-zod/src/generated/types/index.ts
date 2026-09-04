@@ -154,6 +154,7 @@ export * from "./teamCollectionWithRoleRole";
 export * from "./teamMemberWithUser";
 export * from "./teamMemberWithUserRole";
 export * from "./thought";
+export * from "./thoughtArticleTransitionBody";
 export * from "./thoughtCreatedFrom";
 export * from "./thoughtExpansionResult";
 export * from "./thoughtNote";

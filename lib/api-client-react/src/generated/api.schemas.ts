@@ -194,6 +194,27 @@ export interface TransitionArticleBody {
   targetStatus: TransitionArticleBodyTargetStatus;
 }
 
+/**
+ * Optional latest editor snapshot for the thought/review transition. Omit the body to preserve the legacy behavior. When any snapshot field is supplied, title, content, and expectedUpdatedAt must be supplied together. requestId is a client-generated retry identifier.
+
+ */
+export interface ThoughtArticleTransitionBody {
+  /**
+   * Latest title (the thought's first H1 title).
+   * @minLength 1
+   */
+  title?: string;
+  /**
+   * Latest body content, excluding the title.
+   * @minLength 1
+   */
+  content?: string;
+  /** ISO timestamp version read with the editor snapshot. */
+  expectedUpdatedAt?: string;
+  /** Optional client-generated identifier for safe retries. */
+  requestId?: string;
+}
+
 export interface FinalizeArticleBody {
   /** Optional personal collection to add the finalized article to. When omitted, the article is finalized without being added to a collection. */
   myCollectionId?: string;

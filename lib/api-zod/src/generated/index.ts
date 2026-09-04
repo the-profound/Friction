@@ -121,6 +121,7 @@ export type { TeamCollectionWithRoleRole } from "./types/teamCollectionWithRoleR
 export type { TeamMemberWithUser } from "./types/teamMemberWithUser";
 export type { TeamMemberWithUserRole } from "./types/teamMemberWithUserRole";
 export type { Thought } from "./types/thought";
+export type { ThoughtArticleTransitionBody } from "./types/thoughtArticleTransitionBody";
 export type { ThoughtCreatedFrom } from "./types/thoughtCreatedFrom";
 export type { ThoughtExpansionResult } from "./types/thoughtExpansionResult";
 export type { ThoughtNote } from "./types/thoughtNote";

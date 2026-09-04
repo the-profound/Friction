@@ -7,23 +7,38 @@ const readArticlesRoute = () =>
   readFileSync(join(routesRoot, "articles.ts"), "utf8");
 const readThoughtsRoute = () =>
   readFileSync(join(routesRoot, "thoughts.ts"), "utf8");
+const getRouteHandler = (source: string, path: string, nextPath: string) => {
+  const pathIndex = source.indexOf(`"${path}"`);
+  const nextPathIndex = source.indexOf(`"${nextPath}"`);
+  return source.slice(
+    source.lastIndexOf("router.post(", pathIndex),
+    nextPathIndex,
+  );
+};
 
 describe("review article reverse-promotion contract", () => {
   it("serializes retries and restores the original thought in one transaction", () => {
     const source = readArticlesRoute();
-    const handler = source.slice(
-      source.indexOf('router.post("/articles/:id/revert-to-thought"'),
-      source.indexOf('router.post("/articles/:id/cover-image"'),
+    const handler = getRouteHandler(
+      source,
+      "/articles/:id/revert-to-thought",
+      "/articles/:id/cover-image",
     );
 
     expect(handler).toContain("db.transaction(async (tx)");
     expect(handler).toContain("pg_advisory_xact_lock");
     expect(handler).toContain('.for("update")');
     expect(handler).toContain('article.status !== "DIVIDING"');
-    expect(handler).toContain('eq(thoughtPromotionsTable.promotionType, "promote")');
+    expect(handler).toContain(
+      'eq(thoughtPromotionsTable.promotionType, "promote")',
+    );
     expect(handler).toContain("promotions.length !== 1");
-    expect(handler).toContain("Another active thought already uses this source article");
-    expect(handler).toContain("formatThoughtMarkdown(article.title, article.content)");
+    expect(handler).toContain(
+      "Another active thought already uses this source article",
+    );
+    expect(handler).toContain(
+      "formatThoughtMarkdown(article.title, article.content)",
+    );
     expect(handler).toContain('eq(articlesTable.status, "DIVIDING")');
     expect(handler).toContain('status: "PRELIMINARY"');
     expect(handler).toContain("migratedFromArticleId: articleId");
@@ -37,13 +52,16 @@ describe("review article reverse-promotion contract", () => {
 
   it("returns the same restored thought after response loss and blocks stale old retries", () => {
     const source = readArticlesRoute();
-    const handler = source.slice(
-      source.indexOf('router.post("/articles/:id/revert-to-thought"'),
-      source.indexOf('router.post("/articles/:id/cover-image"'),
+    const handler = getRouteHandler(
+      source,
+      "/articles/:id/revert-to-thought",
+      "/articles/:id/cover-image",
     );
 
     expect(handler).toContain("if (article.deletedAt)");
-    expect(handler).toContain("eq(thoughtsTable.migratedFromArticleId, articleId)");
+    expect(handler).toContain(
+      "eq(thoughtsTable.migratedFromArticleId, articleId)",
+    );
     expect(handler).toContain("activePromotion");
     expect(handler).toContain("Thought has already been promoted again");
     expect(handler).toContain("return { status: 200, body: restoredThought }");
@@ -75,9 +93,13 @@ describe("review article reverse-promotion contract", () => {
     expect(patchHandler).toContain("eq(articlesTable.status, existing.status)");
     expect(patchHandler).toContain("isNull(articlesTable.deletedAt)");
     expect(patchHandler).toContain("throw new ArticleMutationConflictError()");
-    expect(transitionHandler).toContain("eq(articlesTable.status, article.status)");
+    expect(transitionHandler).toContain(
+      "eq(articlesTable.status, article.status)",
+    );
     expect(transitionHandler).toContain("isNull(articlesTable.deletedAt)");
-    expect(transitionHandler).toContain("Article changed before the transition completed");
+    expect(transitionHandler).toContain(
+      "Article changed before the transition completed",
+    );
   });
 
   it("rejects empty review payloads before they can erase a titled article", () => {
@@ -122,12 +144,20 @@ describe("review article reverse-promotion contract", () => {
 
     expect(patchHandler).toContain("existing.migratedFromArticleId");
     expect(patchHandler).toContain("pg_advisory_xact_lock");
-    expect(patchHandler).toContain("A promoted thought must be edited through its review article");
-    expect(patchHandler).toContain("Thought changed while it was being updated");
+    expect(patchHandler).toContain(
+      "A promoted thought must be edited through its review article",
+    );
+    expect(patchHandler).toContain(
+      "Thought changed while it was being updated",
+    );
     expect(deleteHandler).toContain('.for("update")');
     expect(deleteHandler).toContain("pg_advisory_xact_lock");
-    expect(deleteHandler).toContain("A promoted thought must be deleted through its review article");
+    expect(deleteHandler).toContain(
+      "A promoted thought must be deleted through its review article",
+    );
     expect(deleteHandler).toContain("existing.migratedFromArticleId");
-    expect(deleteHandler).toContain("Thought changed before it could be deleted");
+    expect(deleteHandler).toContain(
+      "Thought changed before it could be deleted",
+    );
   });
 });

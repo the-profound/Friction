@@ -484,9 +484,15 @@ paths:
       operationId: revertArticleToThought
       tags: [articles, thoughts]
       summary: Return a DIVIDING article to its original thought
-      description: "Atomically copies the latest article title and body into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the DIVIDING article. Retrying a completed request returns the same thought."
+      description: "Atomically applies an optional latest title/body snapshot to the DIVIDING article, copies it into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the article. Retrying a completed request returns the same thought."
       parameters:
         - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThoughtArticleTransitionBody"
       responses:
         "200":
           description: Restored original thought
@@ -494,6 +500,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Thought"
+        "400":
+          description: Invalid title, body, or editor snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Forbidden — article does not belong to this user
           content:
@@ -3101,10 +3113,22 @@ paths:
       operationId: promoteThought
       tags: [thoughts]
       summary: Promote a Markdown thought to the DIVIDING article stage
-      description: "Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again."
+      description: "Atomically applies an optional latest title/body snapshot to the thought, validates its title and body, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again."
       parameters:
         - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThoughtArticleTransitionBody"
       responses:
+        "200":
+          description: Previously completed promotion result (safe retry)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
         "201":
           description: Newly created DIVIDING article
           content:
@@ -3520,6 +3544,30 @@ components:
           enum: [DIVIDING, CLOSING, LETTER]
       required: [targetStatus]
 
+    ThoughtArticleTransitionBody:
+      type: object
+      description: >
+        Optional latest editor snapshot for the thought/review transition.
+        Omit the body to preserve the legacy behavior. When any snapshot field
+        is supplied, title, content, and expectedUpdatedAt must be supplied
+        together. requestId is a client-generated retry identifier.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Latest title (the thought's first H1 title).
+        content:
+          type: string
+          minLength: 1
+          description: Latest body content, excluding the title.
+        expectedUpdatedAt:
+          type: string
+          description: ISO timestamp version read with the editor snapshot.
+        requestId:
+          type: string
+          format: uuid
+          description: Optional client-generated identifier for safe retries.
+
     FinalizeArticleBody:
       type: object
       properties:
@@ -3601,7 +3649,20 @@ components:
         isEnvelope:
           type: boolean
           description: Whether this inbox item was sent as a sealed envelope. When true and openedAt is null, the recipient sees the envelope front face first.
-      required: [id, recipientId, articleId, senderId, visibleAt, isRead, createdAt, senderDisplayName, isReplyToMe, hasReadBefore, isEnvelope]
+      required:
+        [
+          id,
+          recipientId,
+          articleId,
+          senderId,
+          visibleAt,
+          isRead,
+          createdAt,
+          senderDisplayName,
+          isReplyToMe,
+          hasReadBefore,
+          isEnvelope,
+        ]
 
     MarkInboxOthersReadResponse:
       type: object
@@ -3645,7 +3706,17 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, ownerId, name, isPublic, isArchive, isImpression, createdAt, updatedAt]
+      required:
+        [
+          id,
+          ownerId,
+          name,
+          isPublic,
+          isArchive,
+          isImpression,
+          createdAt,
+          updatedAt,
+        ]
 
     CreateMyCollectionBody:
       type: object
@@ -3761,7 +3832,17 @@ components:
           type: string
           nullable: true
           description: Title of the source article (joined from articles table). May be null if the article is missing.
-      required: [id, userId, articleId, text, isFavorite, favoritedAt, createdAt, articleTitle]
+      required:
+        [
+          id,
+          userId,
+          articleId,
+          text,
+          isFavorite,
+          favoritedAt,
+          createdAt,
+          articleTitle,
+        ]
 
     CreateStoredSentenceBody:
       type: object
@@ -4302,7 +4383,8 @@ components:
           $ref: "#/components/schemas/Article"
         recipient:
           $ref: "#/components/schemas/User"
-      required: [id, senderId, articleId, targetType, deliverySlot, sentAt, isDelivered]
+      required:
+        [id, senderId, articleId, targetType, deliverySlot, sentAt, isDelivered]
 
     SendArticleBody:
       type: object
@@ -4423,7 +4505,22 @@ components:
           type: string
           nullable: true
           description: "운영자 표시명. 익명 공간은 모집 중 '참여자', 시작 후 공간 닉네임이며 계정 닉네임은 절대 제공하지 않음."
-      required: [id, name, isAnonymous, operatorParticipates, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt, myRole, participantCount]
+      required:
+        [
+          id,
+          name,
+          isAnonymous,
+          operatorParticipates,
+          roundCount,
+          defaultCenterInterval,
+          defaultCenterCount,
+          status,
+          creatorId,
+          createdAt,
+          updatedAt,
+          myRole,
+          participantCount,
+        ]
 
     SpaceInvitationWithSpace:
       type: object
@@ -4519,7 +4616,20 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, name, isAnonymous, operatorParticipates, roundCount, defaultCenterInterval, defaultCenterCount, status, creatorId, createdAt, updatedAt]
+      required:
+        [
+          id,
+          name,
+          isAnonymous,
+          operatorParticipates,
+          roundCount,
+          defaultCenterInterval,
+          defaultCenterCount,
+          status,
+          creatorId,
+          createdAt,
+          updatedAt,
+        ]
 
     CreateSpaceBody:
       type: object
@@ -4836,7 +4946,8 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, spaceRoundId, assignedUserId, slotOrder, createdAt, updatedAt]
+      required:
+        [id, spaceRoundId, assignedUserId, slotOrder, createdAt, updatedAt]
 
     CreateSpaceRoundSlotBody:
       type: object
@@ -4956,7 +5067,8 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, spaceId, invitedUserId, invitedBy, status, createdAt, updatedAt]
+      required:
+        [id, spaceId, invitedUserId, invitedBy, status, createdAt, updatedAt]
 
     CreateSpaceInvitationBody:
       type: object
@@ -5136,7 +5248,17 @@ components:
           allOf:
             - $ref: "#/components/schemas/SpaceReservationMetadata"
           nullable: true
-      required: [id, spaceId, authorId, letterType, visibility, createdAt, updatedAt, isRead]
+      required:
+        [
+          id,
+          spaceId,
+          authorId,
+          letterType,
+          visibility,
+          createdAt,
+          updatedAt,
+          isRead,
+        ]
 
     CreateSpaceLetterBody:
       type: object
@@ -5214,7 +5336,8 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, spaceId, spaceLetterId, scheduledAt, status, createdAt, updatedAt]
+      required:
+        [id, spaceId, spaceLetterId, scheduledAt, status, createdAt, updatedAt]
 
     CreateSpaceScheduledSendBody:
       type: object
@@ -5317,7 +5440,8 @@ components:
           type: string
           nullable: true
           description: "Assigned round-slot date (YYYY-MM-DD) for the letter's author/round, if any"
-      required: [id, spaceId, spaceLetterId, scheduledAt, status, createdAt, updatedAt]
+      required:
+        [id, spaceId, spaceLetterId, scheduledAt, status, createdAt, updatedAt]
 
     SpaceWithCreatorInfo:
       allOf:
@@ -5460,7 +5584,8 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, authorId, content, createdFrom, status, createdAt, updatedAt]
+      required:
+        [id, authorId, content, createdFrom, status, createdAt, updatedAt]
 
     ThoughtNote:
       type: object

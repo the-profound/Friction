@@ -117,6 +117,7 @@ import type {
   TeamCollectionWithRole,
   TeamMemberWithUser,
   Thought,
+  ThoughtArticleTransitionBody,
   ThoughtQuestionQueueResponse,
   ToggleStoredSentenceFavoriteBody,
   ToggleTeamArticlePinBody,
@@ -1612,7 +1613,7 @@ export const useTransitionArticleStatus = <
 };
 
 /**
- * Atomically copies the latest article title and body into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the DIVIDING article. Retrying a completed request returns the same thought.
+ * Atomically applies an optional latest title/body snapshot to the DIVIDING article, copies it into the original thought as H1 Markdown, removes the active promotion link, and soft-deletes the article. Retrying a completed request returns the same thought.
  * @summary Return a DIVIDING article to its original thought
  */
 export const getRevertArticleToThoughtUrl = (id: string) => {
@@ -1621,11 +1622,14 @@ export const getRevertArticleToThoughtUrl = (id: string) => {
 
 export const revertArticleToThought = async (
   id: string,
+  thoughtArticleTransitionBody?: ThoughtArticleTransitionBody,
   options?: RequestInit,
 ): Promise<Thought> => {
   return customFetch<Thought>(getRevertArticleToThoughtUrl(id), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(thoughtArticleTransitionBody),
   });
 };
 
@@ -1636,14 +1640,14 @@ export const getRevertArticleToThoughtMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof revertArticleToThought>>,
     TError,
-    { id: string },
+    { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof revertArticleToThought>>,
   TError,
-  { id: string },
+  { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
   TContext
 > => {
   const mutationKey = ["revertArticleToThought"];
@@ -1657,11 +1661,11 @@ export const getRevertArticleToThoughtMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof revertArticleToThought>>,
-    { id: string }
+    { id: string; data?: BodyType<ThoughtArticleTransitionBody> }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, data } = props ?? {};
 
-    return revertArticleToThought(id, requestOptions);
+    return revertArticleToThought(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -1670,7 +1674,8 @@ export const getRevertArticleToThoughtMutationOptions = <
 export type RevertArticleToThoughtMutationResult = NonNullable<
   Awaited<ReturnType<typeof revertArticleToThought>>
 >;
-
+export type RevertArticleToThoughtMutationBody =
+  BodyType<ThoughtArticleTransitionBody>;
 export type RevertArticleToThoughtMutationError = ErrorType<ErrorResponse>;
 
 /**
@@ -1683,14 +1688,14 @@ export const useRevertArticleToThought = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof revertArticleToThought>>,
     TError,
-    { id: string },
+    { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof revertArticleToThought>>,
   TError,
-  { id: string },
+  { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
   TContext
 > => {
   return useMutation(getRevertArticleToThoughtMutationOptions(options));
@@ -11015,7 +11020,7 @@ export const useDeleteThought = <
 };
 
 /**
- * Atomically validates the thought's first H1 title, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again.
+ * Atomically applies an optional latest title/body snapshot to the thought, validates its title and body, creates a DIVIDING article, and records the promotion. A thought can have only one active promotion; a successfully reverted thought may be promoted again.
  * @summary Promote a Markdown thought to the DIVIDING article stage
  */
 export const getPromoteThoughtUrl = (id: string) => {
@@ -11024,11 +11029,14 @@ export const getPromoteThoughtUrl = (id: string) => {
 
 export const promoteThought = async (
   id: string,
+  thoughtArticleTransitionBody?: ThoughtArticleTransitionBody,
   options?: RequestInit,
 ): Promise<Article> => {
   return customFetch<Article>(getPromoteThoughtUrl(id), {
     ...options,
     method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(thoughtArticleTransitionBody),
   });
 };
 
@@ -11039,14 +11047,14 @@ export const getPromoteThoughtMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof promoteThought>>,
     TError,
-    { id: string },
+    { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof promoteThought>>,
   TError,
-  { id: string },
+  { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
   TContext
 > => {
   const mutationKey = ["promoteThought"];
@@ -11060,11 +11068,11 @@ export const getPromoteThoughtMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof promoteThought>>,
-    { id: string }
+    { id: string; data?: BodyType<ThoughtArticleTransitionBody> }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, data } = props ?? {};
 
-    return promoteThought(id, requestOptions);
+    return promoteThought(id, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -11073,7 +11081,7 @@ export const getPromoteThoughtMutationOptions = <
 export type PromoteThoughtMutationResult = NonNullable<
   Awaited<ReturnType<typeof promoteThought>>
 >;
-
+export type PromoteThoughtMutationBody = BodyType<ThoughtArticleTransitionBody>;
 export type PromoteThoughtMutationError = ErrorType<ErrorResponse>;
 
 /**
@@ -11086,14 +11094,14 @@ export const usePromoteThought = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof promoteThought>>,
     TError,
-    { id: string },
+    { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof promoteThought>>,
   TError,
-  { id: string },
+  { id: string; data?: BodyType<ThoughtArticleTransitionBody> },
   TContext
 > => {
   return useMutation(getPromoteThoughtMutationOptions(options));
