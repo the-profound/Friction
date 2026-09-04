@@ -58,6 +58,7 @@ import {
   invalidateArticleDetail,
   patchArticleInRecordCaches,
   stageArticleTransitionSnapshot,
+  getProtectedArticleDetailSnapshot,
 } from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -76,7 +77,9 @@ export default function ClosingScreen() {
     letterType?: string;
   }>();
   const articleQuery = useGetArticle(id ?? "");
-  const article = id ? articleQuery.data : undefined;
+  const article = id
+    ? getProtectedArticleDetailSnapshot(queryClient, id, articleQuery.data)
+    : undefined;
   const articleLoading = id ? articleQuery.isLoading && !article : false;
 
   // AsyncStorage 복구 — (tabs)/on.tsx에서 재개할 때 라우트에 spaceId가 없는 경우를 처리한다.
@@ -148,6 +151,8 @@ export default function ClosingScreen() {
   const [coverEditorVisible, setCoverEditorVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
+  const titleEditingRef = useRef(false);
+  titleEditingRef.current = titleEditing;
   const [isExporting, setIsExporting] = useState(false);
   const [isCoverUploading, setIsCoverUploading] = useState(false);
   const [visibility, setVisibility] = useState<SpaceLetterVisibility>(
@@ -165,6 +170,9 @@ export default function ClosingScreen() {
   const initializedRef = useRef(false);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coverSaveQueueRef = useRef<SerializedAsyncRunner>(
+    createSerializedAsyncRunner(),
+  );
+  const titleSaveQueueRef = useRef<SerializedAsyncRunner>(
     createSerializedAsyncRunner(),
   );
   // Step 3(E) — pages 변경 여부 추적: 분할 화면에서 이미 저장된 pages를 다시
@@ -493,16 +501,17 @@ export default function ClosingScreen() {
 
   const flushTitleSave = useCallback(async () => {
     if (!id) return;
-    if (!titleEditing) return;
+    // Back navigation updates React state before this callback is invoked.
+    // Keep the synchronous editing boundary so the latest title is queued
+    // exactly once instead of being skipped.
+    if (!titleEditingRef.current) return;
+    titleEditingRef.current = false;
     setTitleEditing(false);
-    try {
+    await titleSaveQueueRef.current(async () => {
       await updateArticle.mutateAsync({ id, data: { title } });
       patchArticleInRecordCaches(queryClient, id, { title });
-    } catch (e: unknown) {
-      console.warn("Failed to save title:", e instanceof Error ? e.message : e);
-      throw e;
-    }
-  }, [id, queryClient, title, titleEditing, updateArticle]);
+    });
+  }, [id, queryClient, title, updateArticle]);
 
   const handleBack = useCallback(() => {
     if (coverUploadInProgressRef.current) {
@@ -519,7 +528,7 @@ export default function ClosingScreen() {
       stageArticleTransitionSnapshot(queryClient, id, {
         title,
         cover: coverToSave,
-      });
+      }, article);
     }
 
     // The local article snapshot is the visible source of truth. The queued
@@ -565,7 +574,7 @@ export default function ClosingScreen() {
       title,
       cover: coverToSave,
       status: "DIVIDING",
-    });
+    }, article);
 
     // Navigate directly to the integrated writing/dividing screen. Save and
     // status transition are deliberately detached from the route change.
@@ -614,11 +623,14 @@ export default function ClosingScreen() {
   ]);
 
   const handleSaveTitle = useCallback(async () => {
+    titleEditingRef.current = false;
     setTitleEditing(false);
     if (!id) return;
     try {
-      await updateArticle.mutateAsync({ id, data: { title } });
-      patchArticleInRecordCaches(queryClient, id, { title });
+      await titleSaveQueueRef.current(async () => {
+        await updateArticle.mutateAsync({ id, data: { title } });
+        patchArticleInRecordCaches(queryClient, id, { title });
+      });
     } catch (e: unknown) {
       console.warn("Failed to save title:", e instanceof Error ? e.message : e);
     }

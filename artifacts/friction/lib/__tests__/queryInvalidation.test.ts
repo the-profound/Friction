@@ -10,6 +10,7 @@ import {
 
 import {
   invalidateDirectThoughtCreation,
+  getProtectedArticleDetailSnapshot,
   removeRecordFromCache,
   restoreRecordDeletion,
   restoreRecordListCaches,
@@ -134,6 +135,35 @@ describe("record detail cache seeding", () => {
 });
 
 describe("optimistic record cache operations", () => {
+  it("keeps the staged destination in front of a later stale detail response", () => {
+    const queryClient = new QueryClient();
+    const detailKey = getGetArticleQueryKey("article-1");
+    const original = {
+      id: "article-1",
+      status: "DIVIDING",
+      title: "이전 제목",
+      content: "이전 본문",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    queryClient.setQueryData(detailKey, original as never);
+
+    stageArticleTransitionSnapshot(queryClient, original.id, {
+      title: "최신 제목",
+      content: "최신 본문",
+      status: "CLOSING" as never,
+    });
+
+    const lateResponse = { ...original, updatedAt: "2026-01-01T00:00:01.000Z" };
+    queryClient.setQueryData(detailKey, lateResponse as never);
+
+    expect(getProtectedArticleDetailSnapshot(queryClient, original.id, lateResponse as never))
+      .toMatchObject({
+        title: "최신 제목",
+        content: "최신 본문",
+        status: "CLOSING",
+      });
+  });
+
   it("keeps a local stage transition when an older detail request finishes late", async () => {
     const queryClient = new QueryClient();
     const articleKey = getListArticlesQueryKey({ authorId: "author" });

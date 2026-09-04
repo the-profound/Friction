@@ -94,6 +94,7 @@ import {
   removeRecordFromCache,
   restoreRecordListCaches,
   stageArticleTransitionSnapshot,
+  getProtectedArticleDetailSnapshot,
   snapshotRecordListCaches,
 } from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
@@ -215,11 +216,11 @@ export default function WritingScreen() {
   // A thought is active when its query succeeded (status PRELIMINARY).
   // An article is active when its query succeeds after a promotion.
   const thought = thoughtQuery.data;
-  const article = articleQuery.data;
+  const article = getProtectedArticleDetailSnapshot(queryClient, id ?? "", articleQuery.data);
   const detailResolution = resolveDetailEntity({
     requestMode: modeParam === "dividing" ? "dividing" : "thought",
     thought: thoughtQuery,
-    article: articleQuery,
+    article: { ...articleQuery, data: article },
   });
 
   // isThoughtMode: the id refers to a thought (draft writing stage).
@@ -887,6 +888,7 @@ export default function WritingScreen() {
     markDirty,
     markTitleDirty,
     flush,
+    retry: retryAutosave,
     reportFailure: reportAutosaveFailure,
     discard: discardAutosave,
     bindEntity: bindAutosaveEntity,
@@ -1727,11 +1729,14 @@ export default function WritingScreen() {
     }
 
     markDirty(titleRef.current, cur);
-    const flushResult = await flush();
-    if (!flushResult.ok) {
+    try {
+      // The local queue is the recovery boundary for this transition. Once it
+      // is durable, the destination can open without waiting for the network.
+      await persistLatestAutosave();
+    } catch {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
+      showToast({ message: "최신 내용을 안전하게 보관하지 못했습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
 
@@ -1748,7 +1753,7 @@ export default function WritingScreen() {
       pages: pagesJson,
       layoutWidth: containerWidth,
       status: "CLOSING",
-    });
+    }, article);
 
     router.push({
       pathname: "/on-01c",
@@ -1760,33 +1765,79 @@ export default function WritingScreen() {
     isNavigatingRef.current = false;
     setIsNavigating(false);
 
-    const layoutWidthAlreadySaved = savedLayoutWidthRef.current === containerWidth;
-    const layoutWidthSave = layoutWidthAlreadySaved
-      ? Promise.resolve()
-      : updateArticle
-          .mutateAsync({ id, data: { layoutWidth: containerWidth } })
-          .then(() => {
-            savedLayoutWidthRef.current = containerWidth;
-          })
-          .catch((e: unknown) => {
-            console.warn("[on-01] background layoutWidth save failed:", e);
+    // Save and status transition retain their server-side order, but both
+    // continue after the closing screen is visible. A failure leaves the
+    // optimistic CLOSING snapshot and the recovery queue intact for retry.
+    void (async () => {
+      let saved = false;
+      try {
+        const flushResult = await flush();
+        saved = flushResult.ok;
+      } catch (e: unknown) {
+        console.warn("[on-01] background review save failed:", e);
+      }
+      if (!saved) {
+        showToast({
+          message: "최신 검토 내용을 저장하지 못했어요. 잠시 후 다시 시도해주세요.",
+          type: "error",
+          duration: 7000,
+          action: {
+            label: "다시 시도",
+            onPress: () => {
+              void retryAutosave();
+            },
+          },
+        });
+        return;
+      }
+
+      try {
+        const layoutWidthAlreadySaved = savedLayoutWidthRef.current === containerWidth;
+        if (!layoutWidthAlreadySaved) {
+          await updateArticle.mutateAsync({ id, data: { layoutWidth: containerWidth } });
+          savedLayoutWidthRef.current = containerWidth;
+        }
+        if (article?.status !== "CLOSING") {
+          const transitioned = await transitionStatus.mutateAsync({
+            id,
+            data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
           });
-
-    const statusChange =
-      article?.status !== "CLOSING"
-        ? transitionStatus
-            .mutateAsync({ id, data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING } })
-            .catch((e: unknown) => {
-              const status = (e as { status?: number } | null)?.status;
-              if (status === 400) return;
-              console.warn("[on-01] background CLOSING transition failed:", e);
-            })
-        : Promise.resolve();
-
-    Promise.all([layoutWidthSave, statusChange]).finally(() => {
-      invalidateArticleLists(queryClient);
-    });
-  }, [getEditorContent, markDirty, flush, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast, pageHeights, pageContentHeight]);
+          queryClient.setQueryData(getGetArticleQueryKey(id), (previous: unknown) => {
+            if (!previous || typeof previous !== "object") return transitioned;
+            return { ...previous, ...transitioned, status: "CLOSING" };
+          });
+          patchArticleInRecordCaches(queryClient, id, { status: "CLOSING" });
+        }
+        void invalidateArticleLists(queryClient);
+      } catch (e: unknown) {
+        const status = (e as { status?: number } | null)?.status;
+        if (status !== 400) {
+          console.warn("[on-01] background CLOSING transition failed:", e);
+          showToast({
+            message: "마감 단계 저장은 완료했지만 상태 전환에 실패했어요. 다시 시도해주세요.",
+            type: "error",
+            duration: 7000,
+            action: {
+              label: "다시 시도",
+              onPress: () => {
+                void transitionStatus.mutateAsync({
+                  id,
+                  data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
+                }).then((transitioned) => {
+                  queryClient.setQueryData(getGetArticleQueryKey(id), (previous: unknown) => {
+                    if (!previous || typeof previous !== "object") return transitioned;
+                    return { ...previous, ...transitioned, status: "CLOSING" };
+                  });
+                  patchArticleInRecordCaches(queryClient, id, { status: "CLOSING" });
+                  void invalidateArticleLists(queryClient);
+                }).catch(() => undefined);
+              },
+            },
+          });
+        }
+      }
+    })();
+  }, [getEditorContent, markDirty, flush, persistLatestAutosave, retryAutosave, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast, pageHeights, pageContentHeight]);
 
   // ── 작성/분할 모드 뒤로가기 (화면 종료) ───────────────────────────────────
   //

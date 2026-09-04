@@ -43,6 +43,15 @@ export function invalidateThoughtLists(qc: QueryClient) {
 
 type RecordDetailSnapshot = Article | Thought;
 
+type OptimisticArticleTransition = {
+  generation: number;
+  stagedAt: number;
+  patch: Partial<Article>;
+};
+
+let articleTransitionGeneration = 0;
+const optimisticArticleTransitions = new Map<string, OptimisticArticleTransition>();
+
 function snapshotIsNewer(
   incoming: RecordDetailSnapshot,
   current: RecordDetailSnapshot | undefined,
@@ -54,6 +63,32 @@ function snapshotIsNewer(
     return false;
   }
   return incomingUpdatedAt > currentUpdatedAt;
+}
+
+/**
+ * Keep a transition snapshot in front of a late detail response until a
+ * response newer than the snapshot confirms the same fields. React Query does
+ * not compare server timestamps when applying a refetch, so dataUpdatedAt is
+ * used as the response-generation boundary here.
+ */
+export function getProtectedArticleDetailSnapshot(
+  qc: QueryClient,
+  id: string,
+  incoming: Article | undefined,
+) {
+  const transition = optimisticArticleTransitions.get(id);
+  if (!transition || !incoming) return incoming;
+
+  const state = qc.getQueryState(getGetArticleQueryKey(id));
+  const matchesPatch = Object.entries(transition.patch).every(
+    ([key, value]) => incoming[key as keyof Article] === value,
+  );
+  if (matchesPatch && (state?.dataUpdatedAt ?? 0) > transition.stagedAt) {
+    optimisticArticleTransitions.delete(id);
+    return incoming;
+  }
+
+  return { ...incoming, ...transition.patch };
 }
 
 /**
@@ -70,9 +105,11 @@ export function seedRecordDetailCaches(
   },
 ) {
   for (const article of snapshots.articles ?? []) {
-    qc.setQueryData<Article>(getGetArticleQueryKey(article.id), (current) =>
-      snapshotIsNewer(article, current) ? article : current,
-    );
+    qc.setQueryData<Article>(getGetArticleQueryKey(article.id), (current) => {
+      const protectedCurrent = getProtectedArticleDetailSnapshot(qc, article.id, current);
+      if (protectedCurrent && protectedCurrent !== current) return protectedCurrent;
+      return snapshotIsNewer(article, current) ? article : current;
+    });
   }
   for (const thought of snapshots.thoughts ?? []) {
     qc.setQueryData<Thought>(getGetThoughtQueryKey(thought.id), (current) =>
@@ -315,15 +352,22 @@ export function stageArticleTransitionSnapshot(
   qc: QueryClient,
   id: string,
   patch: Partial<Article>,
+  baseSnapshot?: Article,
 ) {
+  const stagedAt = Date.now();
+  optimisticArticleTransitions.set(id, {
+    generation: ++articleTransitionGeneration,
+    stagedAt,
+    patch,
+  });
   void Promise.allSettled([
     qc.cancelQueries({ queryKey: getGetArticleQueryKey(id), exact: true }),
     qc.cancelQueries({ queryKey: getListArticlesQueryKey() }),
   ]);
   qc.setQueryData<Article>(
     getGetArticleQueryKey(id),
-    (previous) => (previous ? { ...previous, ...patch } : previous),
-    { updatedAt: Date.now() },
+    (previous) => (previous ? { ...previous, ...patch } : baseSnapshot ? { ...baseSnapshot, ...patch } : previous),
+    { updatedAt: stagedAt },
   );
   patchArticleInRecordCaches(qc, id, patch);
 }

@@ -60,6 +60,25 @@ describe("non-blocking editor transitions", () => {
     );
   });
 
+  it("opens closing immediately after the local recovery snapshot is durable", () => {
+    const screen = readScreen("app/on-01a.tsx");
+    const nextHandler = screen.slice(
+      screen.indexOf("const handleNextToClosing"),
+      screen.indexOf("// ── 작성/분할 모드 뒤로가기"),
+    );
+
+    expect(nextHandler).toContain("await persistLatestAutosave();");
+    expect(nextHandler).toContain('status: "CLOSING"');
+    expect(nextHandler).toContain('pathname: "/on-01c"');
+    expect(nextHandler.indexOf("await persistLatestAutosave();")).toBeLessThan(
+      nextHandler.indexOf("router.push("),
+    );
+    expect(nextHandler.indexOf("router.push(")).toBeLessThan(
+      nextHandler.indexOf("const flushResult = await flush();"),
+    );
+    expect(nextHandler).toContain("최신 검토 내용을 저장하지 못했어요");
+  });
+
   it("keeps the first guarded navigation intent through deferred dispatch", () => {
     const screen = readScreen("app/on-01c.tsx");
     const navigationGuard = screen.slice(
