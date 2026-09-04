@@ -1,9 +1,26 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildSentLetterSourceMetadataByArticleId,
   isSpaceSendRecord,
   shouldDisplaySentLetter,
 } from "./sentLetterVisibility";
+import type { SendRecordWithDetails } from "@workspace/api-client-react";
+
+function record(
+  overrides: Partial<SendRecordWithDetails>,
+): SendRecordWithDetails {
+  return {
+    id: "record-1",
+    senderId: "sender-1",
+    articleId: "article-1",
+    targetType: "person",
+    deliverySlot: "2026-09-01T00:00:00.000Z",
+    sentAt: "2026-08-31T00:00:00.000Z",
+    isDelivered: true,
+    ...overrides,
+  };
+}
 
 describe("sent letter visibility", () => {
   it.each(["person", "reply"] as const)(
@@ -23,5 +40,68 @@ describe("sent letter visibility", () => {
 
   it("keeps a person/reply copy visible even when the same article also has a private space send", () => {
     expect(shouldDisplaySentLetter(true, "RECIPIENT_ONLY")).toBe(true);
+  });
+
+  it("uses a space name without exposing its ID as a collection navigation target", () => {
+    const metadata = buildSentLetterSourceMetadataByArticleId([
+      record({
+        targetType: "space",
+        spaceId: "space-1",
+        spaceName: "금요일의 편지",
+        collectionId: "legacy-collection-1",
+        collectionName: "잘못된 모임 이름",
+      }),
+    ]);
+
+    expect(metadata["article-1"]).toEqual({
+      name: "금요일의 편지",
+      collectionId: null,
+      spaceId: "space-1",
+      deliverySlot: "2026-09-01T00:00:00.000Z",
+    });
+  });
+
+  it("keeps existing collection metadata for non-space sends", () => {
+    const metadata = buildSentLetterSourceMetadataByArticleId([
+      record({
+        targetType: "group",
+        collectionId: "collection-1",
+        collectionName: "오래된 친구들",
+      }),
+    ]);
+
+    expect(metadata["article-1"]).toMatchObject({
+      name: "오래된 친구들",
+      collectionId: "collection-1",
+      spaceId: null,
+    });
+  });
+
+  it("selects a space record consistently regardless of API response order", () => {
+    const person = record({
+      id: "record-person",
+      targetType: "person",
+      collectionId: "collection-1",
+      collectionName: "개인 모음",
+      deliverySlot: "2026-09-03T00:00:00.000Z",
+    });
+    const space = record({
+      id: "record-space",
+      targetType: "space",
+      spaceId: "space-1",
+      spaceName: "연동 공간",
+      deliverySlot: "2026-09-01T00:00:00.000Z",
+    });
+
+    expect(buildSentLetterSourceMetadataByArticleId([person, space])).toEqual(
+      buildSentLetterSourceMetadataByArticleId([space, person]),
+    );
+    expect(
+      buildSentLetterSourceMetadataByArticleId([person, space])["article-1"],
+    ).toMatchObject({
+      name: "연동 공간",
+      collectionId: null,
+      spaceId: "space-1",
+    });
   });
 });

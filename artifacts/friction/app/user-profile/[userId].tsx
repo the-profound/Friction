@@ -48,6 +48,7 @@ import type {
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import {
+  buildSentLetterSourceMetadataByArticleId,
   isSpaceSendRecord,
   shouldDisplaySentLetter,
 } from "@/lib/sentLetterVisibility";
@@ -134,30 +135,13 @@ export default function UserProfileScreen() {
     }, [refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchSentRequests, refetchProfileSpaceLetters]),
   );
 
-  const sendRecordByArticleId = useMemo<
-    Record<string, { name: string | null; id: string | null; deliverySlot: string | null }>
-  >(() => {
-    const records = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
-    const map: Record<string, { name: string | null; id: string | null; deliverySlot: string | null }> = {};
-    for (const r of records) {
-      if (r.articleId) {
-        map[r.articleId] = {
-          name: r.collectionName ?? null,
-          id: r.collectionId ?? null,
-          deliverySlot: r.deliverySlot ?? null,
-        };
-      }
-    }
-    return map;
-  }, [sendRecordsQuery.data]);
-
-  const collectionNameByArticleId = useMemo<Record<string, string | null>>(() => {
-    const result: Record<string, string | null> = {};
-    for (const [articleId, rec] of Object.entries(sendRecordByArticleId)) {
-      result[articleId] = rec.name;
-    }
-    return result;
-  }, [sendRecordByArticleId]);
+  const sendRecordByArticleId = useMemo(
+    () =>
+      buildSentLetterSourceMetadataByArticleId(
+        (sendRecordsQuery.data ?? []) as SendRecordWithDetails[],
+      ),
+    [sendRecordsQuery.data],
+  );
 
   const user = userQuery.data;
   const displayName = user?.nickname?.trim() || "이름 없음";
@@ -328,7 +312,7 @@ export default function UserProfileScreen() {
       openLetterOverlay(article, {
         meta: {
           collectionName: rec?.name ?? null,
-          collectionId: rec?.id ?? null,
+          collectionId: rec?.collectionId ?? null,
           date: rec?.deliverySlot ?? null,
         },
         measureRef: slotRef ?? null,
@@ -399,7 +383,7 @@ export default function UserProfileScreen() {
             {item.items.map((article) => {
               const isHidden = isSourceHidden(article.id);
               const itemCollectionName =
-                collectionNameByArticleId[article.id] ?? null;
+                sendRecordByArticleId[article.id]?.name ?? null;
               return (
                 <View
                   key={article.id}
@@ -482,7 +466,7 @@ export default function UserProfileScreen() {
     },
     [
       isSourceHidden,
-      collectionNameByArticleId,
+      sendRecordByArticleId,
       cellWidth,
       cellHeight,
       user?.nickname,

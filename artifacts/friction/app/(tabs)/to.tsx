@@ -40,6 +40,7 @@ import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOver
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  buildSentLetterSourceMetadataByArticleId,
   isSpaceSendRecord,
   shouldDisplaySentLetter,
 } from "@/lib/sentLetterVisibility";
@@ -134,30 +135,13 @@ export default function MyScreen() {
     }, [queryClient, userId, refetchUser, refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchUserReads]),
   );
 
-  const sendRecordByArticleId = useMemo<
-    Record<string, { name: string | null; id: string | null; deliverySlot: string | null }>
-  >(() => {
-    const records = (sendRecordsQuery.data ?? []) as SendRecordWithDetails[];
-    const map: Record<string, { name: string | null; id: string | null; deliverySlot: string | null }> = {};
-    for (const r of records) {
-      if (r.articleId) {
-        map[r.articleId] = {
-          name: r.collectionName ?? null,
-          id: r.collectionId ?? null,
-          deliverySlot: r.deliverySlot ?? null,
-        };
-      }
-    }
-    return map;
-  }, [sendRecordsQuery.data]);
-
-  const collectionNameByArticleId = useMemo<Record<string, string | null>>(() => {
-    const result: Record<string, string | null> = {};
-    for (const [articleId, rec] of Object.entries(sendRecordByArticleId)) {
-      result[articleId] = rec.name;
-    }
-    return result;
-  }, [sendRecordByArticleId]);
+  const sendRecordByArticleId = useMemo(
+    () =>
+      buildSentLetterSourceMetadataByArticleId(
+        (sendRecordsQuery.data ?? []) as SendRecordWithDetails[],
+      ),
+    [sendRecordsQuery.data],
+  );
 
   const user = userQuery.data;
   const displayName = user?.nickname?.trim() || "이름 없음";
@@ -238,7 +222,7 @@ export default function MyScreen() {
           fallbackOrigin: origin,
           meta: {
             collectionName: rec?.name ?? null,
-            collectionId: rec?.id ?? null,
+             collectionId: rec?.collectionId ?? null,
             date: rec?.deliverySlot ?? null,
           },
           currentAuthorId: userId,
@@ -332,7 +316,7 @@ export default function MyScreen() {
             {item.items.map((article) => {
               const isHidden = isSourceHidden(article.id);
               const itemCollectionName =
-                collectionNameByArticleId[article.id] ?? null;
+                sendRecordByArticleId[article.id]?.name ?? null;
               return (
                 <View
                   key={article.id}
@@ -414,7 +398,7 @@ export default function MyScreen() {
     },
     [
       isSourceHidden,
-      collectionNameByArticleId,
+      sendRecordByArticleId,
       cellWidth,
       cellHeight,
       user?.nickname,
