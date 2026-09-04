@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback } from "react";
+import React, { useState, useRef, useMemo, useCallback, useContext } from "react";
 import {
   View,
   Text,
@@ -24,7 +24,7 @@ import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarou
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta, type EnvelopeInfo } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, QueryClientContext } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
 import { patchInboxItemInCache, removeInboxItemFromCache } from "@/lib/queryInvalidation";
 import type { InboxItem, Article } from "@workspace/api-client-react";
@@ -121,7 +121,7 @@ function groupBySlot(items: InboxItem[]): DateGroup[] {
 const groupKeyExtractor = (group: DateGroup) => group.dateKey;
 const inboxItemKey = (item: InboxItem) => item.id;
 
-export default function InboxScreen() {
+function InboxScreenContent() {
   const { startFadeToBlack } = useReaderTransition();
   const { tabReselectVersion } = useNavigation();
   const navBottom = useNavBarBottomSafeArea();
@@ -636,6 +636,22 @@ export default function InboxScreen() {
       />
     </View>
   );
+}
+
+/**
+ * QueryClient-safe wrapper.
+ *
+ * react-native-screens 4.26.2 pre-renders the outgoing screen in a
+ * ZoomTransitionTargetContextProvider that is NOT wrapped by the app-level
+ * QueryClientProvider. Calling useQuery (via useListInbox) in that context
+ * throws "No QueryClient set". We guard by checking the context value before
+ * mounting the content; a missing QueryClient just shows nothing while the
+ * real navigation completes.
+ */
+export default function InboxScreen() {
+  const queryClient = useContext(QueryClientContext);
+  if (!queryClient) return null;
+  return <InboxScreenContent />;
 }
 
 const styles = StyleSheet.create({
