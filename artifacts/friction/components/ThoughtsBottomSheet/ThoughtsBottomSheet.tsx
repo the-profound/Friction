@@ -1067,11 +1067,11 @@ export default function ThoughtsBottomSheet({
             scaleTo={0.9}
             style={[styles.closeButtonWrap, { bottom: insets.bottom + 24 }]}
             contentStyle={styles.closeButtonContent}
+            accessibilityRole="button"
             accessibilityLabel="단상 창 닫기"
+            accessibilityState={{ disabled: !!editor?.pending }}
           >
-            {editor?.pending
-              ? <ActivityIndicator size="small" color={Colors.zinc600} />
-              : <Feather name="x" size={22} color={Colors.zinc600} />}
+            <Feather name="x" size={22} color={Colors.zinc600} />
           </ScalePressable>
         )}
       </Animated.View>
