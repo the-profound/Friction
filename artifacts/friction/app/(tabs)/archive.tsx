@@ -110,17 +110,7 @@ export default function ArchiveScreen() {
     return filteredMyCollections.filter((c) => !c.isImpression);
   }, [filteredMyCollections]);
 
-  const isOddPersonal = regularCollections.length % 2 !== 0;
-
-  const regularCollectionsForGrid = useMemo<MyCollection[]>(() => {
-    return isOddPersonal ? regularCollections.slice(0, -1) : regularCollections;
-  }, [regularCollections, isOddPersonal]);
-
-  const lastSingleCollection = useMemo<MyCollection | null>(() => {
-    return isOddPersonal ? regularCollections[regularCollections.length - 1] ?? null : null;
-  }, [regularCollections, isOddPersonal]);
-
-  const collectionCardWidth = (windowWidth - Spacing.screenPx * 2 - 12) / 2;
+  const cardWidth = Math.floor(windowWidth - Spacing.screenPx * 2);
 
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
@@ -344,21 +334,33 @@ export default function ArchiveScreen() {
   const renderPersonalItem = useCallback(({ item }: { item: MyCollection }) => {
     return (
       <ScalePressable
-        style={styles.collectionCard}
+        style={[styles.cardWrapper, { width: cardWidth }]}
         onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
-      contentStyle={styles.collectionCardContent}
+        contentStyle={styles.card}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name} 보관함, ${item.articleCount ?? 0}편`}
       >
-        <View style={styles.collectionIcon}>
-          <Feather name="folder" size={20} color={Colors.zinc500} />
-        </View>
-        <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
-        <View style={styles.collectionMeta}>
-          <Text style={styles.collectionCount}>{item.articleCount ?? 0}편</Text>
-          {item.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+        <View style={styles.cardContent}>
+          <View style={styles.cardTopRow}>
+            <View style={styles.cardIconNameGroup}>
+              <Feather name="folder" size={18} color={Colors.zinc500} />
+              <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+            </View>
+          </View>
+          {item.description ? (
+            <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
+          ) : null}
+          <View style={styles.cardSpacer} />
+          <View style={styles.cardMeta}>
+            <Text style={styles.cardMetaText} numberOfLines={1}>{item.articleCount ?? 0}편</Text>
+            <View style={styles.cardMetaRight}>
+              {item.isPublic && <Feather name="globe" size={14} color={Colors.zinc400} />}
+            </View>
+          </View>
         </View>
       </ScalePressable>
     );
-  }, [router]);
+  }, [cardWidth, router]);
 
   const renderSentenceItem = useCallback(({ item }: { item: StoredSentence }) => (
     <SwipeableRow
@@ -508,53 +510,39 @@ export default function ArchiveScreen() {
       ) : (
         <FlatList
           {...LIST_PERF_PRESET}
-          key="archive-personal-grid"
-          data={regularCollectionsForGrid}
+          key="archive-personal-list"
+          data={regularCollections}
           keyExtractor={(item) => item.id}
           renderItem={renderPersonalItem}
-          numColumns={2}
-          columnWrapperStyle={styles.gridRow}
-          contentContainerStyle={[styles.gridContent, { paddingBottom: navBottom }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
           showsVerticalScrollIndicator={false}
-          ListFooterComponent={
-            lastSingleCollection ? (
-              <View style={[styles.gridRow, { flexDirection: 'row' }]}>
-                <ScalePressable
-                  style={[styles.collectionCard, { flex: 0, width: collectionCardWidth }]}
-                  onPress={() => router.push({ pathname: "/of-01-detail", params: { id: lastSingleCollection.id, name: lastSingleCollection.name } })}
-                contentStyle={styles.collectionCardContent}
-                >
-                  <View style={styles.collectionIcon}>
-                    <Feather name="folder" size={20} color={Colors.zinc500} />
-                  </View>
-                  <Text style={styles.collectionName} numberOfLines={1}>{lastSingleCollection.name}</Text>
-                  <View style={styles.collectionMeta}>
-                    <Text style={styles.collectionCount}>{lastSingleCollection.articleCount ?? 0}편</Text>
-                    {lastSingleCollection.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
-                  </View>
-                </ScalePressable>
-                <View style={{ flex: 0, width: collectionCardWidth }} />
-              </View>
-            ) : null
-          }
           ListHeaderComponent={
             impressionCollection ? (
               <ScalePressable
-                style={styles.impressionCard}
+                style={[styles.cardWrapper, { width: cardWidth, marginTop: 4 }]}
                 onPress={() => router.push({ pathname: "/of-01-detail", params: { id: impressionCollection.id, name: impressionCollection.name } })}
-              contentStyle={styles.impressionCardContent}
+                contentStyle={styles.card}
+                accessibilityRole="button"
+                accessibilityLabel={`${impressionCollection.name} 보관함, ${impressionCollection.articleCount ?? 0}편`}
               >
-                <View style={styles.collectionIcon}>
-                  <Feather name="heart" size={20} color={Colors.zinc500} />
-                </View>
-                <Text style={styles.collectionName} numberOfLines={1}>{impressionCollection.name}</Text>
-                <View style={styles.collectionMeta}>
-                  <Text style={styles.collectionCount}>{impressionCollection.articleCount ?? 0}편</Text>
-                  {impressionCollection.isPublic && <Feather name="globe" size={12} color={Colors.zinc400} />}
+                <View style={styles.cardContent}>
+                  <View style={styles.cardTopRow}>
+                    <View style={styles.cardIconNameGroup}>
+                      <Feather name="heart" size={18} color={Colors.zinc500} />
+                      <Text style={styles.cardName} numberOfLines={1}>{impressionCollection.name}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.cardSpacer} />
+                  <View style={styles.cardMeta}>
+                    <Text style={styles.cardMetaText} numberOfLines={1}>{impressionCollection.articleCount ?? 0}편</Text>
+                    <View style={styles.cardMetaRight}>
+                      {impressionCollection.isPublic && <Feather name="globe" size={14} color={Colors.zinc400} />}
+                    </View>
+                  </View>
                 </View>
               </ScalePressable>
-            ) : null
+            ) : <View style={styles.listTopSpacer} />
           }
         />
       );
@@ -874,57 +862,79 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc900,
     borderRadius: 1,
   },
-  gridContent: {
-    paddingTop: 8,
-    paddingHorizontal: Spacing.screenPx,
-    gap: 12,
+  // ─── Card ────────────────────────────────────────────────────────────────────
+  listTopSpacer: {
+    height: 4,
   },
-  gridRow: {
-    gap: 12,
+  cardWrapper: {
+    marginHorizontal: Spacing.screenPx,
+    marginBottom: 10,
   },
-  collectionCard: {
-    flex: 1,
-  },
-  collectionCardContent: {
-    gap: 8,
-    backgroundColor: Colors.zinc50,
+  card: {
     borderRadius: 16,
-    padding: 16,
-    minHeight: 110,
-  },
-  impressionCard: {
-    width: '100%',
-  },
-  impressionCardContent: {
-    gap: 8,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 16,
-    padding: 16,
-    minHeight: 110,
-  },
-  collectionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
     backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  collectionName: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc900,
-    flex: 1,
+  cardContent: {
+    padding: 16,
+    position: "relative",
+    flexDirection: "column",
+    justifyContent: "flex-start",
+    borderRadius: 16,
+    overflow: "hidden",
   },
-  collectionMeta: {
+  cardTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
+    marginBottom: 4,
+    gap: 8,
   },
-  collectionCount: {
+  cardIconNameGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  cardName: {
+    ...Typography.bodySemiBold,
+    fontSize: 20,
+    color: Colors.zinc900,
+    flex: 1,
+    minWidth: 0,
+  },
+  cardDesc: {
     ...Typography.caption,
     fontSize: 12,
+    color: Colors.zinc600,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  cardSpacer: {
+    flex: 1,
+    minHeight: 8,
+  },
+  cardMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 6,
+  },
+  cardMetaRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  cardMetaText: {
+    ...Typography.captionMedium,
+    fontSize: 12,
     color: Colors.zinc500,
+    flexShrink: 0,
   },
   listContent: {
     paddingTop: 4,
