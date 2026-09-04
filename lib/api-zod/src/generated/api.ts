@@ -2740,6 +2740,9 @@ export const StartSpaceParams = zod.object({
   id: zod.coerce.string().uuid(),
 });
 
+export const startSpaceBodyPlannedStartsAtRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
 export const startSpaceBodyWeekdaysItemMin = 0;
 export const startSpaceBodyWeekdaysItemMax = 6;
 
@@ -2750,6 +2753,10 @@ export const startSpaceBodyOperatorParticipatesDefault = true;
 
 export const StartSpaceBody = zod.object({
   roundCount: zod.number().min(1).describe("확정 회차 수"),
+  plannedStartsAt: zod
+    .string()
+    .regex(startSpaceBodyPlannedStartsAtRegExp)
+    .describe("첫 중심글 일정 계산의 기준이 되는 시작 예정일 (KST 달력 날짜)"),
   scheduleType: zod.enum(["N_DAY", "WEEKDAY"]).describe("진행 방식"),
   interval: zod
     .number()

@@ -25,7 +25,7 @@
 import { asc, eq, isNotNull } from "drizzle-orm";
 import { db, pool, spacesTable, spaceRoundsTable, spaceRoundSlotsTable } from "@workspace/db";
 import { kstDateString } from "./lib/deliverySlot";
-import { calculateOccasionDate } from "./routes/spaces";
+import { calculateOccasionDate } from "./lib/spaceSchedule";
 
 async function main() {
   // -------------------------------------------------------------------------

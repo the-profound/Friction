@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography } from "@/constants/tokens";
+import { kstToday } from "@/lib/kstDate";
 
 /**
  * Shared month-grid calendar primitives.
@@ -42,19 +43,13 @@ export function startOfDay(d: Date): Date {
   return copy;
 }
 
-/** Number of days from today a space's start date must be, at minimum. */
-export const MIN_SPACE_START_OFFSET_DAYS = 3;
-
 /**
- * Earliest selectable "시작 예정일" (space start date) — today + 3 days,
- * normalized to midnight. Shared by the 공간 만들기 (space-create) and
- * 공간 시작하기 (of-space-start) date pickers so the constraint stays in
- * sync across both flows.
+ * Earliest selectable "시작 예정일" (space start date) — today in KST.
+ * Shared by the 공간 만들기 and 공간 시작하기 date pickers so past dates
+ * remain blocked without imposing an additional waiting period.
  */
 export function getMinSpaceStartDate(referenceDate: Date = new Date()): Date {
-  const d = startOfDay(referenceDate);
-  d.setDate(d.getDate() + MIN_SPACE_START_OFFSET_DAYS);
-  return d;
+  return kstToday(referenceDate);
 }
 
 interface CalendarGridCellState {

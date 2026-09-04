@@ -175,6 +175,10 @@ function formatMonthDay(d: Date): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
+function formatCalendarDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * Returns the deadline calendar date for sending an opening letter: the day
  * before startDate (local-midnight calendar Date). The actual send moment on
@@ -416,7 +420,7 @@ function OperationSettingsStep({
   setStartDate: (v: Date) => void;
 }) {
   const minStartDate = useMemo(() => getMinSpaceStartDate(), []);
-  const isStartDateTooSoon = startOfDay(startDate) < minStartDate;
+  const isStartDatePast = startOfDay(startDate) < minStartDate;
 
   const endDate = useMemo(
     () => calculateProjectedEndDate(startDate, scheduleType as "N_DAY" | "WEEKDAY", interval, weekdays, roundCount, centerCount, confirmedCount),
@@ -589,14 +593,14 @@ function OperationSettingsStep({
           onChange={(date) => setStartDate(date)}
           isDateDisabled={(date) => startOfDay(date) < minStartDate}
           onOpen={() => {
-            // 유효하지 않은(너무 이른) 날짜인 채로 달력을 열면 최소 시작일로 스냅
-            if (isStartDateTooSoon) return new Date(minStartDate);
+            // 저장된 날짜가 이미 과거가 됐다면 달력을 열 때 오늘로 스냅
+            if (isStartDatePast) return new Date(minStartDate);
           }}
           formatButtonLabel={(date) => formatDate(date)}
-          triggerStyle={isStartDateTooSoon ? opStyles.datePastTrigger : undefined}
+          triggerStyle={isStartDatePast ? opStyles.datePastTrigger : undefined}
         />
-        {isStartDateTooSoon && (
-          <Text style={opStyles.datePastWarning}>선택한 날짜는 오늘로부터 3일 후 이후여야 해요.</Text>
+        {isStartDatePast && (
+          <Text style={opStyles.datePastWarning}>선택한 날짜가 지났어요. 오늘 이후 날짜를 선택해주세요.</Text>
         )}
       </View>
 
@@ -896,6 +900,7 @@ function OpeningLetterStep({
 
   // KST 기준: 06:00 이전이면 오늘, 이후면 내일부터 발송 예약 가능
   const minSendDate = useMemo(() => minOpeningSendDate(), []);
+  const hasReservableOpeningDate = minSendDate <= maxScheduledAt;
 
   const [scheduledDate, setScheduledDate] = useState<Date>(() => {
     const d = minSendDate;
@@ -917,6 +922,15 @@ function OpeningLetterStep({
   }, [selectedArticleId, articles]);
 
   const handleSave = useCallback(async () => {
+    if (!hasReservableOpeningDate) {
+      const message = `여는 편지는 ${formatMonthDay(deadline)} 06:00까지 보내야 하지만, 지금 예약 가능한 가장 빠른 날짜보다 이전이에요. 시작 예정일을 늦춰주세요.`;
+      if (Platform.OS === "web") {
+        showToast({ message, type: "error", duration: 5000, position: "top" });
+      } else {
+        Alert.alert("예약할 수 없는 일정", message);
+      }
+      return;
+    }
     if (!selectedArticleId) {
       if (Platform.OS === "web") {
         showToast({ message: "발송할 글을 선택해주세요.", type: "error", duration: 5000, position: "top" });
@@ -959,7 +973,7 @@ function OpeningLetterStep({
     } finally {
       setSaving(false);
     }
-  }, [selectedArticleId, scheduledDate, maxScheduledAt, letters, spaceId, userId, createLetter, createSend, queryClient, onSaved, showToast]);
+  }, [hasReservableOpeningDate, deadline, selectedArticleId, scheduledDate, maxScheduledAt, letters, spaceId, userId, createLetter, createSend, queryClient, onSaved, showToast]);
 
   return (
     <View style={stepStyles.container}>
@@ -975,6 +989,11 @@ function OpeningLetterStep({
           까지 설정할 수 있어요.
         </Text>
       </View>
+      {!hasReservableOpeningDate && (
+        <Text style={opStyles.datePastWarning}>
+          여는 편지를 예약할 수 있는 날짜가 없어요. 시작 예정일을 늦춰주세요.
+        </Text>
+      )}
 
       {/* 이미 등록된 편지 정보 — 변경 중에도 현재 등록된 편지가 항상 보이도록 유지 */}
       {openingLetterExists && existingScheduledDate && (
@@ -1030,7 +1049,7 @@ function OpeningLetterStep({
           </ScalePressable>
 
           {/* 선택된 글 — 발송일 선택 */}
-          {selectedArticleId && (
+          {selectedArticleId && hasReservableOpeningDate && (
             <View style={olStyles.sendDateSection}>
               <Text style={olStyles.sendDateLabel}>발송 예정일 (06:00 발송)</Text>
               <CollapsibleDatePicker
@@ -1358,7 +1377,7 @@ export default function SpaceStartScreen() {
     }
     setCenterCount(space.defaultCenterCount ?? 1);
     if ((space as any).plannedStartsAt) {
-      const d = new Date((space as any).plannedStartsAt);
+      const d = toKstCalendarDate(new Date((space as any).plannedStartsAt));
       if (!isNaN(d.getTime())) setStartDate(d);
     }
   }, [space]);
@@ -1476,6 +1495,7 @@ export default function SpaceStartScreen() {
         id,
         data: {
           roundCount,
+          plannedStartsAt: formatCalendarDateKey(startDate),
           scheduleType,
           interval: scheduleType === "N_DAY" ? interval : undefined,
           weekdays: scheduleType === "WEEKDAY" ? weekdays : undefined,
@@ -1524,7 +1544,7 @@ export default function SpaceStartScreen() {
     }
   }, [
     roundConfigs, slotOrder, roundCount, scheduleType, interval, weekdays,
-    centerCount, space, startSpace, id, queryClient, userId, router, showToast,
+    centerCount, startDate, space, startSpace, id, queryClient, userId, router, showToast,
   ]);
 
   const handleAutoRejectContinue = useCallback(() => {
@@ -1583,18 +1603,23 @@ export default function SpaceStartScreen() {
 
   // ── Step navigation logic ─────────────────────────────────────────────────
 
-  // 시작 예정일이 최소 시작일(오늘+3일)보다 이르면 다음 단계로 진행 불가
+  // 시작 예정일이 오늘보다 이르면 다음 단계로 진행 불가
   const isStartDatePast = useMemo(() => startOfDay(startDate) < getMinSpaceStartDate(), [startDate]);
+  const openingScheduleIsValid = useMemo(() => {
+    if (!openingScheduledSend) return false;
+    const scheduledDate = toKstCalendarDate(new Date(openingScheduledSend.scheduledAt));
+    return scheduledDate >= minOpeningSendDate() && scheduledDate <= getOpeningLetterDeadline(startDate);
+  }, [openingScheduledSend, startDate]);
 
   const canProceed = useMemo(() => {
     if (step === 0) return hasValidSchedule && !isStartDatePast;
     if (step === 1) return true; // only reached in custom-edit mode; fields are optional
     if (step === 2 && slotSubStep === 0) return slotItems.length >= 1;
     if (step === 2 && slotSubStep === 1) return true;
-    if (step === 3) return openingLetterExists && openingScheduledSend !== null;
+    if (step === 3) return openingLetterExists && openingScheduleIsValid;
     if (step === 4) return canStart;
     return true;
-  }, [step, slotSubStep, hasValidSchedule, isStartDatePast, slotItems, canStart, openingLetterExists, openingScheduledSend]);
+  }, [step, slotSubStep, hasValidSchedule, isStartDatePast, slotItems, canStart, openingLetterExists, openingScheduleIsValid]);
 
   // Entering the 회차 구성 step always asks whether to change the draft that
   // already exists (created with the space / edited from the rounds screen)

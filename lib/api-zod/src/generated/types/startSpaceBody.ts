@@ -14,6 +14,11 @@ export interface StartSpaceBody {
    * @minimum 1
    */
   roundCount: number;
+  /**
+   * 첫 중심글 일정 계산의 기준이 되는 시작 예정일 (KST 달력 날짜)
+   * @pattern ^\d{4}-\d{2}-\d{2}$
+   */
+  plannedStartsAt: string;
   /** 진행 방식 */
   scheduleType: StartSpaceBodyScheduleType;
   /**

@@ -32,6 +32,7 @@ import {
   computeDeliverySlot,
   isKstDateReservable,
 } from "../lib/deliverySlot";
+import { calculateOccasionDate } from "../lib/spaceSchedule";
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
 import { getCorrelationId } from "../lib/operationalTelemetry";
 import { synchronizeSpaceRoundStatuses } from "../lib/spaceRoundStatus";
@@ -248,49 +249,6 @@ function sanitizeParticipationDisplay<
     spaceNickname: displayName ?? null,
     displayName: displayName ?? null,
   };
-}
-
-// ─── Occasion date calculation ───────────────────────────────────────────────
-
-/**
- * Calculate the date of the Nth (0-indexed) "occasion" in the space's
- * schedule (N_DAY: every `intervalDays` days; WEEKDAY: the Nth matching
- * weekday from `startedAt`).
- *
- * This is the single source of truth for every date the schedule config
- * produces: a round's start/end date is just the occasion date of its first
- * / last slot, and each slot's `scheduledDate` is the occasion date at its
- * global position in the sequence (previous rounds' slot counts + its own
- * slotOrder). Deriving both from the same occasion index guarantees round
- * dates and slot dates never disagree, and that slot dates strictly advance
- * slot-by-slot across the whole space (never overlapping or going backwards).
- */
-export function calculateOccasionDate(
-  startedAt: Date,
-  scheduleType: "N_DAY" | "WEEKDAY",
-  intervalDays: number,
-  weekdays: number[],
-  occasionIndex: number,
-): Date | null {
-  if (scheduleType === "N_DAY") {
-    const date = new Date(startedAt);
-    date.setDate(date.getDate() + occasionIndex * intervalDays);
-    return date;
-  }
-  if (scheduleType === "WEEKDAY" && weekdays.length > 0) {
-    const sorted = [...weekdays].sort((a, b) => a - b);
-    const date = new Date(startedAt);
-    date.setHours(0, 0, 0, 0);
-    let found = 0;
-    for (let attempt = 0; attempt < 3650; attempt++) {
-      if (sorted.includes(date.getDay())) {
-        if (found === occasionIndex) return new Date(date);
-        found++;
-      }
-      date.setDate(date.getDate() + 1);
-    }
-  }
-  return null;
 }
 
 // ─── My invitations (must be before /:id) ───────────────────────────────────
@@ -974,6 +932,7 @@ const startSpaceRoundSchema = z.object({
 
 const startSpaceBodySchema = z.object({
   roundCount: z.number().int().min(1),
+  plannedStartsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   scheduleType: z.enum(["N_DAY", "WEEKDAY"]),
   interval: z.number().int().min(1).optional(),
   weekdays: z.array(z.number().int().min(0).max(6)).optional(),
@@ -981,6 +940,8 @@ const startSpaceBodySchema = z.object({
   rounds: z.array(startSpaceRoundSchema).optional(),
   operatorParticipates: z.boolean().default(true),
 });
+
+class InvalidOpeningScheduleError extends Error {}
 
 router.post("/spaces/:id/start", requireAuth, async (req, res) => {
   const callerId = req.user!.id;
@@ -1056,6 +1017,23 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
     return;
   }
   const body = parseResult.data;
+  const now = new Date();
+  const scheduleStartsAt = new Date(`${body.plannedStartsAt}T00:00:00.000Z`);
+  const isValidPlannedStart =
+    !Number.isNaN(scheduleStartsAt.getTime()) &&
+    scheduleStartsAt.toISOString().slice(0, 10) === body.plannedStartsAt;
+  if (!isValidPlannedStart) {
+    res.status(400).json({ error: "올바른 시작 예정일을 선택해주세요." });
+    return;
+  }
+  if (body.plannedStartsAt < kstDateString(now)) {
+    res.status(400).json({ error: "시작 예정일은 오늘 이후로 선택해주세요." });
+    return;
+  }
+  const openingDeadline = new Date(scheduleStartsAt);
+  openingDeadline.setUTCDate(openingDeadline.getUTCDate() - 1);
+  const openingDeadlineKey = openingDeadline.toISOString().slice(0, 10);
+  const minOpeningSendKey = kstDateString(computeDeliverySlot(now));
 
   if (body.scheduleType === "N_DAY" && !body.interval) {
     res.status(400).json({ error: "N_DAY 방식은 interval(일수)이 필요합니다." });
@@ -1107,7 +1085,6 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
   }
 
   // 7. Execute in a transaction
-  const now = new Date();
   const intervalDays = body.interval ?? space.defaultCenterInterval;
   const weekdays = body.weekdays ?? [];
   let rejectedRequesterIds: string[] = [];
@@ -1131,6 +1108,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         .set({
           status: "ACTIVE",
           startedAt: now,
+          plannedStartsAt: scheduleStartsAt,
           scheduleType: body.scheduleType,
           weekdays: body.weekdays ?? null,
           operatorParticipates: body.operatorParticipates,
@@ -1147,6 +1125,33 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
       if (updatedRows.length === 0) {
         alreadyStarted = true;
         return;
+      }
+
+      // Lock pending opening reservations in the same transaction as the
+      // RECRUITING -> ACTIVE transition. A cancellation, reschedule, or
+      // scheduler update therefore cannot invalidate the reservation between
+      // this final check and the space activation commit.
+      const pendingOpeningSends = await tx
+        .select({ scheduledAt: spaceScheduledSendsTable.scheduledAt })
+        .from(spaceScheduledSendsTable)
+        .innerJoin(
+          spaceLettersTable,
+          eq(spaceScheduledSendsTable.spaceLetterId, spaceLettersTable.id),
+        )
+        .where(
+          and(
+            eq(spaceScheduledSendsTable.spaceId, req.params.id),
+            eq(spaceScheduledSendsTable.status, "PENDING"),
+            eq(spaceLettersTable.letterType, "OPENING"),
+          ),
+        )
+        .for("update");
+      const hasValidOpeningSend = pendingOpeningSends.some((send) => {
+        const dateKey = kstDateString(send.scheduledAt);
+        return dateKey >= minOpeningSendKey && dateKey <= openingDeadlineKey;
+      });
+      if (!hasValidOpeningSend) {
+        throw new InvalidOpeningScheduleError();
       }
 
       // A RECRUITING space can already have rounds (and their slots) created
@@ -1174,7 +1179,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         const slots = roundConfig?.slots ?? [];
 
         const roundStartDate = calculateOccasionDate(
-          now,
+          scheduleStartsAt,
           body.scheduleType,
           intervalDays,
           weekdays,
@@ -1183,7 +1188,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         const roundEndDate =
           slots.length > 0
             ? calculateOccasionDate(
-                now,
+                scheduleStartsAt,
                 body.scheduleType,
                 intervalDays,
                 weekdays,
@@ -1210,7 +1215,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         // check always agree (both key off `scheduledDate` being present).
         for (let j = 0; j < slots.length; j++) {
           const slotDate = calculateOccasionDate(
-            now,
+            scheduleStartsAt,
             body.scheduleType,
             intervalDays,
             weekdays,
@@ -1265,6 +1270,12 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
       rejectedRequesterIds = rejected.map((r) => r.requesterId);
     });
   } catch (err) {
+    if (err instanceof InvalidOpeningScheduleError) {
+      res.status(400).json({
+        error: "여는 편지는 시작 예정일 전날 오전 6시까지 예약해야 해요. 시작 예정일을 늦추거나 발송일을 다시 선택해주세요.",
+      });
+      return;
+    }
     // Postgres errors (via node-postgres) carry structured fields beyond
     // `message`/`stack` — code, table, column, constraint, detail — which are
     // essential for diagnosing schema mismatches (missing column/table/enum

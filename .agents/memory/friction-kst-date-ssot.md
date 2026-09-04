@@ -11,6 +11,7 @@ Rule: any "오늘" comparison, 06:00 cutoff, or scheduled-send timestamp in the 
 - Compare calendar cells against `kstToday()` (returns a local-midnight Date carrying the KST calendar date).
 - Build server `scheduledAt` payloads with `kstDateAt6(calendarDate).toISOString()`.
 - Display stored instants via `toKstCalendarDate(instant)` before formatting.
+- For server-side date-only schedule arithmetic, first reduce an instant to its KST `YYYY-MM-DD`, then use UTC calendar fields on a canonical UTC-midnight `Date`; never use host-local `getDay`/`setDate`.
 - Timezone-variance unit tests live in `lib/__tests__/kstDate.test.ts` (run with a fixed `now` instant; also passes under TZ=America/New_York).
 
 Related: `CollapsibleDatePicker` supports an `onOpen?: () => Date | void` hook to snap an invalid/past selection (e.g. to tomorrow) when the grid opens.

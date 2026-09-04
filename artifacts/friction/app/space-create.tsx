@@ -546,7 +546,7 @@ function OperationSettingsStep({
           isDateDisabled={(date) => startOfDay(date) < minStartDate}
           formatButtonLabel={(date) => formatDateDisplay(dateToDigits(date))}
         />
-        <Text style={stepStyles.hint}>시작 예정일은 오늘로부터 3일 후부터 선택할 수 있어요</Text>
+        <Text style={stepStyles.hint}>시작 예정일은 오늘부터 선택할 수 있어요</Text>
       </View>
 
       <View style={stepStyles.fieldGroup}>
