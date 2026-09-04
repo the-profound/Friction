@@ -259,6 +259,9 @@ vi.mock("../services/preliminary-question-format", () => ({
 }));
 
 const { default: router } = await import("./thoughts");
+const { generatePreliminaryThoughtQuestion } = await import(
+  "../services/generate-preliminary-thought-question"
+);
 
 type QueueResponse = {
   current: { id: string } | null;
@@ -375,6 +378,35 @@ describe("thought question queue API", () => {
       expect(body.current).toMatchObject({ id: "generated-1" });
       expect(body.next).toMatchObject({ id: "generated-2" });
       expect(state.generatedCount).toBe(3);
+    });
+  });
+
+  it("falls back to the minimum backlog when AI generation fails", async () => {
+    seedCandidates("user-a", 3);
+    vi.mocked(generatePreliminaryThoughtQuestion).mockRejectedValueOnce(new Error("AI unavailable"));
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-queue");
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as QueueResponse;
+      expect(body.queue).toHaveLength(3);
+      expect(body.current).toMatchObject({ id: "generated-1" });
+      expect(body.next).toMatchObject({ id: "generated-2" });
+    });
+  });
+
+  it("falls back to the minimum backlog when AI rejects low-signal source material", async () => {
+    seedCandidates("user-a", 3);
+    vi.mocked(generatePreliminaryThoughtQuestion).mockResolvedValueOnce(null);
+
+    await withServer(async (baseUrl) => {
+      const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
+      expect(body.queue).toHaveLength(3);
+      expect(body.queue.map((item) => item.id)).toEqual([
+        "generated-1",
+        "generated-2",
+        "generated-3",
+      ]);
     });
   });
 

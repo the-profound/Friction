@@ -81,6 +81,7 @@ import {
   getRecordCardTitleLineCount,
   recordMatchesQuery,
   resolveQuestionPlacementAnchors,
+  shouldRefetchQuestionQueue,
   type QuestionPlacementAnchors,
   type RecordDateGroup,
   type RecordKind,
@@ -368,15 +369,6 @@ export default function OnScreen() {
   const lastScrollOffsetRef = useRef(0);
 
   useEffect(() => {
-    setKind("thought");
-    setView("card");
-    setRecordResetVersion(tabReselectVersion.ON);
-    if (!questionQuery.isLoading) {
-      questionQuery.refetch();
-    }
-  }, [tabReselectVersion.ON]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
     setOverlayLetter(null);
     setOverlayOriginLayout(null);
     setIsOverlaySourceHidden(false);
@@ -395,21 +387,25 @@ export default function OnScreen() {
     }).start();
   }, [controlsAnimation, controlsVisible]);
 
-  useFocusEffect(
-    useCallback(() => {
-      // Tab screens stay mounted. A focus transition is the screen-level
-      // boundary at which a new question placement is allowed.
-      if (hasFocusedRecordScreenRef.current) {
-        setCardMixSeed(`${Date.now()}-${Math.random()}`);
-      } else {
-        hasFocusedRecordScreenRef.current = true;
-      }
-    }, []),
-  );
-
   const articlesQuery = useListArticles({ authorId: userId });
   const thoughtsQuery = useListThoughts();
-  const questionQuery = useGetThoughtQuestionQueue({ query: { enabled: Boolean(userId) } });
+  const questionQuery = useGetThoughtQuestionQueue({
+    query: {
+      enabled: Boolean(userId),
+      retry: 2,
+      refetchOnMount: "always",
+    },
+  });
+  const questionQueryStateRef = useRef({
+    isLoading: questionQuery.isLoading,
+    isFetching: questionQuery.isFetching,
+    refetch: questionQuery.refetch,
+  });
+  questionQueryStateRef.current = {
+    isLoading: questionQuery.isLoading,
+    isFetching: questionQuery.isFetching,
+    refetch: questionQuery.refetch,
+  };
   const collectionsQuery = useListMyCollections({ ownerId: userId });
   const deleteArticle = useDeleteArticle();
   const deleteThought = useDeleteThought();
@@ -420,6 +416,49 @@ export default function OnScreen() {
     query: { enabled: Boolean(userId) },
   });
   const updateVisibility = useUpdateSpaceLetterVisibility();
+
+  useEffect(() => {
+    setKind("thought");
+    setView("card");
+    setRecordResetVersion(tabReselectVersion.ON);
+    if (shouldRefetchQuestionQueue({
+      userId,
+      isLoading: questionQuery.isLoading,
+      isFetching: questionQuery.isFetching,
+      mutationPending: questionQueueMutationPendingRef.current,
+    })) {
+      void questionQuery.refetch();
+    }
+  }, [tabReselectVersion.ON]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useFocusEffect(
+    useCallback(() => {
+      // Tab screens stay mounted. Focus is both a placement-session boundary
+      // and a recovery path for a queue request that failed while auth loaded.
+      if (hasFocusedRecordScreenRef.current) {
+        setCardMixSeed(`${Date.now()}-${Math.random()}`);
+        const queryState = questionQueryStateRef.current;
+        if (shouldRefetchQuestionQueue({
+          userId,
+          isLoading: queryState.isLoading,
+          isFetching: queryState.isFetching,
+          mutationPending: questionQueueMutationPendingRef.current,
+        })) {
+          void queryState.refetch();
+        }
+      } else {
+        hasFocusedRecordScreenRef.current = true;
+      }
+    }, [userId]),
+  );
+
+  useEffect(() => {
+    if (!questionQuery.isError) return;
+    showToast({
+      message: "질문을 불러오지 못했습니다. 화면을 당겨 다시 시도해주세요.",
+      type: "error",
+    });
+  }, [questionQuery.errorUpdatedAt, questionQuery.isError, showToast]);
 
   useEffect(() => {
     seedRecordDetailCaches(queryClient, {
@@ -436,13 +475,17 @@ export default function OnScreen() {
     return map;
   }, [spaceLettersQuery.data]);
 
-  const queuedIds = useMemo(
-    () => getQueuedThoughtIds(
+  const queuedThoughts = useMemo(
+    () => getQueuedThoughts(
       questionQuery.data?.queue,
       questionQuery.data?.current,
       questionQuery.data?.next,
     ),
     [questionQuery.data?.current, questionQuery.data?.next, questionQuery.data?.queue],
+  );
+  const queuedIds = useMemo(
+    () => new Set(queuedThoughts.map((thought) => thought.id)),
+    [queuedThoughts],
   );
   const listedThoughts = (thoughtsQuery.data ?? []) as Thought[];
   const allRecords = useMemo(
@@ -461,11 +504,7 @@ export default function OnScreen() {
   );
   const queuedQuestionRecords = useMemo<CardRecord[]>(
     () => kind === "thought"
-      ? getQueuedThoughts(
-          questionQuery.data?.queue,
-          questionQuery.data?.current,
-          questionQuery.data?.next,
-        ).map((thought, index) => ({
+      ? queuedThoughts.map((thought, index) => ({
           id: thought.id,
           kind: "thought" as const,
           updatedAt: thought.updatedAt,
@@ -474,7 +513,7 @@ export default function OnScreen() {
           questionIndex: index + 1,
         }))
       : [],
-    [kind, questionQuery.data?.current, questionQuery.data?.next, questionQuery.data?.queue],
+    [kind, queuedThoughts],
   );
   const cardRecords = useMemo<CardRecord[]>(
     () => records.map((record) => ({ ...record, isQuestion: false })),
@@ -498,16 +537,16 @@ export default function OnScreen() {
     return anchors;
   }, [allCardRecords, cardMixSeed, queuedQuestionRecords]);
   const visibleRecords = useMemo<CardRecord[]>(
-    () => kind === "thought" && view !== "card" && questionQuery.data?.current
+    () => kind === "thought" && view !== "card" && queuedThoughts[0]
       ? [{
-          id: questionQuery.data.current.id,
+          id: queuedThoughts[0].id,
           kind: "thought" as const,
-          updatedAt: questionQuery.data.current.updatedAt,
-          thought: questionQuery.data.current,
+          updatedAt: queuedThoughts[0].updatedAt,
+          thought: queuedThoughts[0],
           isQuestion: true,
         }, ...records.map((record) => ({ ...record, isQuestion: false }))]
       : records.map((record) => ({ ...record, isQuestion: false })),
-    [kind, questionQuery.data?.current, records, view],
+    [kind, queuedThoughts, records, view],
   );
   const cardGroups = useMemo(
     () => buildMixedRecordGroups(
@@ -760,7 +799,10 @@ export default function OnScreen() {
     (articlesQuery.isLoading && !articlesQuery.data) ||
     (thoughtsQuery.isLoading && !thoughtsQuery.data) ||
     (questionQuery.isLoading && !questionQuery.data);
-  const emptyTitle = kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
+  const questionLoadFailed = kind === "thought" && questionQuery.isError && queuedThoughts.length === 0;
+  const emptyTitle = questionLoadFailed
+    ? "질문을 불러오지 못했어요. 화면을 당겨 다시 시도해주세요."
+    : kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
   const overlayLetterChain = useMemo<(Article | null)[]>(
     () => (overlayLetter ? [overlayLetter] : []),
     [overlayLetter],
@@ -979,7 +1021,7 @@ export default function OnScreen() {
         <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
           <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
           <RecordListText style={styles.emptyTitle}>{searchQuery.trim() ? "검색 결과가 없습니다" : emptyTitle}</RecordListText>
-          {!searchQuery.trim() && kind === "thought" ? (
+          {!searchQuery.trim() && kind === "thought" && !questionLoadFailed ? (
             <ScalePressable
               style={styles.createButton}
               contentStyle={styles.createButtonContent}

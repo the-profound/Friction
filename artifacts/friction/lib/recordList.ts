@@ -117,9 +117,9 @@ export function filterRecords(records: UnifiedRecord[], kind: RecordKind): Unifi
  * responses safe during a client/server rollout.
  */
 export function getQueuedThoughtIds(
-  queue: Thought[] | null | undefined,
-  current: Thought | null | undefined,
-  next: Thought | null | undefined,
+  queue: unknown,
+  current: unknown,
+  next: unknown,
 ): Set<string> {
   return new Set(getQueuedThoughts(queue, current, next).map((thought) => thought.id));
 }
@@ -130,18 +130,51 @@ export function getQueuedThoughtIds(
  * used when the complete queue is absent.
  */
 export function getQueuedThoughts(
-  queue: Thought[] | null | undefined,
-  current: Thought | null | undefined,
-  next: Thought | null | undefined,
+  queue: unknown,
+  current: unknown,
+  next: unknown,
 ): Thought[] {
-  const source = [current, ...(queue ?? []), next]
-    .filter((thought): thought is Thought => Boolean(thought));
+  const isThought = (value: unknown): value is Thought => {
+    if (typeof value !== "object" || value === null) return false;
+    const candidate = value as Record<string, unknown>;
+    const updatedAt = candidate.updatedAt;
+    const updatedAtMs = updatedAt instanceof Date
+      ? updatedAt.getTime()
+      : typeof updatedAt === "string"
+        ? Date.parse(updatedAt)
+        : Number.NaN;
+    return typeof candidate.id === "string"
+      && typeof candidate.authorId === "string"
+      && typeof candidate.content === "string"
+      && typeof candidate.createdFrom === "string"
+      && typeof candidate.status === "string"
+      && Number.isFinite(updatedAtMs);
+  };
+  const source = [
+    current,
+    ...(Array.isArray(queue) ? queue : []),
+    next,
+  ].filter(isThought);
   const seen = new Set<string>();
   return source.filter((thought) => {
     if (seen.has(thought.id)) return false;
     seen.add(thought.id);
     return true;
   });
+}
+
+export function shouldRefetchQuestionQueue({
+  userId,
+  isLoading,
+  isFetching,
+  mutationPending,
+}: {
+  userId: string | null | undefined;
+  isLoading: boolean;
+  isFetching: boolean;
+  mutationPending: boolean;
+}): boolean {
+  return Boolean(userId) && !isLoading && !isFetching && !mutationPending;
 }
 
 /** Displays the same compact calendar date label used by the record card groups. */

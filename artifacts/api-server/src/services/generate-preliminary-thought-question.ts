@@ -1,5 +1,6 @@
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MODEL = "google/gemini-3.1-flash-lite";
+const REQUEST_TIMEOUT_MS = 12_000;
 
 export type QuestionSource = {
   content: string;
@@ -40,6 +41,7 @@ export async function generatePreliminaryThoughtQuestion(
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",

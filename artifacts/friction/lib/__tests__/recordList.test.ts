@@ -15,15 +15,28 @@ import {
   normalizePreviewTitle,
   normalizePreviewText,
   resolveQuestionPlacementAnchors,
+  shouldRefetchQuestionQueue,
   type UnifiedRecord,
 } from "../recordList";
 
+function queuedThought(id: string): Thought {
+  return {
+    id,
+    authorId: "user-a",
+    content: `# ${id}?\n\n질문 설명`,
+    createdFrom: "question",
+    status: "PRELIMINARY",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+  };
+}
+
 describe("record list model", () => {
   it("keeps every queued question out of ordinary thought records", () => {
-    const queuedThoughts = Array.from({ length: 6 }, (_, index) => ({
-      id: `queued-${index + 1}`,
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    })) as unknown as Thought[];
+    const queuedThoughts = Array.from(
+      { length: 6 },
+      (_, index) => queuedThought(`queued-${index + 1}`),
+    );
     const listedThoughts = [
       ...queuedThoughts,
       { id: "regular-thought", updatedAt: "2026-01-02T00:00:00.000Z" },
@@ -39,26 +52,50 @@ describe("record list model", () => {
   });
 
   it("falls back to current and next while an older cached queue response is in use", () => {
-    const current = { id: "current" } as Thought;
-    const next = { id: "next" } as Thought;
+    const current = queuedThought("current");
+    const next = queuedThought("next");
 
     expect(getQueuedThoughtIds(undefined, current, next)).toEqual(new Set(["current", "next"]));
     expect(getQueuedThoughts(undefined, current, next)).toEqual([current, next]);
   });
 
   it("de-duplicates repeated queue aliases without changing FIFO order", () => {
-    const current = { id: "current" } as Thought;
-    const next = { id: "next" } as Thought;
+    const current = queuedThought("current");
+    const next = queuedThought("next");
 
     expect(getQueuedThoughts([current, next, current], current, next)).toEqual([current, next]);
   });
 
+  it("recovers valid aliases from a malformed queue response", () => {
+    const current = queuedThought("current");
+    expect(getQueuedThoughts({ unexpected: true }, current, { noId: true })).toEqual([current]);
+    expect(getQueuedThoughts([
+      null,
+      { id: "blank-card", updatedAt: "not-a-date", content: "" },
+      current,
+    ], null, null)).toEqual([current]);
+  });
+
+  it("refetches only after auth is ready and no queue read or mutation is active", () => {
+    const state = {
+      userId: "user-a",
+      isLoading: false,
+      isFetching: false,
+      mutationPending: false,
+    };
+    expect(shouldRefetchQuestionQueue(state)).toBe(true);
+    expect(shouldRefetchQuestionQueue({ ...state, userId: undefined })).toBe(false);
+    expect(shouldRefetchQuestionQueue({ ...state, isLoading: true })).toBe(false);
+    expect(shouldRefetchQuestionQueue({ ...state, isFetching: true })).toBe(false);
+    expect(shouldRefetchQuestionQueue({ ...state, mutationPending: true })).toBe(false);
+  });
+
   it("keeps FIFO queue order in the model while excluding every queued ID from date groups", () => {
     const queue = [
-      { id: "first" },
-      { id: "second" },
-      { id: "third" },
-    ] as Thought[];
+      queuedThought("first"),
+      queuedThought("second"),
+      queuedThought("third"),
+    ];
     const queueIds = getQueuedThoughtIds(queue, queue[0], queue[1]);
     const normalThoughts = [
       { id: "third" },
