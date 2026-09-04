@@ -22,6 +22,7 @@ export type SubmitButtonProps = {
   style?: StyleProp<ViewStyle>;
   disabledStyle?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
+  disabledContentStyle?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   disabledTextStyle?: StyleProp<TextStyle>;
   renderIcon?: (state: SubmitButtonState) => React.ReactNode;
@@ -44,6 +45,7 @@ export default function SubmitButton({
   style,
   disabledStyle,
   contentStyle,
+  disabledContentStyle,
   textStyle,
   disabledTextStyle,
   renderIcon,
@@ -71,12 +73,19 @@ export default function SubmitButton({
       accessibilityRole="button"
       accessibilityState={{ disabled: effectivelyDisabled, busy: pending }}
       style={[style, effectivelyDisabled && disabledStyle]}
-      contentStyle={[DEFAULT_CONTENT_STYLE, contentStyle]}
+      contentStyle={[
+        DEFAULT_CONTENT_STYLE,
+        contentStyle,
+        effectivelyDisabled && disabledContentStyle,
+      ]}
       hitSlop={hitSlop}
       testID={testID}
     >
       {renderIcon ? renderIcon({ pending, disabled: effectivelyDisabled }) : null}
-      <Text style={[textStyle, effectivelyDisabled && disabledTextStyle]}>
+      <Text
+        style={[textStyle, effectivelyDisabled && disabledTextStyle]}
+        numberOfLines={1}
+      >
         {currentLabel}
       </Text>
     </ScalePressable>

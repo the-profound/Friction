@@ -344,6 +344,7 @@ export default function OnScreen() {
   const [archiveArticleId, setArchiveArticleId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const isArchivingRef = useRef(false);
   // Letter overlay — opened when the user taps a letter card.
   const [overlayLetter, setOverlayLetter] = useState<Article | null>(null);
   const [overlayOriginLayout, setOverlayOriginLayout] = useState<OriginLayout | null>(null);
@@ -739,7 +740,8 @@ export default function OnScreen() {
   }, [deleteArticle, deleteTarget, deleteThought, queryClient, showToast]);
 
   const archiveArticle = useCallback(async () => {
-    if (!archiveArticleId || !selectedCollectionId || isArchiving) return;
+    if (!archiveArticleId || !selectedCollectionId || isArchivingRef.current) return;
+    isArchivingRef.current = true;
     setIsArchiving(true);
     try {
       await addToCollection.mutateAsync({ id: selectedCollectionId, data: { articleId: archiveArticleId } });
@@ -760,9 +762,10 @@ export default function OnScreen() {
     } catch {
       showToast({ message: "보관에 실패했습니다.", type: "error" });
     } finally {
+      isArchivingRef.current = false;
       setIsArchiving(false);
     }
-  }, [addToCollection, archiveArticleId, isArchiving, queryClient, router, selectedCollectionId, showToast, sortedCollections]);
+  }, [addToCollection, archiveArticleId, queryClient, router, selectedCollectionId, showToast, sortedCollections]);
 
   const handleVisibilityToggle = useCallback((articleId: string) => {
     const sl = spaceLetterByArticleId.get(articleId);
@@ -1027,6 +1030,9 @@ export default function OnScreen() {
               contentStyle={styles.createButtonContent}
               onPress={createDirectThought}
               disabled={isCreatingThought}
+              accessibilityRole="button"
+              accessibilityLabel="단상 쓰기"
+              accessibilityState={{ disabled: isCreatingThought, busy: isCreatingThought }}
             >
               <RecordListText style={styles.createButtonText}>단상 쓰기</RecordListText>
             </ScalePressable>
@@ -1128,7 +1134,17 @@ export default function OnScreen() {
             renderItem={({ item }) => <ScalePressable style={styles.collectionRow} contentStyle={[styles.collectionRowContent, selectedCollectionId === item.id && styles.collectionSelected]} onPress={() => setSelectedCollectionId(item.id)}><RecordListText style={styles.collectionName}>{item.name}</RecordListText>{selectedCollectionId === item.id ? <Feather name="check" size={16} color={Colors.zinc900} /> : null}</ScalePressable>}
             ListEmptyComponent={<RecordListText style={styles.muted}>보관할 폴더가 없어요</RecordListText>}
           />
-          <ScalePressable style={styles.archiveButton} contentStyle={[styles.archiveButtonContent, (!selectedCollectionId || isArchiving) && styles.disabled]} onPress={archiveArticle} disabled={!selectedCollectionId || isArchiving}><RecordListText style={styles.createButtonText}>{isArchiving ? "보관 중..." : "보관하기"}</RecordListText></ScalePressable>
+          <ScalePressable
+            style={styles.archiveButton}
+            contentStyle={[styles.archiveButtonContent, (!selectedCollectionId || isArchiving) && styles.disabled]}
+            onPress={archiveArticle}
+            disabled={!selectedCollectionId || isArchiving}
+            accessibilityRole="button"
+            accessibilityLabel="보관하기"
+            accessibilityState={{ disabled: !selectedCollectionId || isArchiving, busy: isArchiving }}
+          >
+            <RecordListText style={styles.createButtonText}>{isArchiving ? "보관 중..." : "보관하기"}</RecordListText>
+          </ScalePressable>
         </View>
       </BottomSheet>
     </View>
@@ -1167,7 +1183,7 @@ const styles = StyleSheet.create({
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
   createButton: { height: 48, flexGrow: 0, flexShrink: 0 },
-  createButtonContent: { height: 48, flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, backgroundColor: Colors.noticeAccent, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  createButtonContent: { height: 48, flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, backgroundColor: Colors.primaryAction, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   createButtonText: { ...Typography.bodySemiBold, color: Colors.white, fontSize: 15 },
   archive: { flex: 1, paddingHorizontal: Spacing.screenPx, paddingBottom: 16 },
   archiveTitle: { ...Typography.bodySemiBold, fontSize: 16, color: Colors.zinc900, textAlign: "center", paddingVertical: 12 },
@@ -1175,8 +1191,8 @@ const styles = StyleSheet.create({
   collectionRowContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 14, paddingHorizontal: 8, borderRadius: 8 },
   collectionSelected: { backgroundColor: Colors.zinc50 },
   collectionName: { ...Typography.body, color: Colors.zinc700 },
-  archiveButton: { height: 48, marginTop: 12 },
-  archiveButtonContent: { height: 48, borderRadius: 12, backgroundColor: Colors.zinc900, alignItems: "center", justifyContent: "center" },
+  archiveButton: { height: 48, flexGrow: 0, flexShrink: 0, marginTop: 12 },
+  archiveButtonContent: { height: 48, flexGrow: 0, flexShrink: 0, borderRadius: 12, backgroundColor: Colors.primaryAction, alignItems: "center", justifyContent: "center" },
   disabled: { opacity: 0.4 },
   // Letter selection mode
   cardSelectedBorder: {

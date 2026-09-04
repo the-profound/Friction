@@ -450,7 +450,13 @@ export default function ArchiveScreen() {
       <Feather name="folder" size={40} color={Colors.zinc300} />
       <Text style={styles.emptyTitle}>내 폴더가 없어요</Text>
       <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
-      <ScalePressable style={styles.emptyButton} contentStyle={styles.emptyButtonContent} onPress={handleAdd}>
+      <ScalePressable
+        style={styles.emptyButton}
+        contentStyle={styles.emptyButtonContent}
+        onPress={handleAdd}
+        accessibilityRole="button"
+        accessibilityLabel="새 폴더 만들기"
+      >
         <Text style={styles.emptyButtonText}>새 폴더 만들기</Text>
       </ScalePressable>
     </RefreshableEmpty>
@@ -482,7 +488,13 @@ export default function ArchiveScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <ScalePressable style={styles.emptyButton} contentStyle={styles.emptyButtonContent} onPress={handleRefresh}>
+          <ScalePressable
+            style={styles.emptyButton}
+            contentStyle={styles.emptyButtonContent}
+            onPress={handleRefresh}
+            accessibilityRole="button"
+            accessibilityLabel="보관함 다시 불러오기"
+          >
             <Text style={styles.emptyButtonText}>다시 시도</Text>
           </ScalePressable>
         </View>
@@ -691,7 +703,8 @@ export default function ArchiveScreen() {
           />
           <SubmitButton
             style={styles.createConfirmButton}
-            disabledStyle={styles.createConfirmDisabled}
+            contentStyle={styles.createConfirmButtonContent}
+            disabledContentStyle={styles.createConfirmDisabled}
             textStyle={styles.createConfirmText}
             onPress={handleCreateConfirm}
             pending={isCreating}
@@ -1025,12 +1038,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   emptyButton: {
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
     marginTop: 8,
   },
   emptyButtonContent: {
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.primaryAction,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
@@ -1063,19 +1081,29 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   createConfirmButton: {
-    backgroundColor: Colors.zinc900,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
+    width: "100%",
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
     marginTop: 4,
   },
+  createConfirmButtonContent: {
+    width: "100%",
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: Colors.primaryAction,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   createConfirmDisabled: {
-    backgroundColor: Colors.zinc300,
+    backgroundColor: Colors.primaryActionDisabled,
   },
   createConfirmText: {
     ...Typography.bodySemiBold,
     fontSize: 16,
-    color: Colors.white,
+    color: Colors.primaryActionForeground,
   },
   sentenceSheetContainer: {
     paddingVertical: 8,

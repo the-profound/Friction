@@ -8,7 +8,7 @@ const read = (relativePath: string) =>
 
 function styleBlock(source: string, name: string): string {
   const match = source.match(
-    new RegExp(`${name}:\\s*\\{([\\s\\S]*?)\\n\\s*\\},`),
+    new RegExp(`${name}:\\s*\\{([\\s\\S]*?)\\s*\\},`),
   );
   if (!match) throw new Error(`Missing StyleSheet entry: ${name}`);
   return match[1];
@@ -117,5 +117,44 @@ describe("signup step-two button layout contract", () => {
     expect(
       pillButton.match(/\{ height, flexGrow: 0, flexShrink: 0 \}/g),
     ).toHaveLength(2);
+  });
+
+  it("uses the semantic red primary action token without changing secondary variants", () => {
+    const tokens = read("constants/tokens.ts");
+    const pillButton = read("components/shared/PillButton.tsx");
+    const confirmModal = read("components/ConfirmModal/ConfirmModal.tsx");
+
+    expect(tokens).toContain('primaryAction: "#92323D"');
+    expect(tokens).toContain('primaryActionForeground: "#FFFFFF"');
+    expect(pillButton).toContain("backgroundColor: Colors.primaryAction");
+    expect(pillButton).toContain("color: Colors.primaryActionForeground");
+    expect(pillButton).toContain('accessibilityRole = "button"');
+    expect(pillButton).toContain("accessibilityRole={accessibilityRole}");
+    expect(pillButton).toContain("backgroundColor: Colors.zinc100");
+    expect(pillButton).toContain("borderColor: Colors.zinc200");
+    expect(confirmModal).toContain("backgroundColor: Colors.primaryAction");
+    expect(confirmModal).toContain('backgroundColor: "#DC2626"');
+    expect(confirmModal).toContain("accessibilityLabel={displayActionButton.label}");
+    expect(confirmModal).toContain('accessibilityLabel="삭제"');
+  });
+
+  it("keeps archive and record primary actions fixed across normal and pending states", () => {
+    const archive = read("app/(tabs)/archive.tsx");
+    const records = read("app/(tabs)/on.tsx");
+
+    for (const name of ["emptyButton", "emptyButtonContent"]) {
+      expectFixedNonGrowingStyle(styleBlock(archive, name), "40");
+    }
+    for (const name of ["createConfirmButton", "createConfirmButtonContent"]) {
+      expectFixedNonGrowingStyle(styleBlock(archive, name), "48");
+    }
+    for (const name of ["createButton", "createButtonContent", "archiveButton", "archiveButtonContent"]) {
+      expectFixedNonGrowingStyle(styleBlock(records, name), "48");
+    }
+    expect(archive).toContain("disabledContentStyle={styles.createConfirmDisabled}");
+    expect(archive).toContain("backgroundColor: Colors.primaryAction");
+    expect(records).toContain("backgroundColor: Colors.primaryAction");
+    expect(records).toContain("if (!archiveArticleId || !selectedCollectionId || isArchivingRef.current) return;");
+    expect(records).toContain("busy: isArchiving");
   });
 });

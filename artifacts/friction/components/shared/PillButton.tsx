@@ -49,6 +49,7 @@ export default function PillButton({
   style,
   contentStyle,
   children,
+  accessibilityRole = "button",
   ...rest
 }: PillButtonProps) {
   const height = PILL_HEIGHT[size];
@@ -74,6 +75,7 @@ export default function PillButton({
         // stretching capsule buttons vertically.
         { height, flexGrow: 0, flexShrink: 0 },
       ]}
+      accessibilityRole={accessibilityRole}
       {...rest}
     >
       {children ?? (
@@ -121,7 +123,7 @@ const styles = StyleSheet.create({
 
 const variantPillStyles: Record<PillVariant, ViewStyle> = {
   primary: {
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.primaryAction,
   },
   secondary: {
     backgroundColor: Colors.zinc100,
@@ -135,7 +137,7 @@ const variantPillStyles: Record<PillVariant, ViewStyle> = {
 
 const variantLabelStyles: Record<PillVariant, TextStyle> = {
   primary: {
-    color: Colors.white,
+    color: Colors.primaryActionForeground,
   },
   secondary: {
     color: Colors.zinc700,

@@ -47,6 +47,12 @@ export const Colors = {
 
   /** #92323D — 오늘의 인사·NEW 강조색 */
   noticeAccent: "#92323D",
+  /** Primary action surface — save, confirm, create, and retry buttons. */
+  primaryAction: "#92323D",
+  /** Primary action foreground with sufficient contrast on the brand red. */
+  primaryActionForeground: "#FFFFFF",
+  /** Disabled primary action surface; dimensions must remain unchanged. */
+  primaryActionDisabled: "#d4d4d8",
   /** rgba(146,50,61,0.08) — 인사 헤더/행 배경 */
   noticeAccentSoft: "rgba(146,50,61,0.08)",
 

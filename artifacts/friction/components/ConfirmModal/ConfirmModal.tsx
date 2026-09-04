@@ -107,6 +107,8 @@ export default function ConfirmModal({
                   style={styles.actionButton}
                   contentStyle={styles.actionButtonContent}
                   onPress={displayActionButton.onPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={displayActionButton.label}
                 >
                   <Text style={styles.actionButtonEmoji}>{displayActionButton.emoji}</Text>
                   <Text style={styles.actionButtonLabel}>{displayActionButton.label}</Text>
@@ -120,6 +122,8 @@ export default function ConfirmModal({
                       displayDeleteButton.disabled && styles.deleteButtonDisabled,
                     ]}
                     onPress={displayDeleteButton.onPress}
+                    accessibilityRole="button"
+                    accessibilityLabel="삭제"
                   >
                     <Feather name="trash-2" size={20} color={Colors.white} />
                   </ScalePressable>
@@ -132,14 +136,22 @@ export default function ConfirmModal({
                   contentStyle={[styles.buttonContent, styles.cancelButton]}
                   onPress={onCancel}
                   disabled={cancelDisabled}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: cancelDisabled }}
                 >
                   <Text style={styles.cancelText}>{displayCancelLabel}</Text>
                 </ScalePressable>
                 <ScalePressable
                   style={styles.button}
-                  contentStyle={[styles.buttonContent, displayDestructive ? styles.destructiveButton : styles.confirmButton]}
+                  contentStyle={[
+                    styles.buttonContent,
+                    displayDestructive ? styles.destructiveButton : styles.confirmButton,
+                    confirmDisabled && styles.buttonDisabled,
+                  ]}
                   onPress={onConfirm}
                   disabled={confirmDisabled}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: confirmDisabled, busy: confirmDisabled }}
                 >
                   <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
                     {displayConfirmLabel}
@@ -248,18 +260,24 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
+    height: 48,
   },
   buttonContent: {
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
     borderRadius: 12,
   },
   cancelButton: {
     backgroundColor: Colors.zinc100,
   },
   confirmButton: {
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.primaryAction,
+  },
+  buttonDisabled: {
+    opacity: 0.4,
   },
   destructiveButton: {
     backgroundColor: "#FEE2E2",
@@ -272,7 +290,7 @@ const styles = StyleSheet.create({
   confirmText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
-    color: Colors.white,
+    color: Colors.primaryActionForeground,
   },
   destructiveText: {
     color: "#DC2626",
