@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   View,
   Text,
   StyleSheet,
@@ -18,6 +19,7 @@ import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ScalePressable from "@/components/shared/ScalePressable";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
+import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
@@ -27,6 +29,7 @@ import {
   useListMySpaceInvitations,
   useListMySpaceCodeRequests,
   useListOperatorPendingSpaceCodeRequests,
+  listOperatorPendingSpaceCodeRequests,
   getListSpacesQueryKey,
   getListMySpaceInvitationsQueryKey,
   getListMySpaceCodeRequestsQueryKey,
@@ -38,7 +41,10 @@ import type {
   SpacePendingCodeRequestSummary,
 } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
-import { getUserScopedOperatorPendingSpaceCodeRequestsQueryKey } from "@/lib/operatorPendingSpaceCodeRequestsQuery";
+import {
+  getUserScopedOperatorPendingSpaceCodeRequestsQueryKey,
+  runOperatorPendingRetry,
+} from "@/lib/operatorPendingSpaceCodeRequestsQuery";
 
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
@@ -254,9 +260,13 @@ export default function SpacesScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
+  const { prepareAuthSession } = useAuth();
   const queryClient = useQueryClient();
   const { width: screenWidth } = useWindowDimensions();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const refreshLockRef = useRef(false);
+  const [isOperatorRetrying, setIsOperatorRetrying] = useState(false);
+  const operatorRetryLockRef = useRef(false);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -277,7 +287,17 @@ export default function SpacesScreen() {
     [userId],
   );
   const operatorPendingQuery = useListOperatorPendingSpaceCodeRequests({
-    query: { enabled: !!userId, queryKey: operatorPendingQueryKey },
+    query: {
+      enabled: !!userId,
+      queryKey: operatorPendingQueryKey,
+      queryFn: async ({ signal }) => {
+        const session = await prepareAuthSession();
+        if (!session) {
+          throw new Error("로그인 상태를 확인할 수 없어요.");
+        }
+        return listOperatorPendingSpaceCodeRequests({ signal });
+      },
+    },
   });
 
   const allSpaces = useMemo(
@@ -320,13 +340,29 @@ export default function SpacesScreen() {
   }, [spacesQuery, invitationsQuery, codeRequestsQuery, operatorPendingQuery]);
 
   const handleRefresh = useCallback(async () => {
+    if (refreshLockRef.current) return;
+    refreshLockRef.current = true;
     setIsManualRefreshing(true);
     try {
       await refetchAll();
     } finally {
+      refreshLockRef.current = false;
       setIsManualRefreshing(false);
     }
   }, [refetchAll]);
+
+  const handleOperatorRetry = useCallback(async () => {
+    const started = !operatorRetryLockRef.current;
+    if (started) setIsOperatorRetrying(true);
+    try {
+      await runOperatorPendingRetry(
+        operatorRetryLockRef,
+        operatorPendingQuery.refetch,
+      );
+    } finally {
+      if (started) setIsOperatorRetrying(false);
+    }
+  }, [operatorPendingQuery.refetch]);
 
   useFocusEffect(
     useCallback(() => {
@@ -337,10 +373,19 @@ export default function SpacesScreen() {
         queryClient,
         operatorPendingQueryKey,
       );
+      const operatorPendingIsFetching =
+        queryClient.getQueryState(operatorPendingQueryKey)?.fetchStatus ===
+        "fetching";
       if (spaceStale) spacesQuery.refetch();
       if (invStale) invitationsQuery.refetch();
       if (codeStale) codeRequestsQuery.refetch();
-      if (operatorPendingStale) operatorPendingQuery.refetch();
+      if (
+        userId &&
+        operatorPendingStale &&
+        !operatorPendingIsFetching
+      ) {
+        operatorPendingQuery.refetch();
+      }
     }, [
       queryClient,
       userId,
@@ -477,8 +522,23 @@ export default function SpacesScreen() {
         <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={handleRefresh}>
-            <Text style={styles.retryButtonText}>다시 시도</Text>
+          <ScalePressable
+            style={styles.retryButtonOuter}
+            contentStyle={styles.retryButton}
+            onPress={handleRefresh}
+            disabled={isManualRefreshing}
+            accessibilityRole="button"
+            accessibilityLabel="다시 시도"
+            accessibilityState={{
+              disabled: isManualRefreshing,
+              busy: isManualRefreshing,
+            }}
+          >
+            {isManualRefreshing ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <Text style={styles.retryButtonText}>다시 시도</Text>
+            )}
           </ScalePressable>
         </View>
       ) : isOperatorSummaryOnlyLoading ? (
@@ -489,8 +549,23 @@ export default function SpacesScreen() {
         <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>승인 대기 목록을 불러오지 못했어요</Text>
-          <ScalePressable style={styles.retryButtonOuter} contentStyle={styles.retryButton} onPress={handleRefresh}>
-            <Text style={styles.retryButtonText}>다시 시도</Text>
+          <ScalePressable
+            style={styles.retryButtonOuter}
+            contentStyle={styles.retryButton}
+            onPress={handleOperatorRetry}
+            disabled={isOperatorRetrying}
+            accessibilityRole="button"
+            accessibilityLabel="승인 대기 목록 다시 시도"
+            accessibilityState={{
+              disabled: isOperatorRetrying,
+              busy: isOperatorRetrying,
+            }}
+          >
+            {isOperatorRetrying ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <Text style={styles.retryButtonText}>다시 시도</Text>
+            )}
           </ScalePressable>
         </View>
       ) : !hasRawContent ? (
@@ -591,12 +666,21 @@ const styles = StyleSheet.create({
   },
   retryButtonOuter: {
     marginTop: 16,
+    width: 104,
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   retryButton: {
+    width: 104,
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 20,
-    paddingVertical: 10,
     backgroundColor: Colors.zinc900,
     borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   retryButtonText: {
     ...Typography.bodySemiBold,

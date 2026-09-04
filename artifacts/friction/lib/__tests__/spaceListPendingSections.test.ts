@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { getUserScopedOperatorPendingSpaceCodeRequestsQueryKey } from "../operatorPendingSpaceCodeRequestsQuery";
+import {
+  getUserScopedOperatorPendingSpaceCodeRequestsQueryKey,
+  runOperatorPendingRetry,
+} from "../operatorPendingSpaceCodeRequestsQuery";
 
 const readAppFile = (path: string) =>
   readFileSync(join(__dirname, "../..", path), "utf8");
@@ -97,5 +100,57 @@ describe("space list pending sections", () => {
     expect(source.indexOf("isOperatorSummaryOnlyError ?")).toBeLessThan(
       source.indexOf("!hasRawContent ?"),
     );
+  });
+
+  it("waits for the authenticated session before the initial supplemental request", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+    const queryStart = source.indexOf(
+      "const operatorPendingQuery = useListOperatorPendingSpaceCodeRequests",
+    );
+    const queryEnd = source.indexOf("const allSpaces", queryStart);
+    const query = source.slice(queryStart, queryEnd);
+
+    expect(query.indexOf("await prepareAuthSession()")).toBeLessThan(
+      query.indexOf("return listOperatorPendingSpaceCodeRequests"),
+    );
+    expect(source).toContain("operatorPendingIsFetching");
+    expect(source).toContain('fetchStatus ===\n        "fetching"');
+  });
+
+  it("blocks repeated retries and unlocks after a successful retry", async () => {
+    const lock = { current: false };
+    let resolveRequest!: () => void;
+    let calls = 0;
+    const refetch = () => {
+      calls += 1;
+      return new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      });
+    };
+
+    const first = runOperatorPendingRetry(lock, refetch);
+    const duplicate = await runOperatorPendingRetry(lock, refetch);
+
+    expect(duplicate).toBe(false);
+    expect(calls).toBe(1);
+    resolveRequest();
+    await expect(first).resolves.toBe(true);
+
+    const next = runOperatorPendingRetry(lock, async () => {
+      calls += 1;
+    });
+    await expect(next).resolves.toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it("keeps retry layout fixed and exposes disabled busy state", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+
+    expect(source).toContain("width: 104");
+    expect(source.match(/height: 44/g)).toHaveLength(2);
+    expect(source.match(/flexGrow: 0/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source.match(/flexShrink: 0/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source).toContain("disabled={isOperatorRetrying}");
+    expect(source).toContain("busy: isOperatorRetrying");
   });
 });
