@@ -38,6 +38,7 @@
 - [Friction Expo SDK upgrade playbook](friction-expo-sdk-upgrade.md) — managed workflow (no ios/android dirs); use registry+expo-doctor not memorized versions; absoluteFillObject removed; app.json top-level schema changes in SDK55+.
 - [EAS/corepack pnpm version pin](friction-eas-pnpm-corepack-pin.md) — unpinned corepack resolves latest pnpm major (drift from local); pin `packageManager` in root package.json or EAS silently uses a different pnpm.
 - [Friction Metro watcher stability](friction-metro-watchman-useWatchman.md) — Watchman may be absent; exclude transient Replit state from workspace-wide Metro file maps so cold starts cannot fail on deleted logs.
+- [React Query peer-instance alignment](friction-react-query-peer-alignment.md) — pnpm peer variants can split context even at one package version; align React peers to the Expo app.
 - [Friction KST date SSOT](friction-kst-date-ssot.md) — all "today"/06:00-cutoff/send-time math must use lib/kstDate.ts helpers (calendar Dates are local-midnight; send instants are KST 06:00), never raw new Date()/setHours.
 - [Friction drizzle-kit push migration history](friction-drizzle-push-migration-history.md) — a `_journal.json` gap doesn't prove live DB drift; verify against `SUPABASE_DB_URL` directly before assuming a 500 is a schema mismatch.
 - [RN Web Text with null sibling](friction-text-null-sibling-web.md) — a `<Text>` with a `null` or bare-string sibling next to `<Text>` children can render fully blank on web only; wrap every child in `<Text>`.
