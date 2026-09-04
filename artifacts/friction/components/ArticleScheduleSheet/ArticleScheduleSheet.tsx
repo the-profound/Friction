@@ -176,6 +176,8 @@ export function ArticleScheduleSheet({
         id: a.id,
         title: a.title ?? null,
         content: (a as unknown as { content?: string | null }).content ?? null,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
       })),
     [articles],
   );

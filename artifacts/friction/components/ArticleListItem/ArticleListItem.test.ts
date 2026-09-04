@@ -13,8 +13,20 @@ const pickerSource = readFileSync(
   new URL("../shared/LetterPickerSheet.tsx", import.meta.url),
   "utf8",
 );
+const replyPickerSource = readFileSync(
+  new URL("../shared/ReplyLetterPickerModal.tsx", import.meta.url),
+  "utf8",
+);
+const sharedPickerListSource = readFileSync(
+  new URL("../shared/LetterPickerList.tsx", import.meta.url),
+  "utf8",
+);
 const sendInlineSource = readFileSync(
   new URL("../ToInline/SendInline.tsx", import.meta.url),
+  "utf8",
+);
+const scheduleSheetSource = readFileSync(
+  new URL("../ArticleScheduleSheet/ArticleScheduleSheet.tsx", import.meta.url),
   "utf8",
 );
 
@@ -48,9 +60,42 @@ describe("ArticleListItem contract", () => {
 
   it("announces and visibly marks the selected letter", () => {
     expect(listItemSource).toContain("selected?: boolean");
-    expect(listItemSource).toContain("accessibilityState={{ disabled, selected }}");
+    expect(listItemSource).toContain(
+      "accessibilityState={{ disabled, selected }}",
+    );
     expect(listItemSource).toContain("styles.selectedIndicator");
     expect(listItemSource).toContain('name="check"');
+  });
+
+  it("uses the raised card surface contract for record and send lists", () => {
+    expect(listItemSource).toContain("marginHorizontal: Spacing.screenPx");
+    expect(listItemSource).toContain("marginBottom: Spacing.cardGap");
+    expect(listItemSource).toContain("borderRadius: 16");
+    expect(listItemSource).toContain("borderRadius={16}");
+    expect(listItemSource).toContain("backgroundColor: Colors.white");
+    expect(listItemSource).toContain("...Shadows.card");
+    expect(listItemSource).not.toContain("borderBottomWidth");
+    expect(listItemSource).toContain("height: ARTICLE_LIST_ITEM_HEIGHT");
+    expect(listItemSource).toContain("flexGrow: 0");
+    expect(listItemSource).toContain("flexShrink: 0");
+    expect(sharedPickerListSource).toContain("<ArticleListItem");
+  });
+
+  it("uses one searchable, newest-first list for send and reply selection", () => {
+    expect(pickerSource).toContain("<LetterPickerList");
+    expect(replyPickerSource).toContain("<LetterPickerSelectionSheet");
+    expect(sharedPickerListSource).toContain("<ArticleListItem");
+    expect(sharedPickerListSource).toContain('placeholder="제목으로 검색"');
+    expect(sharedPickerListSource).toContain("sortAndFilterLetterPickerItems");
+    expect(sharedPickerListSource).toContain("scrollToIndex");
+    expect(sharedPickerListSource).toContain("selectedId");
+    expect(replyPickerSource).toContain("onSelect={onSelect}");
+  });
+
+  it("preserves dates when the schedule flow adapts articles for the shared picker", () => {
+    expect(scheduleSheetSource).toContain("<LetterPickerSheet");
+    expect(scheduleSheetSource).toContain("createdAt: a.createdAt");
+    expect(scheduleSheetSource).toContain("updatedAt: a.updatedAt");
   });
 
   it("uses a non-blocking cached cover image with a synchronous fallback", () => {
@@ -62,8 +107,10 @@ describe("ArticleListItem contract", () => {
 
   it("uses the same cover row in the send preview and picker without body previews or detail queries", () => {
     expect(sendInlineSource).toContain("<ArticleListItem");
-    expect(pickerSource).toContain("<ArticleListItem");
-    expect(sendInlineSource).toContain("getSendArticleAuthorName(selectedArticle)");
+    expect(sharedPickerListSource).toContain("<ArticleListItem");
+    expect(sendInlineSource).toContain(
+      "getSendArticleAuthorName(selectedArticle)",
+    );
     expect(pickerSource).toContain("getSendArticleAuthorName(article)");
     expect(pickerSource).not.toContain("content.substring");
     expect(pickerSource).not.toContain("ArticleCardCover");

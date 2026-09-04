@@ -1,9 +1,12 @@
-import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useMemo } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ScalePressable from "@/components/shared/ScalePressable";
-import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
+import {
+  LetterPickerList,
+  type LetterPickerListEntry,
+} from "@/components/shared/LetterPickerList";
 import { Colors, Typography } from "@/constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { getSendArticleAuthorName } from "@/lib/sendPickerPresentation";
@@ -13,6 +16,8 @@ export interface LetterPickerArticle {
   title?: string | null;
   authorNickname?: string | null;
   cover?: ArticleCover | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface LetterPickerSheetProps {
@@ -27,6 +32,91 @@ interface LetterPickerSheetProps {
   emptyAction?: { label: string; onPress: () => void };
 }
 
+interface LetterPickerSelectionSheetProps<T> {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  items: LetterPickerListEntry<T>[];
+  isLoading: boolean;
+  isError: boolean;
+  onRefetch: () => void;
+  selectedId: string | null;
+  onSelect: (item: T) => void;
+  emptyIcon?: React.ComponentProps<typeof Feather>["name"];
+  emptyTitle: string;
+  emptyMessage?: string;
+  emptyAction?: { label: string; onPress: () => void };
+}
+
+export function LetterPickerSelectionSheet<T>({
+  visible,
+  onClose,
+  title,
+  items,
+  isLoading,
+  isError,
+  onRefetch,
+  selectedId,
+  onSelect,
+  emptyIcon = "file-text",
+  emptyTitle,
+  emptyMessage,
+  emptyAction,
+}: LetterPickerSelectionSheetProps<T>) {
+  return (
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={title}
+      snapPoints={[0.85]}
+      keyboardAware
+    >
+      {isLoading ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptySub}>불러오는 중...</Text>
+        </View>
+      ) : isError ? (
+        <View style={styles.empty}>
+          <Feather name="alert-circle" size={32} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>불러오기 실패</Text>
+          <ScalePressable onPress={onRefetch}>
+            <Text style={[styles.emptySub, { color: Colors.zinc900 }]}>
+              다시 시도
+            </Text>
+          </ScalePressable>
+        </View>
+      ) : items.length === 0 ? (
+        <View style={styles.empty}>
+          <Feather name={emptyIcon} size={32} color={Colors.zinc300} />
+          <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+          {emptyMessage ? (
+            <Text style={styles.emptySub}>{emptyMessage}</Text>
+          ) : null}
+          {emptyAction ? (
+            <ScalePressable
+              style={styles.emptyActionOuter}
+              contentStyle={styles.emptyAction}
+              onPress={emptyAction.onPress}
+            >
+              <Text style={styles.emptyActionText}>{emptyAction.label}</Text>
+            </ScalePressable>
+          ) : null}
+        </View>
+      ) : (
+        <LetterPickerList
+          visible={visible}
+          items={items}
+          selectedId={selectedId}
+          onSelect={(item) => {
+            onSelect(item);
+            onClose();
+          }}
+        />
+      )}
+    </BottomSheet>
+  );
+}
+
 export function LetterPickerSheet({
   visible,
   onClose,
@@ -38,64 +128,34 @@ export function LetterPickerSheet({
   onSelect,
   emptyAction,
 }: LetterPickerSheetProps) {
+  const pickerItems = useMemo<LetterPickerListEntry<LetterPickerArticle>[]>(
+    () =>
+      articles.map((article) => ({
+        id: article.id,
+        title: article.title || "제목 없음",
+        authorName: getSendArticleAuthorName(article),
+        cover: article.cover,
+        sortAt: article.updatedAt || article.createdAt || "",
+        value: article,
+      })),
+    [articles],
+  );
+
   return (
-    <BottomSheet
+    <LetterPickerSelectionSheet
       visible={visible}
       onClose={onClose}
       title="편지 선택"
-      snapPoints={[0.85]}
-    >
-      {isLoading ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptySub}>불러오는 중...</Text>
-        </View>
-      ) : isError ? (
-        <View style={styles.empty}>
-          <Feather name="alert-circle" size={32} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>불러오기 실패</Text>
-          <ScalePressable onPress={onRefetch}>
-            <Text style={[styles.emptySub, { color: Colors.zinc900 }]}>다시 시도</Text>
-          </ScalePressable>
-        </View>
-      ) : articles.length === 0 ? (
-        <View style={styles.empty}>
-          <Feather name="file-text" size={32} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>완성된 편지가 없어요</Text>
-          <Text style={styles.emptySub}>LETTER 상태의 편지만 보낼 수 있어요</Text>
-          {emptyAction && (
-            <ScalePressable
-              style={styles.emptyActionOuter}
-              contentStyle={styles.emptyAction}
-              onPress={emptyAction.onPress}
-            >
-              <Text style={styles.emptyActionText}>{emptyAction.label}</Text>
-            </ScalePressable>
-          )}
-        </View>
-      ) : (
-        <ScrollView
-          nestedScrollEnabled
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 24 }}
-        >
-          {articles.map((article) => (
-            <ArticleListItem
-              key={article.id}
-              articleId={article.id}
-              title={article.title || "제목 없음"}
-              authorName={getSendArticleAuthorName(article)}
-              cover={article.cover}
-              selected={selectedId === article.id}
-              onPress={() => {
-                onSelect(article);
-                onClose();
-              }}
-              accessibilityLabel={`${article.title?.trim() || "제목 없음"} 편지 선택`}
-            />
-          ))}
-        </ScrollView>
-      )}
-    </BottomSheet>
+      items={pickerItems}
+      isLoading={isLoading}
+      isError={isError}
+      onRefetch={onRefetch}
+      selectedId={selectedId}
+      onSelect={onSelect}
+      emptyTitle="완성된 편지가 없어요"
+      emptyMessage="LETTER 상태의 편지만 보낼 수 있어요"
+      emptyAction={emptyAction}
+    />
   );
 }
 

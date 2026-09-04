@@ -1,4 +1,33 @@
-import type { Article, InboxItem, SpaceListItem } from "@workspace/api-client-react";
+import type {
+  Article,
+  InboxItem,
+  SpaceListItem,
+} from "@workspace/api-client-react";
+
+export interface SortableLetterPickerItem {
+  id: string;
+  title: string;
+  sortAt: string;
+}
+
+export function sortAndFilterLetterPickerItems<
+  T extends SortableLetterPickerItem,
+>(items: T[], titleQuery: string): T[] {
+  const normalizedQuery = titleQuery.trim().toLocaleLowerCase();
+  return items
+    .filter(
+      (item) =>
+        !normalizedQuery ||
+        item.title.toLocaleLowerCase().includes(normalizedQuery),
+    )
+    .map((item, sourceIndex) => ({ item, sourceIndex }))
+    .sort((a, b) => {
+      const dateDifference =
+        (Date.parse(b.item.sortAt) || 0) - (Date.parse(a.item.sortAt) || 0);
+      return dateDifference || a.sourceIndex - b.sourceIndex;
+    })
+    .map(({ item }) => item);
+}
 
 export function buildReplySendTarget(item: Pick<InboxItem, "id">) {
   return { replyToInboxId: item.id };
@@ -16,7 +45,9 @@ export function resolveInitialSendDefaults(
   replyCandidates: InboxItem[],
 ) {
   const source = article?.sourceArticleId
-    ? replyCandidates.find((item) => item.article?.id === article.sourceArticleId) ?? null
+    ? (replyCandidates.find(
+        (item) => item.article?.id === article.sourceArticleId,
+      ) ?? null)
     : null;
 
   return {

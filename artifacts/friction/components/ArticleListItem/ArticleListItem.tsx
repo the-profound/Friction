@@ -4,9 +4,9 @@ import { StyleSheet, View } from "react-native";
 import type { ArticleCover } from "@workspace/api-client-react";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardCover from "@/components/ArticleCardItem/ArticleCardCover";
-import { Colors } from "@/constants/tokens";
+import { Colors, Shadows, Spacing } from "@/constants/tokens";
 
-const LIST_ROW_HEIGHT = 104;
+export const ARTICLE_LIST_ITEM_HEIGHT = 104;
 
 /**
  * The shared compact letter row.
@@ -74,7 +74,7 @@ function ArticleListItem({
         cover={cover}
         title={displayTitle}
         authorName={authorName?.trim() || undefined}
-        borderRadius={0}
+        borderRadius={16}
       />
       {selected ? (
         <View style={styles.selectedIndicator} pointerEvents="none">
@@ -89,19 +89,21 @@ export default React.memo(ArticleListItem);
 
 const styles = StyleSheet.create({
   container: {
-    width: "100%",
-    height: LIST_ROW_HEIGHT,
+    marginHorizontal: Spacing.screenPx,
+    marginBottom: Spacing.cardGap,
+    height: ARTICLE_LIST_ITEM_HEIGHT,
     flexGrow: 0,
     flexShrink: 0,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
   },
   containerContent: {
     width: "100%",
-    height: LIST_ROW_HEIGHT,
+    height: ARTICLE_LIST_ITEM_HEIGHT,
     flexGrow: 0,
     flexShrink: 0,
     position: "relative",
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    ...Shadows.card,
   },
   selectedIndicator: {
     position: "absolute",

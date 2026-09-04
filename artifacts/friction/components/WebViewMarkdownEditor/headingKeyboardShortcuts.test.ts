@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { shouldConvertHeadingToParagraph } from "./headingKeyboardShortcuts";
+import {
+  createHeadingKeyboardShortcuts,
+  createHeadingWithParagraphShortcut,
+  shouldConvertHeadingToParagraph,
+} from "./headingKeyboardShortcuts";
 
 function createEditorLike({
   parentType = "heading",
@@ -39,15 +43,38 @@ describe("heading paragraph keyboard shortcut", () => {
   });
 
   it("requires a collapsed caret at the start of a heading", () => {
-    expect(shouldConvertHeadingToParagraph(createEditorLike({ parentOffset: 1 }))).toBe(false);
-    expect(shouldConvertHeadingToParagraph(createEditorLike({ empty: false }))).toBe(false);
-    expect(shouldConvertHeadingToParagraph(createEditorLike({ parentType: "paragraph" }))).toBe(false);
+    expect(
+      shouldConvertHeadingToParagraph(createEditorLike({ parentOffset: 1 })),
+    ).toBe(false);
+    expect(
+      shouldConvertHeadingToParagraph(createEditorLike({ empty: false })),
+    ).toBe(false);
+    expect(
+      shouldConvertHeadingToParagraph(
+        createEditorLike({ parentType: "paragraph" }),
+      ),
+    ).toBe(false);
   });
 
-  it("registers backward-delete keys for Windows and macOS", () => {
-    const source = readFileSync(new URL("./headingKeyboardShortcuts.ts", import.meta.url), "utf8");
+  it("converts only on backward deletion and leaves forward deletion native", () => {
+    const editor = createEditorLike();
+    const shortcuts = createHeadingKeyboardShortcuts() as {
+      Backspace?: (props: { editor: typeof editor }) => boolean;
+      Delete?: (props: { editor: typeof editor }) => boolean;
+    };
 
+    expect(shortcuts.Backspace?.({ editor })).toBe(true);
+    expect(editor.commands.setParagraph).toHaveBeenCalledOnce();
+    expect(shortcuts.Delete).toBeUndefined();
+    expect(
+      createHeadingWithParagraphShortcut().config.addKeyboardShortcuts,
+    ).toBe(createHeadingKeyboardShortcuts);
+
+    const source = readFileSync(
+      new URL("./headingKeyboardShortcuts.ts", import.meta.url),
+      "utf8",
+    );
     expect(source).toContain("Backspace:");
-    expect(source).toContain("Delete:");
+    expect(source).not.toContain("Delete:");
   });
 });

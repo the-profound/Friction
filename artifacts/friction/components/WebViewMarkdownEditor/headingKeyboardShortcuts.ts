@@ -23,9 +23,8 @@ interface HeadingEditorLike {
  * Convert a heading to a paragraph when deletion is requested at the very
  * beginning of the block. The content is intentionally left untouched.
  *
- * Browsers report the backward-delete key as Backspace on Windows and as
- * Delete on macOS. Both shortcuts are registered below so the behavior is
- * explicit in web and native WebView editors.
+ * The backward-delete key is reported as Backspace by the web and native
+ * WebView editors. Forward deletion (Delete) remains TipTap's native command.
  */
 export function shouldConvertHeadingToParagraph(
   editor: Pick<HeadingEditorLike, "state">,
@@ -33,9 +32,7 @@ export function shouldConvertHeadingToParagraph(
   const { selection } = editor.state;
   const { $from, empty } = selection;
   return (
-    empty
-    && $from.parentOffset === 0
-    && $from.parent.type.name === "heading"
+    empty && $from.parentOffset === 0 && $from.parent.type.name === "heading"
   );
 }
 
@@ -44,13 +41,15 @@ function convertHeadingToParagraph(editor: HeadingEditorLike): boolean {
   return editor.commands.setParagraph();
 }
 
+export function createHeadingKeyboardShortcuts() {
+  return {
+    Backspace: ({ editor }: { editor: HeadingEditorLike }) =>
+      convertHeadingToParagraph(editor),
+  };
+}
+
 export function createHeadingWithParagraphShortcut() {
   return Heading.extend({
-    addKeyboardShortcuts() {
-      return {
-        Backspace: ({ editor }) => convertHeadingToParagraph(editor),
-        Delete: ({ editor }) => convertHeadingToParagraph(editor),
-      };
-    },
+    addKeyboardShortcuts: createHeadingKeyboardShortcuts,
   });
 }

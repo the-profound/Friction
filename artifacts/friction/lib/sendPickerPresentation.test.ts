@@ -7,6 +7,7 @@ import {
   filterReadReplyLetters,
   getSendArticleAuthorName,
   resolveInitialSendDefaults,
+  sortAndFilterLetterPickerItems,
 } from "./sendPickerPresentation";
 
 const article = (id: string, status: "LETTER" | "CLOSING" = "LETTER") => ({
@@ -41,9 +42,30 @@ const inboxItem = (
 
 describe("send picker presentation", () => {
   it("uses a stable author label when the article list has no nickname", () => {
-    expect(getSendArticleAuthorName({ authorNickname: "  민지  " })).toBe("민지");
-    expect(getSendArticleAuthorName({ authorNickname: null })).toBe("알 수 없음");
-    expect(getSendArticleAuthorName({ authorNickname: "   " })).toBe("알 수 없음");
+    expect(getSendArticleAuthorName({ authorNickname: "  민지  " })).toBe(
+      "민지",
+    );
+    expect(getSendArticleAuthorName({ authorNickname: null })).toBe(
+      "알 수 없음",
+    );
+    expect(getSendArticleAuthorName({ authorNickname: "   " })).toBe(
+      "알 수 없음",
+    );
+  });
+
+  it("sorts picker letters newest first and searches titles case-insensitively", () => {
+    const items = [
+      { id: "old", title: "오래된 안부", sortAt: "2026-09-01T00:00:00.000Z" },
+      { id: "new", title: "NEW 안부", sortAt: "2026-09-03T00:00:00.000Z" },
+      { id: "middle", title: "다른 편지", sortAt: "2026-09-02T00:00:00.000Z" },
+    ];
+
+    expect(
+      sortAndFilterLetterPickerItems(items, "").map((item) => item.id),
+    ).toEqual(["new", "middle", "old"]);
+    expect(
+      sortAndFilterLetterPickerItems(items, "new").map((item) => item.id),
+    ).toEqual(["new"]);
   });
 
   it("defaults to person without a linked original, and reply with the exact linked inbox when available", () => {
@@ -65,10 +87,10 @@ describe("send picker presentation", () => {
       replyInbox: null,
     });
     expect(
-      resolveInitialSendDefaults(
-        { sourceArticleId: "original-article" },
-        [unrelatedInbox, linkedInbox],
-      ),
+      resolveInitialSendDefaults({ sourceArticleId: "original-article" }, [
+        unrelatedInbox,
+        linkedInbox,
+      ]),
     ).toEqual({
       mode: "reply",
       replyInbox: linkedInbox,
