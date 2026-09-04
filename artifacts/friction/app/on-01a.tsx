@@ -76,7 +76,9 @@ import {
   useUpdateThought,
   usePromoteThought,
   useRevertArticleToThought,
+  type Article,
   type Thought,
+  type ThoughtArticleTransitionBody,
   type StoredSentence,
   type SpellChange,
   spellCheck as apiSpellCheck,
@@ -139,6 +141,14 @@ interface PendingEditorExport {
   resolve: (markdown: string) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+}
+
+interface PendingStageTransition {
+  entityId: string;
+  title: string;
+  content: string;
+  expectedUpdatedAt: string;
+  requestId: string;
 }
 
 /**
@@ -340,7 +350,10 @@ export default function WritingScreen() {
     articleId: string;
     title: string;
     content: string;
+    expectedUpdatedAt: string;
+    requestId: string;
   } | null>(null);
+  const pendingPromotionSnapshotRef = useRef<PendingStageTransition | null>(null);
   // Native Stack requires usePreventRemove instead of a bare beforeRemove
   // listener for reliable interactive iOS swipe cancellation. Intentional
   // navigation waits until this guard has been disabled before dispatching.
@@ -776,7 +789,10 @@ export default function WritingScreen() {
         // Only the exact payload that was POSTed is already durable. Clear
         // the sentinel immediately so A → B → A still PATCHes the final A.
         if (createdContent !== data.content) {
-          await updateThought.mutateAsync({ id: thoughtId, data: { content: data.content } });
+          const savedThought = await updateThought.mutateAsync({
+            id: thoughtId,
+            data: { content: data.content },
+          });
           queryClient.setQueryData(
             getGetThoughtQueryKey(thoughtId),
             (old: unknown) => {
@@ -787,7 +803,18 @@ export default function WritingScreen() {
           );
           patchThoughtInRecordCaches(queryClient, thoughtId, { content: data.content });
           void invalidateDirectThoughtCreation(queryClient);
+          return {
+            serverUpdatedAt: savedThought.updatedAt,
+            serverContent: savedThought.content,
+          };
         }
+        const savedThought = queryClient.getQueryData<Thought>(
+          getGetThoughtQueryKey(thoughtId),
+        );
+        return {
+          serverUpdatedAt: savedThought?.updatedAt,
+          serverContent: savedThought?.content ?? data.content,
+        };
       } else if (modeRef.current === "dividing") {
         if (!id) return;
         if (!data.title.trim()) return;
@@ -893,6 +920,9 @@ export default function WritingScreen() {
     discard: discardAutosave,
     bindEntity: bindAutosaveEntity,
     persistLatest: persistLatestAutosave,
+    prepareTransition: prepareAutosaveTransition,
+    abortTransition: abortAutosaveTransition,
+    commitTransition: commitAutosaveTransition,
     stageCleanup,
     runPendingCleanup,
   } = useAutoSave({
@@ -1380,8 +1410,9 @@ export default function WritingScreen() {
 
   // ── 모드 전환: 작성(thought) → 분할(article) ──────────────────────────────
   //
-  // flush() 로 최신 내용을 thought 에 저장한 뒤 promoteThought() 를 단 1회 호출한다.
-  // 반환된 DIVIDING article 의 id 를 캐시에 저장하고 라우트를 교체한다.
+  // A saved thought needs one create response to obtain its id. After that,
+  // promotion carries the current editor snapshot itself; it must not first
+  // PATCH the thought and then wait for a second save round trip.
   const enterDividingMode = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
@@ -1445,25 +1476,79 @@ export default function WritingScreen() {
       return;
     }
 
-    // markDirty → flush: flush saves the thought with the full Markdown (including H1).
-    markDirty("", cur);
-    const flushResult = await flush();
-    if (!flushResult.ok) {
+    let thoughtId = thoughtIdRef.current;
+    if (!thoughtId) {
+      // A direct local draft has no entity until its first meaningful save.
+      // This is the only required preliminary round trip; promotion itself
+      // still receives the exact snapshot exported above.
+      markDirty("", cur);
+      const createResult = await flush();
+      if (!createResult.ok) {
+        isNavigatingRef.current = false;
+        setIsNavigating(false);
+        showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
+        return;
+      }
+      thoughtId = thoughtIdRef.current;
+    }
+    if (!thoughtId) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
-      showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
+      showToast({ message: "단상 ID를 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
-    console.log("[enterDividingMode] flush ok — contentLen=%d", cur.length);
 
-    // Promote the thought exactly once.  The server validates the H1 title,
-    // creates a fresh DIVIDING article, and returns it.
-    let promoted: { id: string; title?: string | null; content?: string | null; status?: string };
+    const persistedThought = queryClient.getQueryData<Thought>(
+      getGetThoughtQueryKey(thoughtId),
+    );
+    const previousPromotion = pendingPromotionSnapshotRef.current;
+    const canRetryPromotion =
+      previousPromotion?.entityId === thoughtId
+      && previousPromotion.title === resolvedTitle
+      && previousPromotion.content === thoughtBody;
+    const prepared = await prepareAutosaveTransition({
+      title: resolvedTitle,
+      content: thoughtBody,
+      serverUpdatedAt:
+        (canRetryPromotion ? previousPromotion.expectedUpdatedAt : undefined)
+        ?? persistedThought?.updatedAt
+        ?? thought?.updatedAt,
+      serverContent: persistedThought?.content ?? thought?.content ?? cur,
+    });
+    if (!prepared.ok) {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "최신 내용을 안전하게 준비하지 못했습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
+    let transitionSnapshot: PendingStageTransition;
+    if (canRetryPromotion) {
+      transitionSnapshot = previousPromotion;
+    } else {
+      transitionSnapshot = {
+        entityId: thoughtId,
+        title: resolvedTitle,
+        content: thoughtBody,
+        expectedUpdatedAt: prepared.expectedServerUpdatedAt,
+        requestId: createThoughtClientId(),
+      };
+      pendingPromotionSnapshotRef.current = transitionSnapshot;
+    }
+
+    // The server validates and commits the title/body snapshot atomically.
+    let promoted: Article;
     try {
-      const thoughtId = thoughtIdRef.current;
-      if (!thoughtId) throw new Error("no saved thought");
-      promoted = await promoteThought.mutateAsync({ id: thoughtId });
+      promoted = await promoteThought.mutateAsync({
+        id: thoughtId,
+        data: {
+          title: transitionSnapshot.title,
+          content: transitionSnapshot.content,
+          expectedUpdatedAt: transitionSnapshot.expectedUpdatedAt,
+          requestId: transitionSnapshot.requestId,
+        } satisfies ThoughtArticleTransitionBody,
+      });
     } catch (e) {
+      abortAutosaveTransition();
       isNavigatingRef.current = false;
       setIsNavigating(false);
       showToast({
@@ -1486,7 +1571,8 @@ export default function WritingScreen() {
       pages: [],
     });
 
-    // Update editor without remounting.
+    // Update editor without remounting. The response is authoritative, but
+    // normally matches the submitted snapshot exactly.
     titleRef.current = promotedTitle;
     setTitle(promotedTitle);
     contentRef.current = promotedContent;
@@ -1494,10 +1580,21 @@ export default function WritingScreen() {
     setContent(promotedContent);
     setDebouncedContent(promotedContent);
     serverContentRef.current = promotedContent;
+    isThoughtModeRef.current = false;
     serverInjectionPendingRef.current = true;
     editorRef.current?.setTitle(promotedTitle);
     editorRef.current?.setMarkdown(promotedContent);
     setModeBoth("dividing");
+    await commitAutosaveTransition({
+      entityId: promoted.id,
+      storageKey: `draft_${promoted.id}`,
+      entityMode: "dividing",
+      title: promotedTitle,
+      content: promotedContent,
+      serverUpdatedAt: promoted.updatedAt,
+      serverContent: promotedContent,
+    });
+    pendingPromotionSnapshotRef.current = null;
     isNavigatingRef.current = false;
     setIsNavigating(false);
 
@@ -1507,18 +1604,14 @@ export default function WritingScreen() {
 
     // 공간 컨텍스트를 AsyncStorage에 저장 — (tabs)/on.tsx 재개 시 on-01c가 복구할 수 있도록
     if (spaceId) {
-      try {
-        await AsyncStorage.setItem(
+      void AsyncStorage.setItem(
           `space_context:${promoted.id}`,
           JSON.stringify({
             spaceId,
             ...(spaceRoundId ? { spaceRoundId } : {}),
             ...(letterType ? { letterType } : {}),
           }),
-        );
-      } catch {
-        // 저장 실패는 비핵심 — 라우트 파라미터로 컨텍스트가 이미 전달됨
-      }
+        ).catch(() => undefined);
     }
 
     // Replace route with the new article id so a refresh lands on the real article.
@@ -1533,7 +1626,7 @@ export default function WritingScreen() {
         },
       });
     });
-  }, [getEditorContent, markDirty, flush, queryClient, promoteThought, showToast, setModeBoth, router, releaseDirectThoughtDraft, navigateAfterRemovingGuard, reportAutosaveFailure, spaceId, spaceRoundId, letterType]);
+  }, [abortAutosaveTransition, commitAutosaveTransition, flush, getEditorContent, markDirty, prepareAutosaveTransition, promoteThought, queryClient, releaseDirectThoughtDraft, reportAutosaveFailure, router, setModeBoth, showToast, spaceId, spaceRoundId, thought, letterType, navigateAfterRemovingGuard]);
 
   // ── 검토(article) → 단상(thought) 역승격 ──────────────────────────────────
   const returnToThoughtMode = useCallback(async () => {
@@ -1570,30 +1663,82 @@ export default function WritingScreen() {
       pendingSnapshot.title === latestTitle &&
       pendingSnapshot.content === latestContent;
 
-    // Remember the last persisted snapshot so an unchanged retry can reach the
-    // idempotent POST even if its previous response was lost after commit.
+    const persistedArticle = queryClient.getQueryData<Article>(
+      getGetArticleQueryKey(articleId),
+    );
+    // An unchanged retry reuses both the snapshot and request id so a response
+    // lost after commit converges through the idempotent POST without PATCH.
     if (!canRetryCommittedSnapshot) {
-      markDirty(latestTitle, latestContent);
-      const flushResult = await flush();
-      if (!flushResult.ok) {
+      const prepared = await prepareAutosaveTransition({
+        title: latestTitle,
+        content: latestContent,
+        serverUpdatedAt: persistedArticle?.updatedAt ?? dividingArticle?.updatedAt,
+        serverContent: persistedArticle?.content ?? dividingArticle?.content ?? latestContent,
+      });
+      if (!prepared.ok) {
         isNavigatingRef.current = false;
         setIsNavigating(false);
-        showToast({ message: "저장이 완료되지 않았습니다. 다시 시도해주세요.", type: "error" });
+        showToast({ message: "최신 내용을 안전하게 준비하지 못했습니다. 다시 시도해주세요.", type: "error" });
         return;
       }
       pendingReverseSnapshotRef.current = {
         articleId,
         title: latestTitle,
         content: latestContent,
+        expectedUpdatedAt: prepared.expectedServerUpdatedAt,
+        requestId: createThoughtClientId(),
       };
+    } else {
+      const prepared = await prepareAutosaveTransition({
+        title: pendingSnapshot?.title ?? latestTitle,
+        content: pendingSnapshot?.content ?? latestContent,
+        serverUpdatedAt: pendingSnapshot?.expectedUpdatedAt,
+        serverContent: persistedArticle?.content ?? dividingArticle?.content ?? latestContent,
+      });
+      if (!prepared.ok) {
+        isNavigatingRef.current = false;
+        setIsNavigating(false);
+        showToast({ message: "최신 내용을 안전하게 준비하지 못했습니다. 다시 시도해주세요.", type: "error" });
+        return;
+      }
     }
+    const transitionSnapshot = pendingReverseSnapshotRef.current;
+    if (!transitionSnapshot) {
+      abortAutosaveTransition();
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
+      showToast({ message: "전환 스냅샷을 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
+      return;
+    }
+    stageArticleTransitionSnapshot(
+      queryClient,
+      articleId,
+      {
+        title: transitionSnapshot.title,
+        content: transitionSnapshot.content,
+        updatedAt:
+          persistedArticle?.updatedAt
+          ?? dividingArticle?.updatedAt
+          ?? transitionSnapshot.expectedUpdatedAt,
+      },
+      persistedArticle ?? dividingArticle,
+    );
 
     let restoredThought: Thought;
     try {
-      restoredThought = await revertArticleToThought.mutateAsync({ id: articleId });
+      restoredThought = await revertArticleToThought.mutateAsync({
+        id: articleId,
+        data: {
+          title: transitionSnapshot.title,
+          content: transitionSnapshot.content,
+          expectedUpdatedAt: transitionSnapshot.expectedUpdatedAt,
+          requestId: transitionSnapshot.requestId,
+        } satisfies ThoughtArticleTransitionBody,
+      });
     } catch (error) {
+      abortAutosaveTransition();
       // The server may have committed before the response was lost. Keep the
-      // snapshot so an unchanged retry skips PATCH and calls this POST again.
+      // exact snapshot so an unchanged retry calls the same idempotent POST.
       isNavigatingRef.current = false;
       setIsNavigating(false);
       showToast({
@@ -1614,21 +1759,30 @@ export default function WritingScreen() {
     removeRecordFromCache(queryClient, { id: articleId, kind: "editing" });
     queryClient.setQueryData(getGetThoughtQueryKey(restoredThought.id), restoredThought);
     insertThoughtInRecordCache(queryClient, restoredThought);
-
-    thoughtIdRef.current = restoredThought.id;
-    thoughtCreationIdRef.current = undefined;
-    isThoughtModeRef.current = true;
     titleRef.current = "";
     setTitle("");
     contentRef.current = restoredThought.content;
-    articleContentRef.current = "";
-    serverContentRef.current = restoredThought.content;
     setContent(restoredThought.content);
     setDebouncedContent(restoredThought.content);
+    serverContentRef.current = restoredThought.content;
+    articleContentRef.current = "";
+    isThoughtModeRef.current = true;
     serverInjectionPendingRef.current = true;
     editorRef.current?.setTitle("");
     editorRef.current?.setMarkdown(restoredThought.content);
     setModeBoth("draft");
+    await commitAutosaveTransition({
+      entityId: restoredThought.id,
+      storageKey: `draft_${restoredThought.id}`,
+      entityMode: "draft",
+      title: "",
+      content: restoredThought.content,
+      serverUpdatedAt: restoredThought.updatedAt,
+      serverContent: restoredThought.content,
+    });
+
+    thoughtIdRef.current = restoredThought.id;
+    thoughtCreationIdRef.current = undefined;
     isNavigatingRef.current = false;
     setIsNavigating(false);
 
@@ -1650,17 +1804,18 @@ export default function WritingScreen() {
       });
     });
   }, [
-    flush,
+    abortAutosaveTransition,
+    commitAutosaveTransition,
+    prepareAutosaveTransition,
+    dividingArticle,
     getEditorContent,
     id,
     letterType,
-    markDirty,
     navigateAfterRemovingGuard,
     queryClient,
     reportAutosaveFailure,
     revertArticleToThought,
     router,
-    setDebouncedContent,
     setModeBoth,
     showToast,
     source,

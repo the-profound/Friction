@@ -29,6 +29,23 @@ export interface AutoSaveRestoreContext {
   serverContent: string;
 }
 
+export interface AutoSaveTransitionSnapshot {
+  title: string;
+  content: string;
+  serverUpdatedAt?: string;
+  serverContent?: string;
+}
+
+export interface AutoSaveTransitionCommit {
+  entityId: string;
+  storageKey: string;
+  entityMode: AutoSaveEntityMode;
+  title: string;
+  content: string;
+  serverUpdatedAt: string;
+  serverContent: string;
+}
+
 export type AutoSaveRestoreDecision = "restore" | "defer" | "conflict";
 
 export function hashAutoSaveContent(content: string): string {
@@ -166,11 +183,24 @@ export function useAutoSave({
     entityId,
     entityMode,
   });
+  const committedTransitionRef = useRef<{
+    entityId: string;
+    entityMode: AutoSaveEntityMode;
+  } | null>(null);
+  if (
+    committedTransitionRef.current
+    && committedTransitionRef.current.entityId === entityId
+    && committedTransitionRef.current.entityMode === entityMode
+  ) {
+    committedTransitionRef.current = null;
+  }
   if (creationId && !latestDataRef.current.creationId) {
     latestDataRef.current.creationId = creationId;
   }
-  if (entityId) latestDataRef.current.entityId = entityId;
-  if (entityMode) latestDataRef.current.entityMode = entityMode;
+  if (!committedTransitionRef.current) {
+    if (entityId) latestDataRef.current.entityId = entityId;
+    if (entityMode) latestDataRef.current.entityMode = entityMode;
+  }
   const requestIdRef = useRef(0);
   const latestCompletedRef = useRef(0);
   // Incremented by markDirty/markTitleDirty on every new dirty call.
@@ -206,6 +236,11 @@ export function useAutoSave({
   if (
     restoreContext?.ready
     && (
+      !committedTransitionRef.current
+      || committedTransitionRef.current.entityId !== restoreContext.entityId
+      || committedTransitionRef.current.entityMode !== restoreContext.entityMode
+    )
+    && (
       acknowledgedServerRef.current?.entityId !== restoreContext.entityId
       || (!isDirtyRef.current && !savingRef.current)
     )
@@ -223,6 +258,10 @@ export function useAutoSave({
   // instead of starting a concurrent save that races with the existing one.
   const activeSaveRef = useRef<Promise<void> | null>(null);
   const activeCleanupRef = useRef<Promise<{ ok: boolean }> | null>(null);
+  // A stage transition owns the save lane while it snapshots and changes the
+  // server entity. Debounced saves and the follow-up save scheduled after an
+  // in-flight request must not overtake the atomic transition.
+  const transitionLockRef = useRef(false);
 
   const nextRecoveryMetadata = useCallback((): Partial<PendingPayload> => {
     const context = acknowledgedServerRef.current ?? restoreContextRef.current;
@@ -276,7 +315,7 @@ export function useAutoSave({
   }, [writeQueue]);
 
   const doSave = useCallback(async () => {
-    if (savingRef.current) return;
+    if (savingRef.current || transitionLockRef.current) return;
 
     const data = {
       title: latestDataRef.current.title,
@@ -408,7 +447,12 @@ export function useAutoSave({
         // A change received during an in-flight save may already have spent
         // its debounce while savingRef was true. Schedule its next save here
         // so a local draft's first create cannot strand newer text in memory.
-        if (saved && isDirtyRef.current && dirtyEpochRef.current !== epochSnapshot) {
+        if (
+          saved
+          && !transitionLockRef.current
+          && isDirtyRef.current
+          && dirtyEpochRef.current !== epochSnapshot
+        ) {
           setTimeout(() => {
             if (isDirtyRef.current && !savingRef.current) {
               void doSave();
@@ -609,6 +653,107 @@ export function useAutoSave({
     await writeQueue({ ...latestDataRef.current });
   }, [writeQueue]);
 
+  const prepareTransition = useCallback(async (
+    snapshot: AutoSaveTransitionSnapshot,
+  ): Promise<{ ok: true; expectedServerUpdatedAt: string } | { ok: false }> => {
+    transitionLockRef.current = true;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    clearRetryTimer();
+
+    // A save that already reached the server is allowed to finish, but no new
+    // PATCH is started for this transition. This keeps the server version used
+    // by the atomic request after the last in-flight autosave.
+    if (activeSaveRef.current) {
+      try {
+        await rejectAfter(activeSaveRef.current, saveTimeoutMs, "active transition save");
+      } catch {
+        transitionLockRef.current = false;
+        return { ok: false };
+      }
+    }
+    clearRetryTimer();
+
+    const serverContext = acknowledgedServerRef.current ?? restoreContextRef.current;
+    const expectedServerUpdatedAt =
+      serverContext?.serverUpdatedAt ?? snapshot.serverUpdatedAt ?? "";
+    if (!expectedServerUpdatedAt) {
+      transitionLockRef.current = false;
+      return { ok: false };
+    }
+
+    localGenerationRef.current += 1;
+    latestDataRef.current = {
+      ...latestDataRef.current,
+      title: snapshot.title,
+      content: snapshot.content,
+      operation: "save",
+      cleanupId: undefined,
+      serverUpdatedAt: expectedServerUpdatedAt,
+      serverContentHash: hashAutoSaveContent(
+        serverContext?.serverContent ?? snapshot.serverContent ?? "",
+      ),
+      serverContentBaseline: serverContext?.serverContent ?? snapshot.serverContent,
+      localChangedAt: Date.now(),
+      localGeneration: localGenerationRef.current,
+    };
+    isDirtyRef.current = true;
+    setIsDirty(true);
+    try {
+      await writeQueue({ ...latestDataRef.current });
+    } catch {
+      transitionLockRef.current = false;
+      return { ok: false };
+    }
+    return { ok: true, expectedServerUpdatedAt };
+  }, [clearRetryTimer, saveTimeoutMs, writeQueue]);
+
+  const abortTransition = useCallback(() => {
+    transitionLockRef.current = false;
+  }, []);
+
+  const commitTransition = useCallback(async (commit: AutoSaveTransitionCommit) => {
+    // The old entity's recovery queue is no longer valid after the atomic
+    // transition. Serialize its removal before binding the destination key.
+    try {
+      await writeQueue(null);
+    } catch {
+      // The serialized physical write still continues in queueWriteRef. The
+      // destination key is rebound below so future edits cannot target the old
+      // entity.
+    }
+    queueKeysRef.current = new Set([`autosave_queue_${commit.storageKey}`]);
+    latestDataRef.current = {
+      title: commit.title,
+      content: commit.content,
+      entityId: commit.entityId,
+      entityMode: commit.entityMode,
+      operation: "save",
+      serverUpdatedAt: commit.serverUpdatedAt,
+      serverContentHash: hashAutoSaveContent(commit.serverContent),
+      serverContentBaseline: commit.serverContent,
+      localChangedAt: Date.now(),
+      localGeneration: ++localGenerationRef.current,
+    };
+    committedTransitionRef.current = {
+      entityId: commit.entityId,
+      entityMode: commit.entityMode,
+    };
+    acknowledgedServerRef.current = {
+      ready: true,
+      entityId: commit.entityId,
+      entityMode: commit.entityMode,
+      serverUpdatedAt: commit.serverUpdatedAt,
+      serverContent: commit.serverContent,
+    };
+    isDirtyRef.current = false;
+    setIsDirty(false);
+    setStatus("saved");
+    transitionLockRef.current = false;
+  }, [writeQueue]);
+
   const stageCleanup = useCallback(async (entityId?: string) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -783,6 +928,9 @@ export function useAutoSave({
     discard,
     bindEntity,
     persistLatest,
+    prepareTransition,
+    abortTransition,
+    commitTransition,
     stageCleanup,
     runPendingCleanup,
   };

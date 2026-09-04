@@ -660,7 +660,7 @@ describe("on-01a guarded return navigation", () => {
     expect(webEditor).toContain("padding: 16px 0 var(--content-bottom-padding)");
   });
 
-  it("commits the latest review snapshot before returning to the original thought", () => {
+  it("passes the latest review snapshot directly to the atomic thought transition", () => {
     const screen = readScreen();
     const reverseHandler = screen.slice(
       screen.indexOf("const returnToThoughtMode"),
@@ -670,11 +670,11 @@ describe("on-01a guarded return navigation", () => {
     expect(screen).toContain("useRevertArticleToThought");
     expect(reverseHandler).toContain("if (isNavigatingRef.current) return;");
     expect(reverseHandler).toContain("latestContent = await getEditorContent();");
-    expect(reverseHandler).toContain("markDirty(latestTitle, latestContent);");
-    expect(reverseHandler).toContain("const flushResult = await flush();");
-    expect(reverseHandler.indexOf("await flush()")).toBeLessThan(
-      reverseHandler.indexOf("revertArticleToThought.mutateAsync"),
-    );
+    expect(reverseHandler).toContain("prepareAutosaveTransition");
+    expect(reverseHandler).toContain("expectedUpdatedAt: transitionSnapshot.expectedUpdatedAt");
+    expect(reverseHandler).toContain("requestId: transitionSnapshot.requestId");
+    expect(reverseHandler).not.toContain("markDirty(latestTitle, latestContent);");
+    expect(reverseHandler).not.toContain("const flushResult = await flush();");
     expect(reverseHandler).toContain("removeRecordFromCache(queryClient, { id: articleId, kind: \"editing\" })");
     expect(reverseHandler).toContain("insertThoughtInRecordCache(queryClient, restoredThought)");
     expect(reverseHandler).toContain("queryClient.setQueryData(getGetThoughtQueryKey(restoredThought.id)");
@@ -695,10 +695,28 @@ describe("on-01a guarded return navigation", () => {
     expect(reverseHandler).toContain("if (!canRetryCommittedSnapshot)");
     expect(reverseHandler).toContain("pendingReverseSnapshotRef.current = {");
     expect(reverseHandler).toContain("restoredThought = await revertArticleToThought.mutateAsync");
+    expect(reverseHandler).toContain("data:");
     expect(reverseHandler).toContain("pendingReverseSnapshotRef.current = null;");
     expect(reverseHandler.indexOf("if (!canRetryCommittedSnapshot)")).toBeLessThan(
       reverseHandler.indexOf("revertArticleToThought.mutateAsync"),
     );
+  });
+
+  it("passes the latest thought snapshot directly to atomic promotion", () => {
+    const screen = readScreen();
+    const promoteHandler = screen.slice(
+      screen.indexOf("const enterDividingMode"),
+      screen.indexOf("// ── 검토(article)"),
+    );
+
+    expect(promoteHandler).toContain("prepareAutosaveTransition");
+    expect(promoteHandler).toContain("title: transitionSnapshot.title");
+    expect(promoteHandler).toContain("content: transitionSnapshot.content");
+    expect(promoteHandler).toContain("expectedUpdatedAt: transitionSnapshot.expectedUpdatedAt");
+    expect(promoteHandler).toContain("requestId: transitionSnapshot.requestId");
+    expect(promoteHandler).toContain("promoteThought.mutateAsync");
+    expect(promoteHandler).toContain("commitAutosaveTransition");
+    expect(promoteHandler).not.toContain("const flushResult = await flush();");
   });
 
   it("keeps review content and unlocks retry when reverse-promotion fails", () => {
