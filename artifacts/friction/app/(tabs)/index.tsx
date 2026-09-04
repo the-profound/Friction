@@ -574,12 +574,15 @@ function InboxScreenContent() {
 /**
  * QueryClient-safe wrapper.
  *
- * react-native-screens 4.26.2 pre-renders the outgoing screen in a
- * ZoomTransitionTargetContextProvider that is NOT wrapped by the app-level
- * QueryClientProvider. Calling useQuery (via useListInbox) in that context
- * throws "No QueryClient set". We guard by checking the context value before
- * mounting the content; a missing QueryClient just shows nothing while the
- * real navigation completes.
+ * Root cause (fixed): artifacts/friction used react@19.2.3 while the catalog
+ * and lib/api-client-react used react@19.2.8. pnpm created two separate
+ * @tanstack/react-query instances (one per React peer version), each with its
+ * own QueryClientContext. The app-level QueryClientProvider supplied Context A
+ * but lib/api-client-react hooks read from Context B, causing "No QueryClient
+ * set" errors. Fixed by aligning artifacts/friction to react@19.2.8.
+ *
+ * This guard is kept as a safety net in case react-native-screens ever
+ * pre-renders the screen outside the provider tree.
  */
 export default function InboxScreen() {
   const queryClient = useContext(QueryClientContext);
