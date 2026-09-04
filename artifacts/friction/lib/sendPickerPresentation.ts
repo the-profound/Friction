@@ -4,6 +4,32 @@ import type {
   SpaceListItem,
 } from "@workspace/api-client-react";
 
+export type SendSpaceLetterVisibility = "PUBLIC" | "RECIPIENT_ONLY";
+
+export function defaultSendSpaceLetterVisibility(
+  space: Pick<SpaceListItem, "isAnonymous">,
+): SendSpaceLetterVisibility {
+  return space.isAnonymous ? "RECIPIENT_ONLY" : "PUBLIC";
+}
+
+export function resolveSendSpaceLetterVisibilitySelection({
+  previousSpace,
+  previousVisibility,
+  nextSpace,
+}: {
+  previousSpace: Pick<SpaceListItem, "id" | "isAnonymous"> | null;
+  previousVisibility: SendSpaceLetterVisibility;
+  nextSpace: Pick<SpaceListItem, "id" | "isAnonymous">;
+}): SendSpaceLetterVisibility {
+  if (
+    previousSpace?.id === nextSpace.id &&
+    previousSpace.isAnonymous === nextSpace.isAnonymous
+  ) {
+    return previousVisibility;
+  }
+  return defaultSendSpaceLetterVisibility(nextSpace);
+}
+
 export interface SortableLetterPickerItem {
   id: string;
   title: string;

@@ -3,11 +3,13 @@ import type { InboxItem, SpaceListItem } from "@workspace/api-client-react";
 
 import {
   buildReplySendTarget,
+  defaultSendSpaceLetterVisibility,
   filterActiveParticipatingSpaces,
   filterReadReplyLetters,
   getSendArticleAuthorName,
   resolveInitialSendDefaults,
   resolvePrefillArticleState,
+  resolveSendSpaceLetterVisibilitySelection,
   sortAndFilterLetterPickerItems,
 } from "./sendPickerPresentation";
 
@@ -56,30 +58,38 @@ describe("send picker presentation", () => {
 
   it("resolves a cached prefill immediately and terminates cold-load failures", () => {
     const cached = article("cached") as never;
-    expect(resolvePrefillArticleState({
-      prefillArticleId: "cached",
-      articles: [cached],
-      isLoading: true,
-      isError: false,
-    })).toEqual({ kind: "ready", article: cached });
-    expect(resolvePrefillArticleState({
-      prefillArticleId: "missing",
-      articles: [],
-      isLoading: true,
-      isError: false,
-    })).toEqual({ kind: "loading" });
-    expect(resolvePrefillArticleState({
-      prefillArticleId: "missing",
-      articles: [],
-      isLoading: false,
-      isError: true,
-    })).toEqual({ kind: "error" });
-    expect(resolvePrefillArticleState({
-      prefillArticleId: "missing",
-      articles: [],
-      isLoading: false,
-      isError: false,
-    })).toEqual({ kind: "missing" });
+    expect(
+      resolvePrefillArticleState({
+        prefillArticleId: "cached",
+        articles: [cached],
+        isLoading: true,
+        isError: false,
+      }),
+    ).toEqual({ kind: "ready", article: cached });
+    expect(
+      resolvePrefillArticleState({
+        prefillArticleId: "missing",
+        articles: [],
+        isLoading: true,
+        isError: false,
+      }),
+    ).toEqual({ kind: "loading" });
+    expect(
+      resolvePrefillArticleState({
+        prefillArticleId: "missing",
+        articles: [],
+        isLoading: false,
+        isError: true,
+      }),
+    ).toEqual({ kind: "error" });
+    expect(
+      resolvePrefillArticleState({
+        prefillArticleId: "missing",
+        articles: [],
+        isLoading: false,
+        isError: false,
+      }),
+    ).toEqual({ kind: "missing" });
   });
 
   it("sorts picker letters newest first and searches titles case-insensitively", () => {
@@ -197,5 +207,33 @@ describe("send picker presentation", () => {
         makeSpace("recruiting", "RECRUITING", "PARTICIPANT"),
       ]).map((space) => space.id),
     ).toEqual(["active-operator", "active-member"]);
+  });
+
+  it("defaults regular space sends to public and anonymous space sends to recipient-only", () => {
+    expect(defaultSendSpaceLetterVisibility({ isAnonymous: false })).toBe(
+      "PUBLIC",
+    );
+    expect(defaultSendSpaceLetterVisibility({ isAnonymous: true })).toBe(
+      "RECIPIENT_ONLY",
+    );
+  });
+
+  it("keeps a regular-space choice for retry/reselection and resets when the target policy changes", () => {
+    const regular = { id: "regular", isAnonymous: false };
+    expect(resolveSendSpaceLetterVisibilitySelection({
+      previousSpace: regular,
+      previousVisibility: "RECIPIENT_ONLY",
+      nextSpace: regular,
+    })).toBe("RECIPIENT_ONLY");
+    expect(resolveSendSpaceLetterVisibilitySelection({
+      previousSpace: regular,
+      previousVisibility: "RECIPIENT_ONLY",
+      nextSpace: { id: "other", isAnonymous: false },
+    })).toBe("PUBLIC");
+    expect(resolveSendSpaceLetterVisibilitySelection({
+      previousSpace: regular,
+      previousVisibility: "PUBLIC",
+      nextSpace: { id: "anonymous", isAnonymous: true },
+    })).toBe("RECIPIENT_ONLY");
   });
 });

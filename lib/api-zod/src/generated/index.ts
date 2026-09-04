@@ -62,6 +62,7 @@ export type { RegisterPushTokenBodyPlatform } from "./types/registerPushTokenBod
 export type { ReleaseDiagnosticContext } from "./types/releaseDiagnosticContext";
 export type { ReleaseDiagnosticContextConfigurationState } from "./types/releaseDiagnosticContextConfigurationState";
 export type { ReleaseDiagnosticContextTrack } from "./types/releaseDiagnosticContextTrack";
+export type { SendArticleBodySpaceLetterVisibility } from "./types/sendArticleBodySpaceLetterVisibility";
 export type { SendArticleBodyTargetType } from "./types/sendArticleBodyTargetType";
 export type { SendRecord } from "./types/sendRecord";
 export type { SendRecordTargetType } from "./types/sendRecordTargetType";

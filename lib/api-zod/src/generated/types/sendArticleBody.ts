@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { SendArticleBodySpaceLetterVisibility } from "./sendArticleBodySpaceLetterVisibility";
 import type { SendArticleBodyTargetType } from "./sendArticleBodyTargetType";
 
 export interface SendArticleBody {
@@ -20,6 +21,8 @@ export interface SendArticleBody {
   replyToArticleId?: string;
   /** Required for space sends; must identify an ACTIVE space where senderId is approved. */
   spaceId?: string;
+  /** Optional visibility for space sends only. Defaults to PUBLIC; anonymous spaces always force RECIPIENT_ONLY. */
+  spaceLetterVisibility?: SendArticleBodySpaceLetterVisibility;
   /** Optional KST calendar date. It is stored and delivered at 06:00 KST; omitted means the earliest available date. */
   deliveryDate?: Date;
   /** When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening. */

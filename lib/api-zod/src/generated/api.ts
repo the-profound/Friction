@@ -4295,6 +4295,12 @@ export const SendArticleBody = zod.object({
     .describe(
       "Required for space sends; must identify an ACTIVE space where senderId is approved.",
     ),
+  spaceLetterVisibility: zod
+    .enum(["PUBLIC", "RECIPIENT_ONLY"])
+    .optional()
+    .describe(
+      "Optional visibility for space sends only. Defaults to PUBLIC; anonymous spaces always force RECIPIENT_ONLY.",
+    ),
   deliveryDate: zod
     .date()
     .optional()

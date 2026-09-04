@@ -640,6 +640,17 @@ export const SendArticleBodyTargetType = {
   space: "space",
 } as const;
 
+/**
+ * Optional visibility for space sends only. Defaults to PUBLIC; anonymous spaces always force RECIPIENT_ONLY.
+ */
+export type SendArticleBodySpaceLetterVisibility =
+  (typeof SendArticleBodySpaceLetterVisibility)[keyof typeof SendArticleBodySpaceLetterVisibility];
+
+export const SendArticleBodySpaceLetterVisibility = {
+  PUBLIC: "PUBLIC",
+  RECIPIENT_ONLY: "RECIPIENT_ONLY",
+} as const;
+
 export interface SendArticleBody {
   senderId: string;
   /** Required for person sends. For legacy callers, omitting targetType implies person. */
@@ -653,6 +664,8 @@ export interface SendArticleBody {
   replyToArticleId?: string;
   /** Required for space sends; must identify an ACTIVE space where senderId is approved. */
   spaceId?: string;
+  /** Optional visibility for space sends only. Defaults to PUBLIC; anonymous spaces always force RECIPIENT_ONLY. */
+  spaceLetterVisibility?: SendArticleBodySpaceLetterVisibility;
   /** Optional KST calendar date. It is stored and delivered at 06:00 KST; omitted means the earliest available date. */
   deliveryDate?: string;
   /** When true, the inbox item is created with is_envelope=true so the recipient sees a sealed envelope front face before opening. */

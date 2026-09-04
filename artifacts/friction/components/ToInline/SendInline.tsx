@@ -1,5 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -20,9 +32,11 @@ import { CollapsibleDatePicker } from "@/components/shared/CalendarGrid";
 import {
   ApiError,
   getListSendRecordsQueryKey,
+  getListSpacesQueryKey,
   useListArticles,
   useListInbox,
   useListNeighbors,
+  useListSpaces,
   useSendArticle,
 } from "@workspace/api-client-react";
 import type {
@@ -41,7 +55,9 @@ import {
   getSendArticleAuthorName,
   resolveInitialSendDefaults,
   resolvePrefillArticleState,
+  resolveSendSpaceLetterVisibilitySelection,
 } from "@/lib/sendPickerPresentation";
+import type { SendSpaceLetterVisibility } from "@/lib/sendPickerPresentation";
 import { kstDateAt6, minOpeningSendDate } from "@/lib/kstDate";
 import {
   createSubmissionLock,
@@ -101,9 +117,15 @@ export function SendInline({
 
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [mode, setMode] = useState<SendMode>("person");
-  const [selectedNeighbor, setSelectedNeighbor] = useState<NeighborWithUser | null>(null);
-  const [selectedReplyInbox, setSelectedReplyInbox] = useState<InboxItem | null>(null);
-  const [selectedSpace, setSelectedSpace] = useState<SpaceListItem | null>(null);
+  const [selectedNeighbor, setSelectedNeighbor] =
+    useState<NeighborWithUser | null>(null);
+  const [selectedReplyInbox, setSelectedReplyInbox] =
+    useState<InboxItem | null>(null);
+  const [selectedSpace, setSelectedSpace] = useState<SpaceListItem | null>(
+    null,
+  );
+  const [spaceLetterVisibility, setSpaceLetterVisibility] =
+    useState<SendSpaceLetterVisibility>("PUBLIC");
   const [deliveryDate, setDeliveryDate] = useState(() => minOpeningSendDate());
 
   const [letterPickerVisible, setLetterPickerVisible] = useState(false);
@@ -119,7 +141,10 @@ export function SendInline({
 
   const initialDefaultsPendingRef = useRef(false);
 
-  const articlesQuery = useListArticles({ authorId: userId, status: "LETTER" as const });
+  const articlesQuery = useListArticles({
+    authorId: userId,
+    status: "LETTER" as const,
+  });
   const articles = (articlesQuery.data ?? []) as Article[];
   const neighborsQuery = useListNeighbors({ userId });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
@@ -129,6 +154,15 @@ export function SendInline({
     [inboxQuery.data],
   );
   const sendArticle = useSendArticle();
+  const spacesQuery = useListSpaces(
+    { userId },
+    {
+      query: {
+        enabled: !!userId,
+        queryKey: getListSpacesQueryKey({ userId }),
+      },
+    },
+  );
   const prefillArticleState = resolvePrefillArticleState({
     prefillArticleId,
     articles,
@@ -164,27 +198,56 @@ export function SendInline({
   useEffect(() => {
     if (!prefillSpaceId) return;
     setMode("space");
-    setSelectedSpace(
-      (current) =>
-        current?.id === prefillSpaceId
-          ? current
-          : ({
-              id: prefillSpaceId,
-              name: prefillSpaceName || "공간",
-              status: "ACTIVE",
-            } as SpaceListItem),
+    setSelectedSpace((current) =>
+      current?.id === prefillSpaceId
+        ? current
+        : ({
+            id: prefillSpaceId,
+            name: prefillSpaceName || "공간",
+            status: "ACTIVE",
+          } as SpaceListItem),
     );
   }, [prefillKey, prefillSpaceId, prefillSpaceName]);
+
+  // Replace route-prefill snapshots with the current server policy before the
+  // user confirms a send. The server still enforces the same rule atomically.
+  useEffect(() => {
+    if (!selectedSpace) return;
+    const currentSpace = ((spacesQuery.data ?? []) as SpaceListItem[]).find(
+      (space) => space.id === selectedSpace.id,
+    );
+    if (!currentSpace) return;
+    const policyChanged =
+      selectedSpace.isAnonymous !== currentSpace.isAnonymous;
+    setSelectedSpace(currentSpace);
+    if (policyChanged) {
+      setSpaceLetterVisibility((previousVisibility) =>
+        resolveSendSpaceLetterVisibilitySelection({
+          previousSpace: selectedSpace,
+          previousVisibility,
+          nextSpace: currentSpace,
+        }),
+      );
+    }
+  }, [selectedSpace?.id, selectedSpace?.isAnonymous, spacesQuery.data]);
 
   // Only an entry-point source article can provide automatic defaults. A
   // manually chosen reply must remain empty until the user picks a letter.
   useEffect(() => {
-    if (!initialDefaultsPendingRef.current || !selectedArticle || inboxQuery.isLoading) return;
+    if (
+      !initialDefaultsPendingRef.current ||
+      !selectedArticle ||
+      inboxQuery.isLoading
+    )
+      return;
     if (prefillNeighborId || prefillSpaceId) {
       initialDefaultsPendingRef.current = false;
       return;
     }
-    const defaults = resolveInitialSendDefaults(selectedArticle, replyCandidates);
+    const defaults = resolveInitialSendDefaults(
+      selectedArticle,
+      replyCandidates,
+    );
     setMode(defaults.mode);
     setSelectedReplyInbox(defaults.replyInbox);
     initialDefaultsPendingRef.current = false;
@@ -199,20 +262,27 @@ export function SendInline({
   // Re-evaluate on every render so a screen kept open across the 06:00 KST
   // cutoff cannot keep accepting the previous day's date.
   const earliestDate = minOpeningSendDate();
+  const spacePolicyReady =
+    mode !== "space" || typeof selectedSpace?.isAnonymous === "boolean";
   const canSend = Boolean(
     selectedArticle &&
-      ((mode === "person" && selectedNeighbor) ||
-        (mode === "reply" && selectedReplyInbox) ||
-        (mode === "space" && selectedSpace)),
+    spacePolicyReady &&
+    ((mode === "person" && selectedNeighbor) ||
+      (mode === "reply" && selectedReplyInbox) ||
+      (mode === "space" && selectedSpace)),
   );
   const targetLabel =
-    mode === "person" ? "받는 사람" : mode === "reply" ? "답장할 편지" : "보낼 공간";
+    mode === "person"
+      ? "받는 사람"
+      : mode === "reply"
+        ? "답장할 편지"
+        : "보낼 공간";
   const targetValue =
     mode === "person"
-      ? selectedNeighbor?.user?.nickname ?? null
+      ? (selectedNeighbor?.user?.nickname ?? null)
       : mode === "reply"
-        ? selectedReplyInbox?.article?.title ?? null
-        : selectedSpace?.name ?? null;
+        ? (selectedReplyInbox?.article?.title ?? null)
+        : (selectedSpace?.name ?? null);
 
   const selectMode = useCallback((nextMode: SendMode) => {
     setMode(nextMode);
@@ -221,12 +291,16 @@ export function SendInline({
     if (nextMode !== "reply") {
       setSelectedReplyInbox(null);
     }
-    if (nextMode !== "space") setSelectedSpace(null);
+    if (nextMode !== "space") {
+      setSelectedSpace(null);
+      setSpaceLetterVisibility("PUBLIC");
+    }
   }, []);
 
   const handleSend = useCallback(
     async (isEnvelope = false) => {
-      if (!displayedArticle || !canSend || !sendSubmissionLock.tryAcquire()) return;
+      if (!displayedArticle || !canSend || !sendSubmissionLock.tryAcquire())
+        return;
       setIsSubmitting(true);
       setSendError(null);
 
@@ -237,10 +311,18 @@ export function SendInline({
           targetType: mode,
           deliveryDate: calendarDateKey(deliveryDate),
           ...(mode === "person"
-            ? { recipientId: selectedNeighbor!.neighborUserId, ...(isEnvelope ? { isEnvelope: true } : {}) }
+            ? {
+                recipientId: selectedNeighbor!.neighborUserId,
+                ...(isEnvelope ? { isEnvelope: true } : {}),
+              }
             : mode === "reply"
               ? buildReplySendTarget(selectedReplyInbox!)
-              : { spaceId: selectedSpace!.id }),
+              : {
+                  spaceId: selectedSpace!.id,
+                  spaceLetterVisibility: selectedSpace!.isAnonymous
+                    ? "RECIPIENT_ONLY"
+                    : spaceLetterVisibility,
+                }),
         };
         const result = await runAuthenticatedMutation<SendRecordWithDetails>({
           prepareSession: prepareAuthSession,
@@ -252,7 +334,9 @@ export function SendInline({
           ? new Date(`${result.deliveryDate}T06:00:00+09:00`)
           : kstDateAt6(deliveryDate);
         const arrivalTime = formatDeliveryTime(returnedDate);
-        queryClient.invalidateQueries({ queryKey: getListSendRecordsQueryKey({ senderId: userId }) });
+        queryClient.invalidateQueries({
+          queryKey: getListSendRecordsQueryKey({ senderId: userId }),
+        });
         showToast({
           message:
             mode === "person"
@@ -288,6 +372,7 @@ export function SendInline({
       selectedNeighbor,
       selectedReplyInbox,
       selectedSpace,
+      spaceLetterVisibility,
       showToast,
       userId,
     ],
@@ -301,10 +386,14 @@ export function SendInline({
         : mode === "reply"
           ? `'${targetValue}'에`
           : `'${targetValue}'에`;
+    const visibilityDescription =
+      mode === "space"
+        ? `\n공개 범위: ${spaceLetterVisibility === "PUBLIC" ? "공개" : "비공개"}`
+        : "";
     return `'${selectedArticle.title || "제목 없음"}'을(를)\n${destination} ${formatCalendarDate(
       deliveryDate,
-    )} 오전 6시에 보내시겠어요?`;
-  }, [deliveryDate, mode, selectedArticle, targetValue]);
+    )} 오전 6시에 보내시겠어요?${visibilityDescription}`;
+  }, [deliveryDate, mode, selectedArticle, spaceLetterVisibility, targetValue]);
 
   const openSendConfirmation = useCallback(() => {
     if (!canSend) return;
@@ -344,10 +433,16 @@ export function SendInline({
               accessibilityState={{ busy: true }}
             >
               <ActivityIndicator size="small" color={Colors.zinc500} />
-              <Text style={styles.placeholder}>선택한 편지를 불러오는 중...</Text>
+              <Text style={styles.placeholder}>
+                선택한 편지를 불러오는 중...
+              </Text>
             </View>
-          ) : prefillArticleState.kind === "error" || prefillArticleState.kind === "missing" ? (
-            <View style={styles.articleLoadError} accessibilityLiveRegion="polite">
+          ) : prefillArticleState.kind === "error" ||
+            prefillArticleState.kind === "missing" ? (
+            <View
+              style={styles.articleLoadError}
+              accessibilityLiveRegion="polite"
+            >
               <Text style={styles.articleLoadErrorText}>
                 {prefillArticleState.kind === "error"
                   ? "선택한 편지를 불러오지 못했어요."
@@ -377,27 +472,129 @@ export function SendInline({
           )}
         </View>
 
+        {mode === "space" && selectedSpace ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>공개 범위</Text>
+            {!spacePolicyReady ? (
+              <View
+                style={styles.visibilityLoading}
+                accessible
+                accessibilityRole="progressbar"
+                accessibilityLabel="공간 공개 범위를 확인하는 중"
+                accessibilityState={{ busy: true }}
+              >
+                <ActivityIndicator size="small" color={Colors.zinc500} />
+                <Text style={styles.visibilityDescription}>
+                  공간 공개 범위를 확인하는 중...
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View
+                  style={styles.visibilityRow}
+                  accessibilityRole="radiogroup"
+                  accessibilityLabel="공간 편지 공개 범위"
+                >
+                  {(
+                    [
+                      ["PUBLIC", "공개", "공간 참여자가 볼 수 있어요"],
+                      [
+                        "RECIPIENT_ONLY",
+                        "비공개",
+                        "편지를 받은 사람만 볼 수 있어요",
+                      ],
+                    ] as const
+                  ).map(([value, label, description]) => {
+                    const selected = spaceLetterVisibility === value;
+                    const disabled = selectedSpace.isAnonymous;
+                    return (
+                      <ScalePressable
+                        key={value}
+                        testID={`space-visibility-${value.toLowerCase()}`}
+                        style={styles.visibilityButtonOuter}
+                        contentStyle={[
+                          styles.visibilityButton,
+                          selected && styles.visibilityButtonSelected,
+                          disabled && styles.visibilityButtonDisabled,
+                        ]}
+                        disabled={disabled}
+                        onPress={() => {
+                          setSpaceLetterVisibility(value);
+                          setSendError(null);
+                        }}
+                        accessibilityRole="radio"
+                        accessibilityLabel={`${label}, ${description}`}
+                        accessibilityState={{ selected, disabled }}
+                      >
+                        <View
+                          style={[
+                            styles.radioCircle,
+                            selected && styles.radioCircleSelected,
+                          ]}
+                        >
+                          {selected ? <View style={styles.radioDot} /> : null}
+                        </View>
+                        <View style={styles.visibilityTextWrap}>
+                          <Text style={styles.visibilityLabel}>{label}</Text>
+                          <Text style={styles.visibilityDescription}>
+                            {description}
+                          </Text>
+                        </View>
+                      </ScalePressable>
+                    );
+                  })}
+                </View>
+                {selectedSpace.isAnonymous ? (
+                  <View
+                    style={styles.visibilityNotice}
+                    accessible
+                    accessibilityRole="text"
+                  >
+                    <Feather name="lock" size={15} color={Colors.zinc500} />
+                    <Text style={styles.visibilityNoticeText}>
+                      익명 공간은 참여자의 익명성을 위해 비공개로 고정돼요.
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            )}
+          </View>
+        ) : null}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>보내기 종류</Text>
           <View style={styles.modeRow}>
-            {([
-              ["person", "사람", "user"],
-              ["reply", "답장", "corner-up-left"],
-              ["space", "공간", "layers"],
-            ] as const).map(([value, label, icon]) => {
+            {(
+              [
+                ["person", "사람", "user"],
+                ["reply", "답장", "corner-up-left"],
+                ["space", "공간", "layers"],
+              ] as const
+            ).map(([value, label, icon]) => {
               const active = mode === value;
               return (
                 <ScalePressable
                   key={value}
                   style={styles.modeButtonOuter}
-                  contentStyle={[styles.modeButton, active && styles.modeButtonActive]}
+                  contentStyle={[
+                    styles.modeButton,
+                    active && styles.modeButtonActive,
+                  ]}
                   onPress={() => selectMode(value)}
                   accessibilityRole="radio"
                   accessibilityLabel={label}
                   accessibilityState={{ selected: active }}
                 >
-                  <Feather name={icon} size={17} color={active ? Colors.white : Colors.zinc600} />
-                  <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
+                  <Feather
+                    name={icon}
+                    size={17}
+                    color={active ? Colors.white : Colors.zinc600}
+                  />
+                  <Text
+                    style={[styles.modeText, active && styles.modeTextActive]}
+                  >
+                    {label}
+                  </Text>
                 </ScalePressable>
               );
             })}
@@ -418,11 +615,23 @@ export function SendInline({
             accessibilityLabel={`${targetLabel} 선택`}
           >
             <Feather
-              name={mode === "person" ? "user" : mode === "reply" ? "corner-up-left" : "layers"}
+              name={
+                mode === "person"
+                  ? "user"
+                  : mode === "reply"
+                    ? "corner-up-left"
+                    : "layers"
+              }
               size={18}
               color={targetValue ? Colors.zinc900 : Colors.zinc500}
             />
-            <Text style={[styles.targetText, targetValue && styles.targetTextActive]} numberOfLines={2}>
+            <Text
+              style={[
+                styles.targetText,
+                targetValue && styles.targetTextActive,
+              ]}
+              numberOfLines={2}
+            >
               {targetValue ?? `${targetLabel}를 선택하세요`}
             </Text>
             <Feather name="chevron-right" size={18} color={Colors.zinc400} />
@@ -431,7 +640,9 @@ export function SendInline({
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>수신일</Text>
-          <Text style={styles.sectionHint}>선택한 날짜 오전 6시에 도착해요.</Text>
+          <Text style={styles.sectionHint}>
+            선택한 날짜 오전 6시에 도착해요.
+          </Text>
           <CollapsibleDatePicker
             value={deliveryDate}
             onChange={(date) => {
@@ -448,7 +659,9 @@ export function SendInline({
               }
             }}
             isDateDisabled={(date) => date < earliestDate}
-            canGoPrevMonth={(year, month) => new Date(year, month + 1, 0) >= earliestDate}
+            canGoPrevMonth={(year, month) =>
+              new Date(year, month + 1, 0) >= earliestDate
+            }
             formatButtonLabel={(date) => formatCalendarDate(date)}
             triggerIcon="calendar"
             triggerStyle={styles.dateTrigger}
@@ -459,15 +672,22 @@ export function SendInline({
         {sendError ? (
           <View style={styles.errorBox} accessibilityLiveRegion="polite">
             <View style={styles.errorTextWrap}>
-              <Feather name="alert-circle" size={18} color={Colors.noticeAccent} />
+              <Feather
+                name="alert-circle"
+                size={18}
+                color={Colors.noticeAccent}
+              />
               <Text style={styles.errorText}>{sendError}</Text>
             </View>
             <ScalePressable
               style={styles.retryButtonOuter}
               contentStyle={styles.retryButton}
               onPress={() => handleSend(retryEnvelope ?? false)}
-               disabled={isSubmitting}
-               accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
+              disabled={isSubmitting}
+              accessibilityState={{
+                disabled: isSubmitting,
+                busy: isSubmitting,
+              }}
               accessibilityRole="button"
               accessibilityLabel="전송 다시 시도"
             >
@@ -490,7 +710,11 @@ export function SendInline({
           label="보내기"
           pendingLabel="보내는 중..."
           renderIcon={({ disabled }) => (
-            <Feather name="send" size={16} color={disabled ? Colors.zinc400 : Colors.white} />
+            <Feather
+              name="send"
+              size={16}
+              color={disabled ? Colors.zinc400 : Colors.white}
+            />
           )}
         />
       </View>
@@ -538,6 +762,13 @@ export function SendInline({
         userId={userId}
         selectedSpaceId={selectedSpace?.id ?? null}
         onSelect={(space) => {
+          setSpaceLetterVisibility((previousVisibility) =>
+            resolveSendSpaceLetterVisibilitySelection({
+              previousSpace: selectedSpace,
+              previousVisibility,
+              nextSpace: space,
+            }),
+          );
           setSelectedSpace(space);
           setSendError(null);
         }}
@@ -572,7 +803,6 @@ export function SendInline({
         onConfirm={() => handleSend(pendingIsEnvelope)}
         onCancel={() => setConfirmVisible(false)}
       />
-
     </View>
   );
 }
@@ -586,7 +816,11 @@ const styles = StyleSheet.create({
     gap: 26,
   },
   section: { gap: 10 },
-  sectionTitle: { ...Typography.bodySemiBold, fontSize: 15, color: Colors.zinc900 },
+  sectionTitle: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc900,
+  },
   sectionHint: { ...Typography.caption, color: Colors.zinc500, marginTop: -3 },
   articlePlaceholderOuter: { minHeight: 58 },
   articlePlaceholder: {
@@ -598,7 +832,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.zinc50,
   },
-  placeholder: { ...Typography.body, flex: 1, fontSize: 14, color: Colors.zinc500 },
+  placeholder: {
+    ...Typography.body,
+    flex: 1,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
   articleLoading: {
     height: 104,
     marginHorizontal: Spacing.screenPx,
@@ -622,8 +861,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Colors.zinc50,
   },
-  articleLoadErrorText: { ...Typography.body, fontSize: 14, color: Colors.zinc600 },
-  articleRetryOuter: { height: 40, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
+  articleLoadErrorText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.zinc600,
+  },
+  articleRetryOuter: {
+    height: 40,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   articleRetry: {
     height: 40,
     flexGrow: 0,
@@ -648,7 +896,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.zinc200,
     backgroundColor: Colors.white,
   },
-  modeButtonActive: { borderColor: Colors.noticeAccent, backgroundColor: Colors.noticeAccent },
+  modeButtonActive: {
+    borderColor: Colors.noticeAccent,
+    backgroundColor: Colors.noticeAccent,
+  },
   modeText: { ...Typography.bodySemiBold, fontSize: 14, color: Colors.zinc600 },
   modeTextActive: { color: Colors.white },
   targetButtonOuter: { minHeight: 58 },
@@ -661,8 +912,86 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.zinc50,
   },
-  targetText: { ...Typography.body, flex: 1, fontSize: 14, color: Colors.zinc500 },
+  targetText: {
+    ...Typography.body,
+    flex: 1,
+    fontSize: 14,
+    color: Colors.zinc500,
+  },
   targetTextActive: { color: Colors.zinc900, fontWeight: "600" },
+  visibilityRow: { gap: 8 },
+  visibilityLoading: {
+    height: 62,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.zinc50,
+  },
+  visibilityButtonOuter: {
+    width: "100%",
+    height: 62,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  visibilityButton: {
+    width: "100%",
+    height: 62,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
+  },
+  visibilityButtonSelected: {
+    borderColor: Colors.noticeAccent,
+    backgroundColor: Colors.zinc50,
+  },
+  visibilityButtonDisabled: { opacity: 0.72 },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.zinc300,
+    alignItems: "center",
+    justifyContent: "center",
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  radioCircleSelected: {
+    borderColor: Colors.noticeAccent,
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.noticeAccent,
+  },
+  visibilityTextWrap: { flex: 1, gap: 2 },
+  visibilityLabel: {
+    ...Typography.bodySemiBold,
+    fontSize: 14,
+    color: Colors.zinc900,
+  },
+  visibilityDescription: { ...Typography.caption, color: Colors.zinc500 },
+  visibilityNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    paddingHorizontal: 2,
+  },
+  visibilityNoticeText: {
+    ...Typography.caption,
+    flex: 1,
+    color: Colors.zinc500,
+  },
   dateTrigger: { backgroundColor: Colors.zinc50 },
   dateTriggerText: { color: Colors.zinc900 },
   errorBox: {
@@ -674,7 +1003,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff7f7",
   },
   errorTextWrap: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  errorText: { ...Typography.body, flex: 1, fontSize: 14, lineHeight: 20, color: Colors.noticeAccent },
+  errorText: {
+    ...Typography.body,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.noticeAccent,
+  },
   retryButtonOuter: { alignSelf: "flex-start", minHeight: 40 },
   retryButton: {
     minHeight: 40,
@@ -691,9 +1026,17 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
   },
-  sendButton: { backgroundColor: Colors.zinc900, paddingVertical: 16, borderRadius: 12 },
+  sendButton: {
+    backgroundColor: Colors.zinc900,
+    paddingVertical: 16,
+    borderRadius: 12,
+  },
   sendButtonContent: { gap: 8 },
   sendButtonDisabled: { backgroundColor: Colors.zinc100 },
-  sendButtonText: { ...Typography.bodySemiBold, fontSize: 16, color: Colors.white },
+  sendButtonText: {
+    ...Typography.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
   sendButtonTextDisabled: { color: Colors.zinc400 },
 });

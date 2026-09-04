@@ -4417,6 +4417,10 @@ components:
           type: string
           format: uuid
           description: Required for space sends; must identify an ACTIVE space where senderId is approved.
+        spaceLetterVisibility:
+          type: string
+          enum: [PUBLIC, RECIPIENT_ONLY]
+          description: Optional visibility for space sends only. Defaults to PUBLIC; anonymous spaces always force RECIPIENT_ONLY.
         deliveryDate:
           type: string
           format: date
