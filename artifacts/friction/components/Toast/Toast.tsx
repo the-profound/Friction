@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Animated } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Colors, Typography, ZIndex, Spacing } from "../../constants/tokens";
+import { Colors, Typography, ZIndex, Spacing, Sizing } from "../../constants/tokens";
 import { useToast, type ToastType } from "../../contexts/ToastContext";
 
 const TYPE_CONFIG: Record<ToastType, { icon: keyof typeof Feather.glyphMap; bg: string; iconColor: string }> = {
@@ -26,7 +26,7 @@ export default function ToastContainer() {
           <ToastItem key={t.id} toast={t} onDismiss={() => removeToast(t.id)} />
         ))}
       </View>
-      <View style={[styles.bottomContainer, { bottom: Spacing.navBarPaddingBottom + 8 }]} pointerEvents="box-none">
+      <View style={[styles.bottomContainer, { bottom: Spacing.navBarBottom + insets.bottom + Sizing.navBarHeight + 8 }]} pointerEvents="box-none">
         {bottomToasts.map((t) => (
           <ToastItem key={t.id} toast={t} onDismiss={() => removeToast(t.id)} />
         ))}
