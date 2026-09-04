@@ -242,15 +242,7 @@ function RecordSourceCard({
   return (
     <ScalePressable
       style={[styles.thoughtCard, { width, height }]}
-      contentStyle={[
-        styles.thoughtCardContent,
-        NON_SELECTABLE_WEB_STYLE,
-        {
-          paddingHorizontal: layout.paddingX,
-          paddingVertical: layout.paddingY,
-        },
-        question && styles.questionCardContent,
-      ]}
+      contentStyle={[styles.thoughtCardContent, NON_SELECTABLE_WEB_STYLE]}
       onPress={() => {
         if (!touchMovedRef.current) onPress();
       }}
@@ -276,41 +268,52 @@ function RecordSourceCard({
         : record.kind === "thought" ? "단상 열기" : "편집 글 열기"}
       accessibilityHint={question ? "누르면 이 질문에 답하는 단상을 시작합니다." : undefined}
     >
-      <View style={styles.thoughtCardBodyWrap}>
-        {content.hasTitle ? (
+      <View
+        style={[
+          styles.thoughtCardSurface,
+          {
+            paddingHorizontal: layout.paddingX,
+            paddingVertical: layout.paddingY,
+          },
+          question && styles.questionCardSurface,
+        ]}
+      >
+        <View style={styles.thoughtCardBodyWrap}>
+          {content.hasTitle ? (
+            <RecordListText
+              style={[
+                styles.thoughtCardTitle,
+                textStyle,
+                {
+                  fontSize: titleSize,
+                  lineHeight: titleLineHeight,
+                  color: question ? Colors.white : Colors.zinc900,
+                },
+              ]}
+              numberOfLines={question ? undefined : 2}
+              ellipsizeMode={question ? undefined : "tail"}
+            >
+              {content.title}
+            </RecordListText>
+          ) : null}
           <RecordListText
             style={[
-              styles.thoughtCardTitle,
+              styles.thoughtCardBody,
               textStyle,
               {
-                fontSize: titleSize,
-                lineHeight: titleLineHeight,
-                color: question ? Colors.white : Colors.zinc900,
+                fontSize: bodySize,
+                lineHeight: bodyLineHeight,
+                letterSpacing: layout.bodyLetterSpacing,
+                marginTop: content.hasTitle ? Spacing.md : 0,
+                color: question ? Colors.white : Colors.zinc800,
               },
             ]}
-            numberOfLines={question ? undefined : 2}
-            ellipsizeMode={question ? undefined : "tail"}
+            numberOfLines={bodyLines}
+            ellipsizeMode="tail"
           >
-            {content.title}
+            {content.body || "아직 적힌 내용이 없어요."}
           </RecordListText>
-        ) : null}
-        <RecordListText
-          style={[
-            styles.thoughtCardBody,
-            textStyle,
-            {
-              fontSize: bodySize,
-              lineHeight: bodyLineHeight,
-              letterSpacing: layout.bodyLetterSpacing,
-              marginTop: content.hasTitle ? Spacing.md : 0,
-              color: question ? Colors.white : Colors.zinc800,
-            },
-          ]}
-          numberOfLines={bodyLines}
-          ellipsizeMode="tail"
-        >
-          {content.body || "아직 적힌 내용이 없어요."}
-        </RecordListText>
+        </View>
       </View>
     </ScalePressable>
   );
@@ -1112,11 +1115,12 @@ const styles = StyleSheet.create({
   recordListViewport: { flex: 1 },
   recordCardFrame: { flex: 1, alignItems: "center" },
   recordCardHidden: { opacity: 0 },
-  // Keep the press wrapper transparent: only the animated content surface
-  // should own the card geometry and shadow, so the shadow scales with it.
+  // The animated wrapper owns elevation while the nested surface owns clipping.
+  // Keeping those responsibilities separate prevents the card shadow from being clipped.
   thoughtCard: { flexGrow: 0, flexShrink: 0 },
-  thoughtCardContent: { flex: 1, backgroundColor: Colors.zinc50, borderRadius: 16, overflow: "hidden", ...Shadows.carouselCard },
-  questionCardContent: { backgroundColor: Colors.noticeAccent },
+  thoughtCardContent: { flex: 1, backgroundColor: Colors.white, borderRadius: 16, ...Shadows.carouselCard },
+  thoughtCardSurface: { flex: 1, backgroundColor: Colors.white, borderRadius: 16, overflow: "hidden" },
+  questionCardSurface: { backgroundColor: Colors.noticeAccent },
   thoughtCardBodyWrap: { flex: 1, justifyContent: "flex-start" },
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
