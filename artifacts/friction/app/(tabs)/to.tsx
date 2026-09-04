@@ -536,7 +536,12 @@ export default function MyScreen() {
         scrollEnabled={!isOverlayActive}
       />
 
-      {renderLetterOverlay()}
+      {/* Collapse the overlay's touch surface to none when inactive.
+          Defense-in-depth: catches any future case where the inner overlay
+          forgets its own pointerEvents fix and leaves a ghost hit region. */}
+      <View pointerEvents={isOverlayActive ? "auto" : "none"}>
+        {renderLetterOverlay()}
+      </View>
     </View>
   );
 }

@@ -326,6 +326,7 @@ export default function CardSelectOverlay({
 
   // ── Carousel state ────────────────────────────────────────────────────────
   const [rendered, setRendered] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const closingRef = useRef(false);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
@@ -547,10 +548,19 @@ export default function CardSelectOverlay({
   runCloseRef.current = () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    setIsClosing(true);
     openedRef.current = false;
     const initIdx = prevInitialIndexRef.current;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
     const finishClose = () => {
+      if (fallbackTimer !== null) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      // Guard against double-invocation (animation callback + fallback timer).
+      if (!closingRef.current) return;
       setRendered(false);
+      setIsClosing(false);
       closingRef.current = false;
       onClose();
     };
@@ -579,6 +589,10 @@ export default function CardSelectOverlay({
               easing: TRANSITION_EASING,
               useNativeDriver: false,
             });
+
+          // Fallback: if the animation callback never fires (race condition or
+          // JS scheduler jitter), guarantee cleanup within ~420 ms.
+          fallbackTimer = setTimeout(finishClose, CLOSE_MAX_DURATION + 100);
 
           // Always include the track, even when the active index already equals
           // the initial index: it can sit between snap points after a drag.
@@ -1092,8 +1106,13 @@ export default function CardSelectOverlay({
       onRequestClose={requestClose}
       onShow={handleModalShow}
     >
-      {/* Dark backdrop */}
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}>
+      {/* Dark backdrop — touch disabled the moment closing begins so the
+          underlying screen is immediately interactive even if finishClose is
+          delayed by a JS scheduler race. */}
+      <Animated.View
+        pointerEvents={isClosing ? "none" : "auto"}
+        style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
       </Animated.View>
 
