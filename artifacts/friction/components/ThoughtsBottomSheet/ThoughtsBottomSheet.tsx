@@ -39,7 +39,12 @@ import {
 import type { Thought } from "@workspace/api-client-react";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, ReaderTokens, Shadows, Spacing, Typography } from "@/constants/tokens";
-import { getThoughtInlineCommitAction } from "@/lib/thoughtInlineEditor";
+import {
+  getThoughtInlineCommitAction,
+  isCurrentOptimisticRequest,
+  mergeReadingThoughtsById,
+  type OptimisticReadingThought,
+} from "@/lib/thoughtInlineEditor";
 
 const PANEL_RATIO = 0.5;
 /** 스와이프 1단계 중간 스냅 높이 비율 */
@@ -220,6 +225,14 @@ export default function ThoughtsBottomSheet({
   const editorRef = useRef<EditorState | null>(null);
   editorRef.current = editor;
   const commitLockRef = useRef(false);
+  const [optimisticThoughts, setOptimisticThoughts] = useState<OptimisticReadingThought[]>([]);
+  const optimisticThoughtsRef = useRef(optimisticThoughts);
+  optimisticThoughtsRef.current = optimisticThoughts;
+  const commitOptimisticThoughts = useCallback((next: OptimisticReadingThought[]) => {
+    optimisticThoughtsRef.current = next;
+    setOptimisticThoughts(next);
+  }, []);
+  const addTransitionLockRef = useRef(false);
   /** optimistic 삭제: 화면에서 즉시 숨길 ID 집합 */
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
@@ -235,16 +248,52 @@ export default function ThoughtsBottomSheet({
     },
   );
   const thoughts = (thoughtsQuery.data ?? []) as Thought[];
+  const articleOptimisticThoughts = optimisticThoughts.filter(
+    (thought) => thought.sourceArticleId === articleId,
+  );
+  const displayedThoughts = mergeReadingThoughtsById(thoughts, articleOptimisticThoughts);
   const createThought = useCreateThought();
   const updateThought = useUpdateThought();
   const deleteThought = useDeleteThought();
 
   const invalidateThoughts = useCallback(() => {
-    queryClient.invalidateQueries({
-      queryKey: getListThoughtsQueryKey({ sourceArticleId: articleId }),
-    });
-    queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+    return Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: getListThoughtsQueryKey({ sourceArticleId: articleId }),
+      }),
+      queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() }),
+    ]);
   }, [queryClient, articleId]);
+
+  const upsertThoughtInCaches = useCallback((thought: Thought) => {
+    const upsert = (previous: Thought[] | undefined) => {
+      if (!previous) return previous;
+      const index = previous.findIndex((item) => item.id === thought.id);
+      if (index < 0) return [...previous, thought];
+      const next = [...previous];
+      next[index] = thought;
+      return next;
+    };
+    queryClient.setQueryData<Thought[]>(getListThoughtsQueryKey(), upsert);
+    queryClient.setQueryData<Thought[]>(
+      getListThoughtsQueryKey({ sourceArticleId: articleId }),
+      upsert,
+    );
+  }, [articleId, queryClient]);
+
+  const cacheOptimisticThought = useCallback((optimistic: OptimisticReadingThought) => {
+    const cacheThought: Thought = {
+      id: optimistic.id,
+      authorId: "",
+      content: optimistic.content,
+      createdFrom: "reading",
+      sourceArticleId: optimistic.sourceArticleId,
+      status: "PRELIMINARY",
+      createdAt: optimistic.createdAt,
+      updatedAt: optimistic.createdAt,
+    };
+    upsertThoughtInCaches(cacheThought);
+  }, [upsertThoughtInCaches]);
 
   // ── Keyboard: 패널 height + inputBar padding 동시 신축 ─────────────────────
 
@@ -530,6 +579,131 @@ export default function ThoughtsBottomSheet({
     }
   }, [articleId, createThought, deleteThought, invalidateThoughts, updateThought]);
 
+  const saveOptimisticThought = useCallback((
+    optimistic: OptimisticReadingThought,
+    requestGeneration: number,
+  ) => {
+    void (async () => {
+      let saved: Thought;
+      try {
+        saved = await createThought.mutateAsync({
+          data: {
+            clientId: optimistic.id,
+            content: optimistic.content,
+            createdFrom: "reading",
+            sourceArticleId: optimistic.sourceArticleId,
+            status: "PRELIMINARY",
+          },
+        }) as Thought;
+      } catch (error) {
+        console.warn("[ThoughtsBottomSheet] optimistic create failed:", error);
+        commitOptimisticThoughts(optimisticThoughtsRef.current.map((item) =>
+          item.id === optimistic.id && item.requestGeneration === requestGeneration
+            ? {
+                ...item,
+                saveState: "failed",
+                error: "저장하지 못했어요. 다시 시도해 주세요.",
+              }
+            : item
+        ));
+        return;
+      }
+
+      const current = optimisticThoughtsRef.current.find((item) => item.id === optimistic.id);
+      if (!isCurrentOptimisticRequest(current, requestGeneration)) return;
+      upsertThoughtInCaches(saved);
+      commitOptimisticThoughts(optimisticThoughtsRef.current.map((item) =>
+        item.id === optimistic.id && item.requestGeneration === requestGeneration
+          ? { ...item, saveState: "confirmed", error: undefined }
+          : item
+      ));
+      try {
+        await invalidateThoughts();
+      } catch (error) {
+        // Creation already succeeded. Keep the confirmed local fence so a
+        // transient refetch failure cannot turn a saved card into a retry.
+        console.warn("[ThoughtsBottomSheet] thought refetch failed:", error);
+        return;
+      }
+      const latest = optimisticThoughtsRef.current.find((item) => item.id === optimistic.id);
+      const refreshed = queryClient.getQueryData<Thought[]>(
+        getListThoughtsQueryKey({ sourceArticleId: optimistic.sourceArticleId }),
+      );
+      if (
+        isCurrentOptimisticRequest(latest, requestGeneration)
+        && refreshed?.some((item) => item.id === optimistic.id)
+      ) {
+        commitOptimisticThoughts(
+          optimisticThoughtsRef.current.filter((item) => item.id !== optimistic.id),
+        );
+      }
+    })();
+  }, [
+    commitOptimisticThoughts,
+    createThought,
+    invalidateThoughts,
+    queryClient,
+    upsertThoughtInCaches,
+  ]);
+
+  const retryOptimisticThought = useCallback((id: string) => {
+    const current = optimisticThoughtsRef.current.find((item) => item.id === id);
+    if (!current || current.saveState !== "failed") return;
+    const retrying = {
+      ...current,
+      saveState: "pending" as const,
+      error: undefined,
+      requestGeneration: current.requestGeneration + 1,
+    };
+    commitOptimisticThoughts(
+      optimisticThoughtsRef.current.map((item) => item.id === id ? retrying : item),
+    );
+    saveOptimisticThought(retrying, retrying.requestGeneration);
+  }, [commitOptimisticThoughts, saveOptimisticThought]);
+
+  const openNextNewEditorImmediately = useCallback(() => {
+    if (addTransitionLockRef.current) return;
+    addTransitionLockRef.current = true;
+    const current = editorRef.current;
+    const action = current && !current.thought
+      ? getThoughtInlineCommitAction({
+          isExisting: false,
+          text: current.text,
+          initialText: current.initialText,
+        })
+      : null;
+
+    if (current && !current.thought && action === "create") {
+      const optimistic: OptimisticReadingThought = {
+        id: current.key,
+        content: current.text,
+        sourceArticleId: articleId,
+        createdAt: new Date().toISOString(),
+        saveState: "pending",
+        requestGeneration: 1,
+      };
+      commitOptimisticThoughts([
+        ...optimisticThoughtsRef.current.filter((item) => item.id !== optimistic.id),
+        optimistic,
+      ]);
+      cacheOptimisticThought(optimistic);
+      saveOptimisticThought(optimistic, optimistic.requestGeneration);
+    }
+
+    const nextKey = createClientId();
+    setEditor({
+      key: nextKey,
+      text: "",
+      initialText: "",
+      pending: false,
+    });
+    setTimeout(() => {
+      inputRef.current?.focus();
+      scrollRef.current?.scrollToEnd({ animated: true });
+      addTransitionLockRef.current = false;
+    }, 0);
+  }, [articleId, cacheOptimisticThought, commitOptimisticThoughts, saveOptimisticThought]);
+
   const openEditor = useCallback(async (thought?: Thought) => {
     if (editorRef.current && !(await commitEditor())) return;
     const key = thought?.id ?? createClientId();
@@ -748,9 +922,33 @@ export default function ThoughtsBottomSheet({
               </View>
             ) : (
               <>
-                {thoughts
+                {displayedThoughts
                   .filter((t) => !deletedIds.has(t.id))
-                  .map((t) => editor?.thought?.id === t.id ? (
+                  .map((t) => "saveState" in t ? (
+                    <View key={t.id} style={styles.card}>
+                      <View style={styles.optimisticMetaRow}>
+                        <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
+                        {t.saveState === "pending" && (
+                          <ActivityIndicator size="small" color={Colors.zinc400} />
+                        )}
+                      </View>
+                      <Text style={styles.cardText}>{t.content}</Text>
+                      {t.saveState === "failed" && (
+                        <View style={styles.errorRow}>
+                          <Text style={styles.errorText}>{t.error}</Text>
+                          <Pressable
+                            onPress={() => retryOptimisticThought(t.id)}
+                            style={({ pressed }) => [styles.retryButton, pressed && styles.buttonPressed]}
+                            accessibilityRole="button"
+                            accessibilityLabel="단상 저장 다시 시도"
+                            accessibilityState={{ busy: false }}
+                          >
+                            <Text style={styles.retryText}>다시 시도</Text>
+                          </Pressable>
+                        </View>
+                      )}
+                    </View>
+                  ) : editor?.thought?.id === t.id ? (
                     <View
                       key={t.id}
                       onLayout={(event) => {
@@ -840,16 +1038,19 @@ export default function ThoughtsBottomSheet({
                   </View>
                 )}
                 <Pressable
-                  onPress={() => void openEditor()}
-                  disabled={!!editor?.pending}
+                  onPress={() => {
+                    if (editor && !editor.thought) openNextNewEditorImmediately();
+                    else void openEditor();
+                  }}
+                  disabled={!!editor?.pending || addTransitionLockRef.current}
                   style={({ pressed }) => [
                     styles.addCardButton,
                     pressed && styles.buttonPressed,
-                    editor?.pending && styles.buttonDisabled,
+                    (editor?.pending || addTransitionLockRef.current) && styles.buttonDisabled,
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel="새 단상 추가"
-                  accessibilityState={{ disabled: !!editor?.pending }}
+                  accessibilityState={{ disabled: !!editor?.pending || addTransitionLockRef.current }}
                 >
                   <Feather name="plus" size={22} color={Colors.zinc500} />
                 </Pressable>
@@ -960,6 +1161,13 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.zinc500,
     alignSelf: "flex-end",
+  },
+  optimisticMetaRow: {
+    minHeight: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
   },
   cardText: {
     fontSize: 16,
