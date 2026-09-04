@@ -7,6 +7,7 @@ import {
   filterReadReplyLetters,
   getSendArticleAuthorName,
   resolveInitialSendDefaults,
+  resolvePrefillArticleState,
   sortAndFilterLetterPickerItems,
 } from "./sendPickerPresentation";
 
@@ -51,6 +52,34 @@ describe("send picker presentation", () => {
     expect(getSendArticleAuthorName({ authorNickname: "   " })).toBe(
       "알 수 없음",
     );
+  });
+
+  it("resolves a cached prefill immediately and terminates cold-load failures", () => {
+    const cached = article("cached") as never;
+    expect(resolvePrefillArticleState({
+      prefillArticleId: "cached",
+      articles: [cached],
+      isLoading: true,
+      isError: false,
+    })).toEqual({ kind: "ready", article: cached });
+    expect(resolvePrefillArticleState({
+      prefillArticleId: "missing",
+      articles: [],
+      isLoading: true,
+      isError: false,
+    })).toEqual({ kind: "loading" });
+    expect(resolvePrefillArticleState({
+      prefillArticleId: "missing",
+      articles: [],
+      isLoading: false,
+      isError: true,
+    })).toEqual({ kind: "error" });
+    expect(resolvePrefillArticleState({
+      prefillArticleId: "missing",
+      articles: [],
+      isLoading: false,
+      isError: false,
+    })).toEqual({ kind: "missing" });
   });
 
   it("sorts picker letters newest first and searches titles case-insensitively", () => {

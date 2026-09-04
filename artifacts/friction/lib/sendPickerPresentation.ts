@@ -56,6 +56,32 @@ export function resolveInitialSendDefaults(
   };
 }
 
+export type PrefillArticleState =
+  | { kind: "none" }
+  | { kind: "ready"; article: Article }
+  | { kind: "loading" }
+  | { kind: "error" }
+  | { kind: "missing" };
+
+export function resolvePrefillArticleState({
+  prefillArticleId,
+  articles,
+  isLoading,
+  isError,
+}: {
+  prefillArticleId?: string;
+  articles: Article[];
+  isLoading: boolean;
+  isError: boolean;
+}): PrefillArticleState {
+  if (!prefillArticleId) return { kind: "none" };
+  const article = articles.find((item) => item.id === prefillArticleId);
+  if (article) return { kind: "ready", article };
+  if (isLoading) return { kind: "loading" };
+  if (isError) return { kind: "error" };
+  return { kind: "missing" };
+}
+
 /**
  * The inbox endpoint returns both read and unread rows. Reply selection is
  * intentionally limited to visible, completed deliveries. Keep repeated

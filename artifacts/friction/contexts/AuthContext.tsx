@@ -11,8 +11,9 @@ import {
   createAuthSessionCoordinator,
   createNativeAutoRefreshController,
   restoreNativeSession,
+  waitForActiveAppState,
 } from "@/lib/authSessionRecovery";
-import { setCurrentAuthSession } from "@/lib/authTokenStore";
+import { getCurrentAuthAccessToken, setCurrentAuthSession } from "@/lib/authTokenStore";
 import { runtimeConfig } from "@/lib/runtimeConfig";
 import {
   createAuthFlowId,
@@ -49,6 +50,7 @@ interface AuthContextValue {
   configurationError: string | null;
   apiReachability: ApiReachability;
   refreshAuthSession: () => Promise<Session | null>;
+  prepareAuthSession: () => Promise<Session | null>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: AuthFlowError | null }>;
   signUp: (email: string, password: string, nickname: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
@@ -60,6 +62,7 @@ const AuthContext = createContext<AuthContextValue>({
   configurationError: null,
   apiReachability: "checking",
   refreshAuthSession: async () => null,
+  prepareAuthSession: async () => null,
   signInWithPassword: async () => ({ error: null }),
   signUp: async () => ({
     error: null,
@@ -120,6 +123,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshSessionPromiseRef = useRef<Promise<Session | null> | null>(null);
   const authCoordinatorRef = useRef(createAuthSessionCoordinator<Session>());
   const currentSessionRef = useRef<Session | null>(null);
+  const restoreReadyRef = useRef<Promise<void>>(Promise.resolve());
+  const resolveRestoreReadyRef = useRef<(() => void) | null>(null);
 
   // Supabase fires onAuthStateChange synchronously as part of
   // supabase.auth.signUp() *before* our own signUp() function below gets a
@@ -146,10 +151,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(nextSession);
   }
 
-  const refreshAuthSession = useCallback(async (): Promise<Session | null> => {
-    if (Platform.OS !== "web" && AppState.currentState !== "active") {
-      return null;
+  const waitForAuthBoundary = useCallback(async (): Promise<void> => {
+    await restoreReadyRef.current;
+    if (Platform.OS !== "web") {
+      await waitForActiveAppState({
+        getCurrentState: () => AppState.currentState,
+        subscribe: (listener) => AppState.addEventListener("change", listener),
+      });
     }
+  }, []);
+
+  const refreshAuthSession = useCallback(async (): Promise<Session | null> => {
+    await waitForAuthBoundary();
 
     if (refreshSessionPromiseRef.current) {
       return refreshSessionPromiseRef.current;
@@ -186,18 +199,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshSessionPromiseRef.current = null;
       }
     }
-  }, []);
+  }, [waitForAuthBoundary]);
+
+  const prepareAuthSession = useCallback(async (): Promise<Session | null> => {
+    await waitForAuthBoundary();
+    if (getCurrentAuthAccessToken()) return currentSessionRef.current;
+    return refreshAuthSession();
+  }, [refreshAuthSession, waitForAuthBoundary]);
 
   useEffect(() => {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     setCurrentAuthSession(null);
+    restoreReadyRef.current = new Promise<void>((resolve) => {
+      resolveRestoreReadyRef.current = resolve;
+    });
 
     if (configurationError) {
       console.error("[auth] Invalid app configuration:", configurationError);
       reportAuthDiagnostic("config", "invalid-build", "RuntimeConfigError");
       initialRestoreCompleteRef.current = true;
       setIsLoading(false);
+      resolveRestoreReadyRef.current?.();
+      resolveRestoreReadyRef.current = null;
       return () => {
         mounted = false;
       };
@@ -321,6 +345,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted && !suppressAuthEventsRef.current) {
           setIsLoading(false);
         }
+        resolveRestoreReadyRef.current?.();
+        resolveRestoreReadyRef.current = null;
       }
     };
 
@@ -594,6 +620,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         configurationError,
         apiReachability,
         refreshAuthSession,
+        prepareAuthSession,
         signInWithPassword,
         signUp,
         signOut,

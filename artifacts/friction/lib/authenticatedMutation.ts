@@ -28,16 +28,34 @@ export class AuthSessionUnavailableError extends Error {
   }
 }
 
+export function createSubmissionLock() {
+  let locked = false;
+  return {
+    tryAcquire(): boolean {
+      if (locked) return false;
+      locked = true;
+      return true;
+    },
+    release(): void {
+      locked = false;
+    },
+    isLocked(): boolean {
+      return locked;
+    },
+  };
+}
+
 export async function runAuthenticatedMutation<T>({
-  hasUsableToken,
-  refreshSession,
+  prepareSession,
   mutate,
 }: {
-  hasUsableToken: () => boolean;
-  refreshSession: () => Promise<unknown | null>;
+  prepareSession: () => Promise<unknown | null>;
   mutate: () => Promise<T>;
 }): Promise<T> {
-  if (!hasUsableToken() && !(await refreshSession())) {
+  // Always cross the restore/foreground boundary, even when the in-memory
+  // token still appears valid. AppState may not yet reflect the foreground
+  // transition that allowed the user to press the button.
+  if (!(await prepareSession())) {
     throw new AuthSessionUnavailableError();
   }
 
@@ -45,18 +63,8 @@ export async function runAuthenticatedMutation<T>({
     return await mutate();
   } catch (error) {
     if (!isAuthenticationFailure(error)) throw error;
-  }
-
-  if (!(await refreshSession())) {
+    // customFetch owns the single 401 refresh + replay. A 401 reaching this
+    // layer is therefore permanent for this attempt; never issue it again.
     throw new AuthSessionUnavailableError();
-  }
-
-  try {
-    return await mutate();
-  } catch (error) {
-    if (isAuthenticationFailure(error)) {
-      throw new AuthSessionUnavailableError();
-    }
-    throw error;
   }
 }

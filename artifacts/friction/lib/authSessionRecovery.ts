@@ -406,3 +406,38 @@ export function createActiveSessionRestoreGate(
     },
   };
 }
+
+export interface AppStateSubscriptionLike {
+  remove: () => void;
+}
+
+/**
+ * Wait for a native app to become active without touching persisted auth
+ * storage. The AuthProvider's existing AppState owner performs restoration;
+ * callers only wait for that safe boundary before requesting a refresh.
+ */
+export function waitForActiveAppState({
+  getCurrentState,
+  subscribe,
+}: {
+  getCurrentState: () => string | null;
+  subscribe: (listener: (state: string) => void) => AppStateSubscriptionLike;
+}): Promise<void> {
+  if (getCurrentState() === "active") return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const subscription = subscribe((state) => {
+      if (state !== "active" || settled) return;
+      settled = true;
+      subscription.remove();
+      resolve();
+    });
+    // AppState can turn active between the initial read and subscription.
+    if (getCurrentState() === "active" && !settled) {
+      settled = true;
+      subscription.remove();
+      resolve();
+    }
+  });
+}

@@ -109,7 +109,7 @@ describe("ArticleListItem contract", () => {
     expect(sendInlineSource).toContain("<ArticleListItem");
     expect(sharedPickerListSource).toContain("<ArticleListItem");
     expect(sendInlineSource).toContain(
-      "getSendArticleAuthorName(selectedArticle)",
+      "getSendArticleAuthorName(displayedArticle)",
     );
     expect(pickerSource).toContain("getSendArticleAuthorName(article)");
     expect(pickerSource).not.toContain("content.substring");

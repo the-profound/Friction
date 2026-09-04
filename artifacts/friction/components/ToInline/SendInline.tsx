@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -40,12 +40,16 @@ import {
   filterReadReplyLetters,
   getSendArticleAuthorName,
   resolveInitialSendDefaults,
+  resolvePrefillArticleState,
 } from "@/lib/sendPickerPresentation";
 import { kstDateAt6, minOpeningSendDate } from "@/lib/kstDate";
-import { getCurrentAuthAccessToken } from "@/lib/authTokenStore";
-import { runAuthenticatedMutation } from "@/lib/authenticatedMutation";
+import {
+  createSubmissionLock,
+  runAuthenticatedMutation,
+} from "@/lib/authenticatedMutation";
 
 type SendMode = "person" | "reply" | "space";
+const sendSubmissionLock = createSubmissionLock();
 
 interface SendInlineProps {
   /** Kept for compatibility with older entry points. Collections are not send targets. */
@@ -92,7 +96,7 @@ export function SendInline({
   const navBottom = useNavBarBottomSafeArea();
   const queryClient = useQueryClient();
   const { userId } = useUser();
-  const { refreshAuthSession } = useAuth();
+  const { prepareAuthSession } = useAuth();
   const { showToast } = useToast();
 
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -111,6 +115,7 @@ export function SendInline({
   const [pendingIsEnvelope, setPendingIsEnvelope] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [retryEnvelope, setRetryEnvelope] = useState<boolean | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const initialDefaultsPendingRef = useRef(false);
 
@@ -124,6 +129,15 @@ export function SendInline({
     [inboxQuery.data],
   );
   const sendArticle = useSendArticle();
+  const prefillArticleState = resolvePrefillArticleState({
+    prefillArticleId,
+    articles,
+    isLoading: articlesQuery.isFetching,
+    isError: articlesQuery.isError,
+  });
+  const displayedArticle =
+    selectedArticle ??
+    (prefillArticleState.kind === "ready" ? prefillArticleState.article : null);
 
   // Preserve all existing entry points while applying their preselection once
   // their corresponding list has arrived.
@@ -212,25 +226,24 @@ export function SendInline({
 
   const handleSend = useCallback(
     async (isEnvelope = false) => {
-      if (!selectedArticle || !canSend || sendArticle.isPending) return;
+      if (!displayedArticle || !canSend || !sendSubmissionLock.tryAcquire()) return;
+      setIsSubmitting(true);
       setSendError(null);
 
-      const body: SendArticleBody = {
-        senderId: userId,
-        articleId: selectedArticle.id,
-        targetType: mode,
-        deliveryDate: calendarDateKey(deliveryDate),
-        ...(mode === "person"
-          ? { recipientId: selectedNeighbor!.neighborUserId, ...(isEnvelope ? { isEnvelope: true } : {}) }
-          : mode === "reply"
-            ? buildReplySendTarget(selectedReplyInbox!)
-            : { spaceId: selectedSpace!.id }),
-      };
-
       try {
+        const body: SendArticleBody = {
+          senderId: userId,
+          articleId: displayedArticle.id,
+          targetType: mode,
+          deliveryDate: calendarDateKey(deliveryDate),
+          ...(mode === "person"
+            ? { recipientId: selectedNeighbor!.neighborUserId, ...(isEnvelope ? { isEnvelope: true } : {}) }
+            : mode === "reply"
+              ? buildReplySendTarget(selectedReplyInbox!)
+              : { spaceId: selectedSpace!.id }),
+        };
         const result = await runAuthenticatedMutation<SendRecordWithDetails>({
-          hasUsableToken: () => Boolean(getCurrentAuthAccessToken()),
-          refreshSession: refreshAuthSession,
+          prepareSession: prepareAuthSession,
           mutate: () => sendArticle.mutateAsync({ data: body }),
         });
         setConfirmVisible(false);
@@ -258,6 +271,9 @@ export function SendInline({
         setConfirmVisible(false);
         setRetryEnvelope(isEnvelope);
         setSendError(getErrorMessage(error));
+      } finally {
+        sendSubmissionLock.release();
+        setIsSubmitting(false);
       }
     },
     [
@@ -266,12 +282,12 @@ export function SendInline({
       mode,
       onSent,
       queryClient,
-      refreshAuthSession,
+      prepareAuthSession,
+      displayedArticle,
       selectedArticle,
       selectedNeighbor,
       selectedReplyInbox,
       selectedSpace,
-      sendArticle,
       showToast,
       userId,
     ],
@@ -309,16 +325,44 @@ export function SendInline({
       >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>보낼 편지</Text>
-          {selectedArticle ? (
+          {displayedArticle ? (
             <ArticleListItem
-              articleId={selectedArticle.id}
-              title={selectedArticle.title || "제목 없음"}
-              authorName={getSendArticleAuthorName(selectedArticle)}
-              cover={selectedArticle.cover}
+              articleId={displayedArticle.id}
+              title={displayedArticle.title || "제목 없음"}
+              authorName={getSendArticleAuthorName(displayedArticle)}
+              cover={displayedArticle.cover}
               selected
               onPress={() => setLetterPickerVisible(true)}
-              accessibilityLabel={`${selectedArticle.title || "제목 없음"} 편지 변경`}
+              accessibilityLabel={`${displayedArticle.title || "제목 없음"} 편지 변경`}
             />
+          ) : prefillArticleState.kind === "loading" ? (
+            <View
+              style={styles.articleLoading}
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityLabel="선택한 편지를 불러오는 중"
+              accessibilityState={{ busy: true }}
+            >
+              <ActivityIndicator size="small" color={Colors.zinc500} />
+              <Text style={styles.placeholder}>선택한 편지를 불러오는 중...</Text>
+            </View>
+          ) : prefillArticleState.kind === "error" || prefillArticleState.kind === "missing" ? (
+            <View style={styles.articleLoadError} accessibilityLiveRegion="polite">
+              <Text style={styles.articleLoadErrorText}>
+                {prefillArticleState.kind === "error"
+                  ? "선택한 편지를 불러오지 못했어요."
+                  : "선택한 편지를 찾을 수 없어요."}
+              </Text>
+              <ScalePressable
+                style={styles.articleRetryOuter}
+                contentStyle={styles.articleRetry}
+                onPress={() => articlesQuery.refetch()}
+                accessibilityRole="button"
+                accessibilityLabel="선택한 편지 다시 불러오기"
+              >
+                <Text style={styles.retryText}>다시 불러오기</Text>
+              </ScalePressable>
+            </View>
           ) : (
             <ScalePressable
               style={styles.articlePlaceholderOuter}
@@ -422,7 +466,8 @@ export function SendInline({
               style={styles.retryButtonOuter}
               contentStyle={styles.retryButton}
               onPress={() => handleSend(retryEnvelope ?? false)}
-              disabled={sendArticle.isPending}
+               disabled={isSubmitting}
+               accessibilityState={{ disabled: isSubmitting, busy: isSubmitting }}
               accessibilityRole="button"
               accessibilityLabel="전송 다시 시도"
             >
@@ -440,8 +485,8 @@ export function SendInline({
           textStyle={styles.sendButtonText}
           disabledTextStyle={styles.sendButtonTextDisabled}
           onPress={openSendConfirmation}
-          pending={sendArticle.isPending}
-          disabled={!canSend}
+          pending={isSubmitting}
+          disabled={!canSend || prefillArticleState.kind === "loading"}
           label="보내기"
           pendingLabel="보내는 중..."
           renderIcon={({ disabled }) => (
@@ -522,8 +567,8 @@ export function SendInline({
         description={confirmDescription}
         confirmLabel="보내기"
         cancelLabel="취소"
-        confirmDisabled={sendArticle.isPending}
-        cancelDisabled={sendArticle.isPending}
+        confirmDisabled={isSubmitting}
+        cancelDisabled={isSubmitting}
         onConfirm={() => handleSend(pendingIsEnvelope)}
         onCancel={() => setConfirmVisible(false)}
       />
@@ -554,6 +599,41 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc50,
   },
   placeholder: { ...Typography.body, flex: 1, fontSize: 14, color: Colors.zinc500 },
+  articleLoading: {
+    height: 104,
+    marginHorizontal: Spacing.screenPx,
+    marginBottom: Spacing.cardGap,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: Colors.zinc50,
+  },
+  articleLoadError: {
+    minHeight: 104,
+    flexGrow: 0,
+    flexShrink: 0,
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: Colors.zinc50,
+  },
+  articleLoadErrorText: { ...Typography.body, fontSize: 14, color: Colors.zinc600 },
+  articleRetryOuter: { height: 40, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
+  articleRetry: {
+    height: 40,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: 9,
+    backgroundColor: Colors.noticeAccent,
+  },
   modeRow: { flexDirection: "row", gap: 8 },
   modeButtonOuter: { flex: 1, minHeight: 48 },
   modeButton: {

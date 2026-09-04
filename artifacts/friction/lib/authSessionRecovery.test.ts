@@ -7,6 +7,7 @@ import {
   createNativeStorageAccessGate,
   isAccessTokenUsable,
   restoreNativeSession,
+  waitForActiveAppState,
   type NativeAuthFacade,
   type SessionLike,
 } from "./authSessionRecovery";
@@ -202,6 +203,33 @@ describe("createActiveSessionRestoreGate", () => {
     await gate.setAppState("active");
     await gate.setAppState("active");
     expect(restore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("waitForActiveAppState", () => {
+  it("waits through background and resolves once on foreground", async () => {
+    let state = "background";
+    let listener: ((next: string) => void) | null = null;
+    const remove = vi.fn();
+    const waiting = waitForActiveAppState({
+      getCurrentState: () => state,
+      subscribe: (next) => {
+        listener = next;
+        return { remove };
+      },
+    });
+
+    let resolved = false;
+    void waiting.then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    state = "active";
+    listener?.("active");
+    await waiting;
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 });
 
