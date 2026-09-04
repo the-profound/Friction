@@ -5,22 +5,19 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Keyboard,
-  TextInput,
-  LayoutChangeEvent,
   BackHandler,
   Platform,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, ReaderTokens, Shadows } from "@/constants/tokens";
+import { Colors, Typography, Spacing, ReaderTokens } from "@/constants/tokens";
 import { bodyTypographyMetrics, computeBodyLayout } from "@/lib/bodyLayout";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
+import PreviewPager from "@/components/PreviewPager/PreviewPager";
 import CoverEditor from "@/components/CoverEditor/CoverEditor";
 import WebViewMarkdownReader from "@/components/WebViewMarkdownReader";
 import { resolveArticleCover, getDefaultCover } from "@/utils/articleCover";
@@ -33,7 +30,6 @@ import WritingStateBar, {
   type WritingStageAction,
 } from "@/components/WritingStateBar/WritingStateBar";
 import HeaderButton from "@/components/shared/HeaderButton";
-import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { trackArticlePublished } from "@/lib/analytics";
 import {
   useGetArticle,
@@ -44,6 +40,7 @@ import {
   TransitionArticleBodyTargetStatus,
   getGetArticleQueryKey,
   useGetSpace,
+  getGetSpaceQueryKey,
   SpaceLetterVisibility,
   useCreateSpaceLetter,
   CreateSpaceLetterBodyLetterType,
@@ -67,6 +64,7 @@ const WRITING_HEADER_HEIGHT = 68;
 export default function ClosingScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -117,7 +115,10 @@ export default function ClosingScreen() {
   const effectiveLetterType = letterType ?? recoveredSpaceContext?.letterType;
 
   const spaceQuery = useGetSpace(effectiveSpaceId ?? "", {
-    query: { enabled: !!effectiveSpaceId },
+    query: {
+      queryKey: getGetSpaceQueryKey(effectiveSpaceId ?? ""),
+      enabled: !!effectiveSpaceId,
+    },
   });
   const isAnonymous = spaceQuery.data?.isAnonymous ?? false;
 
@@ -150,9 +151,6 @@ export default function ClosingScreen() {
   const [cover, setCover] = useState<ArticleCover>(getDefaultCover());
   const [coverEditorVisible, setCoverEditorVisible] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [titleEditing, setTitleEditing] = useState(false);
-  const titleEditingRef = useRef(false);
-  titleEditingRef.current = titleEditing;
   const [isExporting, setIsExporting] = useState(false);
   const [isCoverUploading, setIsCoverUploading] = useState(false);
   const [visibility, setVisibility] = useState<SpaceLetterVisibility>(
@@ -164,15 +162,11 @@ export default function ClosingScreen() {
   const [shouldPreventRemoval, setShouldPreventRemoval] = useState(true);
   const pendingNavigationRef = useRef<(() => void) | null>(null);
   const navigationCommittedRef = useRef(false);
-  const [previewCardWidth, setPreviewCardWidth] = useState(0);
   const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0) ? article.layoutWidth : null;
   const exportedArticleIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coverSaveQueueRef = useRef<SerializedAsyncRunner>(
-    createSerializedAsyncRunner(),
-  );
-  const titleSaveQueueRef = useRef<SerializedAsyncRunner>(
     createSerializedAsyncRunner(),
   );
   // Step 3(E) — pages 변경 여부 추적: 분할 화면에서 이미 저장된 pages를 다시
@@ -499,20 +493,6 @@ export default function ClosingScreen() {
     [id, persistCover],
   );
 
-  const flushTitleSave = useCallback(async () => {
-    if (!id) return;
-    // Back navigation updates React state before this callback is invoked.
-    // Keep the synchronous editing boundary so the latest title is queued
-    // exactly once instead of being skipped.
-    if (!titleEditingRef.current) return;
-    titleEditingRef.current = false;
-    setTitleEditing(false);
-    await titleSaveQueueRef.current(async () => {
-      await updateArticle.mutateAsync({ id, data: { title } });
-      patchArticleInRecordCaches(queryClient, id, { title });
-    });
-  }, [id, queryClient, title, updateArticle]);
-
   const handleBack = useCallback(() => {
     if (coverUploadInProgressRef.current) {
       showToast({ message: "표지 사진 작업이 끝난 뒤 이동할 수 있어요.", type: "info" });
@@ -520,9 +500,6 @@ export default function ClosingScreen() {
     }
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
-    Keyboard.dismiss();
-    setTitleEditing(false);
-
     const coverToSave = pendingCoverRef.current ?? cover;
     if (id) {
       stageArticleTransitionSnapshot(queryClient, id, {
@@ -533,7 +510,7 @@ export default function ClosingScreen() {
 
     // The local article snapshot is the visible source of truth. The queued
     // title/cover writes continue after the route has changed.
-    void Promise.allSettled([flushTitleSave(), flushCoverSave()]).then((results) => {
+    void Promise.allSettled([flushCoverSave()]).then((results) => {
       if (results.some((result) => result.status === "rejected")) {
         showToast({ message: "최신 내용을 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
       }
@@ -544,7 +521,6 @@ export default function ClosingScreen() {
   }, [
     cover,
     flushCoverSave,
-    flushTitleSave,
     id,
     navigateAfterRemovingGuard,
     queryClient,
@@ -557,7 +533,6 @@ export default function ClosingScreen() {
     if (coverUploadInProgressRef.current) return;
     if (isActionInProgressRef.current) return;
     isActionInProgressRef.current = true;
-    Keyboard.dismiss();
     const result = canStepBack("CLOSING");
     if (!result.allowed) {
       isActionInProgressRef.current = false;
@@ -567,8 +542,6 @@ export default function ClosingScreen() {
       isActionInProgressRef.current = false;
       return;
     }
-    setTitleEditing(false);
-
     const coverToSave = pendingCoverRef.current ?? cover;
     stageArticleTransitionSnapshot(queryClient, id, {
       title,
@@ -578,7 +551,7 @@ export default function ClosingScreen() {
 
     // Navigate directly to the integrated writing/dividing screen. Save and
     // status transition are deliberately detached from the route change.
-    void Promise.allSettled([flushTitleSave(), flushCoverSave()]).then((results) => {
+    void Promise.allSettled([flushCoverSave()]).then((results) => {
       if (results.some((result) => result.status === "rejected")) {
         showToast({ message: "최신 내용을 모두 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
       }
@@ -612,7 +585,6 @@ export default function ClosingScreen() {
   }, [
     cover,
     flushCoverSave,
-    flushTitleSave,
     id,
     navigateAfterRemovingGuard,
     queryClient,
@@ -621,20 +593,6 @@ export default function ClosingScreen() {
     title,
     transitionStatus,
   ]);
-
-  const handleSaveTitle = useCallback(async () => {
-    titleEditingRef.current = false;
-    setTitleEditing(false);
-    if (!id) return;
-    try {
-      await titleSaveQueueRef.current(async () => {
-        await updateArticle.mutateAsync({ id, data: { title } });
-        patchArticleInRecordCaches(queryClient, id, { title });
-      });
-    } catch (e: unknown) {
-      console.warn("Failed to save title:", e instanceof Error ? e.message : e);
-    }
-  }, [id, queryClient, title, updateArticle]);
 
   const stageMenuBusy = isExporting || isCoverUploading;
   const stageMenuActions: WritingStageAction[] = [
@@ -692,32 +650,8 @@ export default function ClosingScreen() {
     : 0;
   const isCoverPage = hasCoverPage && clampedPreviewPage === 0;
   const contentPageIndex = hasCoverPage ? clampedPreviewPage - 1 : clampedPreviewPage;
-  const currentPage = isCoverPage ? null : (pages[contentPageIndex] ?? null);
   // 렌더마다 최신 복귀 페이지 인덱스를 ref에 반영한다.
   returnPageIdxRef.current = isCoverPage ? 0 : Math.max(0, contentPageIndex);
-
-  const handlePreviewCardLayout = useCallback((e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width;
-    setPreviewCardWidth((prev) => (prev === w ? prev : w));
-  }, []);
-
-
-  const totalVirtualPagesRef = useRef(totalVirtualPages);
-  totalVirtualPagesRef.current = totalVirtualPages;
-
-  const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-20, 20])
-    .failOffsetY([-15, 15])
-    .runOnJS(true)
-    .onEnd((e) => {
-      const total = totalVirtualPagesRef.current;
-      if (total < 1) return;
-      if (e.translationX < -40) {
-        setPreviewPage((p) => Math.min(total - 1, Math.max(0, p + 1)));
-      } else if (e.translationX > 40) {
-        setPreviewPage((p) => Math.max(0, Math.min(total - 1, p - 1)));
-      }
-    });
 
   if (!id || articleLoading) {
     return (
@@ -793,137 +727,36 @@ export default function ClosingScreen() {
         </View>
       </View>
 
-      <View style={styles.titleSection}>
-        {titleEditing ? (
-          <TextInput
-            style={styles.titleInput}
-            value={title}
-            onChangeText={setTitle}
-            onBlur={handleSaveTitle}
-            autoFocus
-            maxLength={100}
-            multiline
-            scrollEnabled={false}
-            textAlignVertical="top"
-          />
-        ) : (
-          <ScalePressable style={styles.titleRow} onPress={() => setTitleEditing(true)}
-          contentStyle={styles.titleRowContent}
-          >
-            <Text style={styles.titleText}>
-              {title || "제목 없음"}
-            </Text>
-            <Feather name="edit-2" size={14} color={Colors.zinc400} />
-          </ScalePressable>
-        )}
-      </View>
-
-      <View style={styles.visibilitySection}>
-        {isAnonymous ? (
-          // 익명 공간: 수신자 공개 고정 표시
-          <View style={styles.visibilityAnonymousRow}>
-            <View style={styles.visibilityAnonPill}>
-              <Feather name="users" size={13} color={Colors.zinc400} />
-              <Text style={styles.visibilityAnonPillText}>{"수신자 공개"}</Text>
-            </View>
-            <Text style={styles.visibilityAnonHint}>{"익명 공간은 수신자 공개로 고정돼요"}</Text>
-          </View>
-        ) : (
-          // 실명 공간 또는 공간 미지정: 전체 공개 / 수신자 공개 토글
-          <View style={styles.visibilityToggleRow}>
-            <ScalePressable
-              style={[
-                styles.visibilityToggleBtn,
-                visibility === SpaceLetterVisibility.PUBLIC && styles.visibilityToggleBtnActive,
-              ]}
-              contentStyle={[
-                styles.visibilityToggleBtnContent,
-                visibility === SpaceLetterVisibility.PUBLIC && styles.visibilityToggleBtnContentActive,
-              ]}
-              onPress={() => setVisibility(SpaceLetterVisibility.PUBLIC)}
-              accessibilityRole="radio"
-              accessibilityLabel="전체 공개"
-              accessibilityState={{ checked: visibility === SpaceLetterVisibility.PUBLIC }}
-            >
-              <Feather
-                name="globe"
-                size={13}
-                color={visibility === SpaceLetterVisibility.PUBLIC ? Colors.white : Colors.zinc600}
-              />
-              <Text
-                style={[
-                  styles.visibilityToggleBtnLabel,
-                  visibility === SpaceLetterVisibility.PUBLIC && styles.visibilityToggleBtnLabelActive,
-                ]}
-              >
-                {"전체 공개"}
-              </Text>
-            </ScalePressable>
-            <ScalePressable
-              style={[
-                styles.visibilityToggleBtn,
-                visibility === SpaceLetterVisibility.RECIPIENT_ONLY && styles.visibilityToggleBtnActive,
-              ]}
-              contentStyle={[
-                styles.visibilityToggleBtnContent,
-                visibility === SpaceLetterVisibility.RECIPIENT_ONLY && styles.visibilityToggleBtnContentActive,
-              ]}
-              onPress={() => setVisibility(SpaceLetterVisibility.RECIPIENT_ONLY)}
-              accessibilityRole="radio"
-              accessibilityLabel="수신자 공개"
-              accessibilityState={{ checked: visibility === SpaceLetterVisibility.RECIPIENT_ONLY }}
-            >
-              <Feather
-                name="users"
-                size={13}
-                color={visibility === SpaceLetterVisibility.RECIPIENT_ONLY ? Colors.white : Colors.zinc600}
-              />
-              <Text
-                style={[
-                  styles.visibilityToggleBtnLabel,
-                  visibility === SpaceLetterVisibility.RECIPIENT_ONLY && styles.visibilityToggleBtnLabelActive,
-                ]}
-              >
-                {"수신자 공개"}
-              </Text>
-            </ScalePressable>
-            <SpaceInfoNote
-              variant="popup"
-              text={"편지를 내보낸 이후에도 공개 상태를 변경할 수 있어요. 단, 익명 공간에 발신하면 수신자 공개로 고정돼요."}
-              accessibilityLabel="공개 설정 안내 보기"
-            />
-          </View>
-        )}
-      </View>
-
-      <GestureDetector gesture={swipeGesture}>
-        <View style={styles.previewArea}>
-          <View style={styles.previewInner}>
-            {totalVirtualPages === 0 ? (
+      <View style={styles.previewArea}>
+        <View style={styles.previewInner}>
+          {totalVirtualPages === 0 ? (
               <View style={styles.emptyContainer}>
                 <Feather name="eye" size={36} color={Colors.zinc300} />
                 <Text style={styles.emptyTitle}>미리보기할 내용이 없어요</Text>
               </View>
-            ) : isCoverPage ? (
-              <View style={styles.coverPreviewWrapper}>
-                <CoverPreview cover={cover} title={title} author={authorName} borderRadius={2} />
-              </View>
-            ) : (
-              <View style={styles.previewCardShadow}>
-              <View style={styles.previewCard} onLayout={handlePreviewCardLayout}>
-                {previewCardWidth > 0 && storedLayoutWidth !== null ? (
-                  // storedLayoutWidth를 알 때: 원래 분할 단계의 치수로 렌더링 후 scale 축소.
-                  // 4개 화면(작성/분할/마감/읽기)이 모두 lib/bodyLayout.ts의 computeBodyLayout을
-                  // 거쳐 같은 정수 픽셀 textColumnWidth를 자식 View의 width에 직접 사용한다 →
-                  // PretextMeasureLayer / read.tsx PageView와 픽셀 단위로 일치하는 줄넘김.
-                  (() => {
-                    const storedBody = computeBodyLayout(storedLayoutWidth);
-                    return (
-                      <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+          ) : (
+            <PreviewPager
+              pageCount={totalVirtualPages}
+              pageIndex={clampedPreviewPage}
+              onPageChange={setPreviewPage}
+              renderPage={(pageIndex, dimensions) => {
+                if (pageIndex === 0) {
+                  return (
+                    <View style={styles.coverPreviewWrapper}>
+                      <CoverPreview cover={cover} title={title} author={authorName} borderRadius={2} />
+                    </View>
+                  );
+                }
+                const markdown = pages[pageIndex - 1] ?? "";
+                if (storedLayoutWidth !== null) {
+                  const storedBody = computeBodyLayout(storedLayoutWidth);
+                  return (
+                    <View style={styles.previewCard}>
+                      <View style={styles.scaledBodyViewport}>
                         <View style={{
                           width: storedLayoutWidth,
                           height: storedLayoutWidth / ReaderTokens.aspectRatio,
-                          transform: [{ scale: Math.min(previewCardWidth / storedLayoutWidth, 1.0) }],
+                          transform: [{ scale: Math.min(dimensions.width / storedLayoutWidth, 1.0) }],
                           alignItems: "center",
                           justifyContent: "center",
                         }}>
@@ -936,21 +769,20 @@ export default function ClosingScreen() {
                           }}>
                             <View style={{ width: storedBody.textColumnWidth, flex: 1 }}>
                               <WebViewMarkdownReader
-                                markdown={currentPage!}
+                                markdown={markdown}
                                 typography={bodyTypographyMetrics(storedBody)}
                               />
                             </View>
                           </View>
                         </View>
                       </View>
-                    );
-                  })()
-                ) : previewCardWidth > 0 ? (
-                  // storedLayoutWidth 없는 폴백: previewCardWidth 자체를 컨테이너 폭으로 보고
-                  // 동일한 computeBodyLayout으로 텍스트 컬럼을 산출한다 (정수 textColumnWidth 사용).
-                  (() => {
-                    const fallbackBody = computeBodyLayout(previewCardWidth);
-                    return (
+                    </View>
+                  );
+                }
+                if (dimensions.width > 0) {
+                  const fallbackBody = computeBodyLayout(dimensions.width);
+                  return (
+                    <View style={styles.previewCard}>
                       <View style={{
                         width: fallbackBody.pageWidth,
                         flex: 1,
@@ -961,53 +793,26 @@ export default function ClosingScreen() {
                       }}>
                         <View style={{ width: fallbackBody.textColumnWidth, flex: 1 }}>
                           <WebViewMarkdownReader
-                            markdown={currentPage!}
+                            markdown={markdown}
                             typography={bodyTypographyMetrics(fallbackBody)}
                           />
                         </View>
                       </View>
-                    );
-                  })()
-                ) : null}
-              </View>
-              </View>
-            )}
-          </View>
+                    </View>
+                  );
+                }
+                return null;
+              }}
+            />
+          )}
         </View>
-      </GestureDetector>
+      </View>
 
       {totalVirtualPages > 1 && (
-        <View style={[styles.pageNav, { paddingBottom: insets.bottom + 16 }]}>
-          <ScalePressable
-            style={styles.pageNavButton}
-            onPress={() => setPreviewPage((p) => Math.max(0, p - 1))}
-            disabled={clampedPreviewPage === 0}
-          contentStyle={[styles.pageNavButtonContent, clampedPreviewPage === 0 && styles.pageNavButtonDisabled]}
-          >
-            <Feather
-              name="chevron-left"
-              size={20}
-              color={clampedPreviewPage === 0 ? Colors.zinc300 : Colors.zinc600}
-            />
-          </ScalePressable>
+        <View style={[styles.pageNav, { paddingBottom: bottomInset + 16 }]}>
           <Text style={styles.pageNavText}>
             {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}
           </Text>
-          <ScalePressable
-            style={styles.pageNavButton}
-            onPress={() => setPreviewPage((p) => Math.min(totalVirtualPages - 1, p + 1))}
-            disabled={clampedPreviewPage >= totalVirtualPages - 1}
-          contentStyle={[
-              styles.pageNavButtonContent,
-              clampedPreviewPage >= totalVirtualPages - 1 && styles.pageNavButtonDisabled,
-            ]}
-          >
-            <Feather
-              name="chevron-right"
-              size={20}
-              color={clampedPreviewPage >= totalVirtualPages - 1 ? Colors.zinc300 : Colors.zinc600}
-            />
-          </ScalePressable>
         </View>
       )}
 
@@ -1110,34 +915,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
   },
-  titleSection: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  titleRow: {
-  },
-  titleRowContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,},
-  titleText: {
-    ...Typography.bodySemiBold,
-    fontSize: 18,
-    lineHeight: 24,
-    color: Colors.zinc900,
-    flex: 1,
-  },
-  titleInput: {
-    ...Typography.bodySemiBold,
-    fontSize: 18,
-    lineHeight: 24,
-    color: Colors.zinc900,
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc300,
-  },
   previewArea: {
     flex: 1,
     overflow: "hidden",
@@ -1153,23 +930,22 @@ const styles = StyleSheet.create({
   coverPreviewWrapper: {
     borderRadius: 2,
     width: "100%",
-    aspectRatio: 5 / 8,
-    maxHeight: 480,
-    alignSelf: "center",
-    ...Shadows.previewPage,
-  },
-  previewCardShadow: {
-    borderRadius: 2,
-    width: "100%",
-    aspectRatio: 5 / 8,
-    maxHeight: 480,
-    alignSelf: "center",
-    ...Shadows.previewPage,
+    height: "100%",
   },
   previewCard: {
     borderRadius: 2,
     flex: 1,
     backgroundColor: ReaderTokens.bodyBg,
+    overflow: "hidden",
+  },
+  scaledBodyViewport: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
   },
   emptyContainer: {
@@ -1190,106 +966,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingTop: 12,
-    gap: 20,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.zinc100,
-  },
-  pageNavButton: {
-    width: 40,
-    height: 40,
-  },
-  pageNavButtonContent: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.zinc50,
-    alignItems: "center",
-    justifyContent: "center",},
-  pageNavButtonDisabled: {
-    opacity: 0.5,
   },
   pageNavText: {
     ...Typography.bodySemiBold,
     fontSize: 14,
     color: Colors.zinc600,
-  },
-  // ── 공개 설정 섹션 ──────────────────────────────────────
-  visibilitySection: {
-    paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  visibilityToggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  // 토글 버튼 — 비활성 상태 (테두리만, overflow:hidden 없음)
-  visibilityToggleBtn: {
-    height: 34,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-  },
-  visibilityToggleBtnContent: {
-    height: 34,
-    flexGrow: 0,
-    flexShrink: 0,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-  },
-  // 토글 버튼 — 활성 상태
-  visibilityToggleBtnActive: {
-    borderColor: Colors.zinc900,
-    backgroundColor: Colors.zinc900,
-  },
-  visibilityToggleBtnContentActive: {
-    backgroundColor: Colors.zinc900,
-  },
-  visibilityToggleBtnLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc600,
-  },
-  visibilityToggleBtnLabelActive: {
-    color: Colors.white,
-  },
-  // 익명 공간 — 잠금 표시
-  visibilityAnonymousRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  visibilityAnonPill: {
-    height: 34,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.zinc200,
-    backgroundColor: Colors.zinc50,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  visibilityAnonPillText: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc400, // typography-ok: disabled anonymous-space status
-  },
-  visibilityAnonHint: {
-    ...Typography.body,
-    fontSize: 12,
-    color: Colors.zinc400, // typography-ok: disabled anonymous-space hint
-    flex: 1,
   },
 });

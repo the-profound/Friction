@@ -30,8 +30,7 @@ describe("non-blocking editor transitions", () => {
       screen.indexOf("const hasCoverPage"),
     );
 
-    expect(backHandler).toContain("Promise.allSettled([flushTitleSave(), flushCoverSave()])");
-    expect(backHandler).not.toContain("await flushTitleSave()");
+    expect(backHandler).toContain("Promise.allSettled([flushCoverSave()])");
     expect(backHandler).not.toContain("await flushCoverSave()");
     expect(backHandler).toContain('navigateAfterRemovingGuard(() => router.replace("/(tabs)/on"))');
     expect(removalGuard).toContain(
@@ -54,7 +53,7 @@ describe("non-blocking editor transitions", () => {
     expect(stepBackHandler).toContain('mode: "dividing"');
     expect(stepBackHandler).not.toContain('pathname: "/on-01b"');
     expect(stepBackHandler).toContain("status: \"DIVIDING\"");
-    expect(stepBackHandler).toContain("Promise.allSettled([flushTitleSave(), flushCoverSave()])");
+    expect(stepBackHandler).toContain("Promise.allSettled([flushCoverSave()])");
     expect(stepBackHandler.indexOf("stageArticleTransitionSnapshot(")).toBeLessThan(
       stepBackHandler.indexOf("navigateAfterRemovingGuard("),
     );

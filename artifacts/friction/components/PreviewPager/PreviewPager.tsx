@@ -14,6 +14,7 @@ import { ReaderTokens, Shadows } from "@/constants/tokens";
 import {
   PREVIEW_PAGER_HORIZONTAL_ACTIVATION,
   PREVIEW_PAGER_VERTICAL_FAILURE,
+  getPreviewPagerTurn,
 } from "./gesturePolicy";
 
 type PagerSlotRole = "prev" | "current" | "next";
@@ -178,9 +179,14 @@ export default function PreviewPager({
           return;
         }
 
-        const shouldCommit =
-          Math.abs(dx) > width * 0.22 || Math.abs(event.velocityX) > 450;
-        if (!shouldCommit) {
+        const destinationPage = getPreviewPagerTurn({
+          pageIndex: current,
+          pageCount: total,
+          width,
+          translationX: dx,
+          velocityX: event.velocityX,
+        });
+        if (destinationPage === current) {
           snapBack();
           return;
         }
