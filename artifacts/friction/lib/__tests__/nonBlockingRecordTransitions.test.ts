@@ -6,6 +6,36 @@ const appRoot = join(__dirname, "../..");
 const readScreen = (path: string) => readFileSync(join(appRoot, path), "utf8");
 
 describe("non-blocking editor transitions", () => {
+  it("disables stack motion for every writing-stage route", () => {
+    const layout = readScreen("app/_layout.tsx");
+
+    expect(layout).toContain(
+      'name="on-01a"\n            options={{ animation: "none", animationTypeForReplace: "pop" }}',
+    );
+    expect(layout).toContain(
+      'name="on-01b"\n            options={{ animation: "none", animationTypeForReplace: "pop" }}',
+    );
+    expect(layout).toContain(
+      '<Stack.Screen name="on-01c" options={{ animation: "none" }} />',
+    );
+  });
+
+  it("uses transition locks without showing a stage-change spinner", () => {
+    const screen = readScreen("app/on-01a.tsx");
+    const stageMenu = screen.slice(
+      screen.indexOf("const stageMenuDisabled"),
+      screen.indexOf("useEffect(() =>", screen.indexOf("const stageMenuDisabled")),
+    );
+
+    expect(stageMenu).toContain(
+      'const stageMenuBusy = splitting || spellState.status === "loading";',
+    );
+    expect(stageMenu).toContain("disabled: isNavigating");
+    expect(stageMenu).not.toContain("busy: isNavigating");
+    expect(screen).toContain("disabled={stageMenuDisabled}");
+    expect(screen).toContain("busy={stageMenuBusy}");
+  });
+
   it("exposes the closing actions from the shared stage menu", () => {
     const screen = readScreen("app/on-01c.tsx");
 
@@ -54,8 +84,83 @@ describe("non-blocking editor transitions", () => {
     expect(stepBackHandler).not.toContain('pathname: "/on-01b"');
     expect(stepBackHandler).toContain("status: \"DIVIDING\"");
     expect(stepBackHandler).toContain("Promise.allSettled([flushCoverSave()])");
+    expect(stepBackHandler).toContain("const completeStepBackTransition = () =>");
+    expect(stepBackHandler).toContain("onPress: completeStepBackTransition");
     expect(stepBackHandler.indexOf("stageArticleTransitionSnapshot(")).toBeLessThan(
       stepBackHandler.indexOf("navigateAfterRemovingGuard("),
+    );
+  });
+
+  it("shows review before the thought promotion request settles", () => {
+    const screen = readScreen("app/on-01a.tsx");
+    const promoteHandler = screen.slice(
+      screen.indexOf("const enterDividingMode"),
+      screen.indexOf("// ── 검토(article)"),
+    );
+
+    expect(promoteHandler.indexOf('setModeBoth("dividing")')).toBeLessThan(
+      promoteHandler.indexOf("promoteThought.mutateAsync"),
+    );
+    expect(promoteHandler).toContain('setModeBoth("draft")');
+    expect(promoteHandler).toContain('label: "다시 시도"');
+    expect(promoteHandler).toContain("retryPromotionRef.current?.()");
+    expect(promoteHandler).toContain("setInlineMenuMode(null)");
+    expect(promoteHandler).toContain("addMenuPendingRef.current = false");
+    expect(screen).toContain("editable={!isNavigating}");
+    expect(screen).toContain("isDividing && !!dividingArticle && !isNavigating");
+    expect(screen).toContain('!isNavigating && Platform.OS !== "web"');
+    expect(screen).toContain('!isNavigating && inlineMenuMode === "addMenu"');
+  });
+
+  it("rejects programmatic editor commands during an identity handoff", () => {
+    const screen = readScreen("app/on-01a.tsx");
+    const commands = screen.slice(
+      screen.indexOf("const handleInsertDivider"),
+      screen.indexOf("// ── 분할 조작"),
+    );
+
+    expect(commands.match(/if \(isNavigatingRef\.current\) return;/g)).toHaveLength(7);
+    expect(screen).toContain(
+      "if (isNavigatingRef.current) return;\n              editorRef.current?.setBlockType(blockType);",
+    );
+    expect(promoteHandler).toContain("setInlineMenuMode(null)");
+    expect(promoteHandler).toContain("addMenuPendingRef.current = false");
+    expect(screen).toContain(
+      "!isNavigating && Platform.OS !== \"web\"",
+    );
+    expect(screen).toContain(
+      "!isNavigating && inlineMenuMode === \"addMenu\"",
+    );
+    expect(screen).toContain(
+      "!isNavigating && inlineMenuMode !== null && inlineMenuMode !== \"addMenu\"",
+    );
+  });
+
+  it("rejects programmatic editor commands during an identity handoff", () => {
+    const screen = readScreen("app/on-01a.tsx");
+    const commands = screen.slice(
+      screen.indexOf("const handleInsertDivider"),
+      screen.indexOf("// ── 분할 조작"),
+    );
+
+    expect(commands.match(/if \(isNavigatingRef\.current\) return;/g)).toHaveLength(7);
+    expect(screen).toContain(
+      "if (isNavigatingRef.current) return;\n              editorRef.current?.setBlockType(blockType);",
+    );
+  });
+
+  it("renders staged destination data instead of a transition loading fallback", () => {
+    const writing = readScreen("app/on-01a.tsx");
+    const closing = readScreen("app/on-01c.tsx");
+
+    expect(writing).toContain(
+      'const article = getProtectedArticleDetailSnapshot(queryClient, id ?? "", articleQuery.data);',
+    );
+    expect(closing).toContain(
+      "getProtectedArticleDetailSnapshot(queryClient, id, articleQuery.data)",
+    );
+    expect(closing).toContain(
+      "const articleLoading = id ? articleQuery.isLoading && !article : false;",
     );
   });
 

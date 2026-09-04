@@ -355,6 +355,7 @@ export default function WritingScreen() {
     requestId: string;
   } | null>(null);
   const pendingPromotionSnapshotRef = useRef<PendingStageTransition | null>(null);
+  const retryPromotionRef = useRef<(() => void) | null>(null);
   // Native Stack requires usePreventRemove instead of a bare beforeRemove
   // listener for reliable interactive iOS swipe cancellation. One session owns
   // either the exact intercepted action or one explicit app navigation.
@@ -1422,6 +1423,8 @@ export default function WritingScreen() {
 
     editorRef.current?.blur();
     Keyboard.dismiss();
+    setInlineMenuMode(null);
+    addMenuPendingRef.current = false;
 
     // 검토 단계 진입 전: 이미지를 단독 페이지(블록)로 자동 분할한다.
     const splitResult = await editorRef.current?.autoSplitImages();
@@ -1537,6 +1540,21 @@ export default function WritingScreen() {
       pendingPromotionSnapshotRef.current = transitionSnapshot;
     }
 
+    // The recovery snapshot is durable now, so show the review surface before
+    // waiting for the atomic promotion response. Keep the editor read-only
+    // during this short identity handoff: autosave is still bound to the
+    // thought id until the server returns the article id.
+    titleRef.current = transitionSnapshot.title;
+    setTitle(transitionSnapshot.title);
+    contentRef.current = transitionSnapshot.content;
+    articleContentRef.current = transitionSnapshot.content;
+    setContent(transitionSnapshot.content);
+    setDebouncedContent(transitionSnapshot.content);
+    serverInjectionPendingRef.current = true;
+    editorRef.current?.setTitle(transitionSnapshot.title);
+    editorRef.current?.setMarkdown(transitionSnapshot.content);
+    setModeBoth("dividing");
+
     // The server validates and commits the title/body snapshot atomically.
     let promoted: Article;
     try {
@@ -1551,11 +1569,29 @@ export default function WritingScreen() {
       });
     } catch (e) {
       abortAutosaveTransition();
+      // The server still owns a thought, so restore the exact pre-transition
+      // editor shape. The toast action retries through the same idempotent
+      // request snapshot.
+      titleRef.current = "";
+      setTitle("");
+      contentRef.current = cur;
+      articleContentRef.current = "";
+      setContent(cur);
+      setDebouncedContent(cur);
+      serverInjectionPendingRef.current = true;
+      editorRef.current?.setTitle("");
+      editorRef.current?.setMarkdown(cur);
+      setModeBoth("draft");
       isNavigatingRef.current = false;
       setIsNavigating(false);
       showToast({
         message: e instanceof Error ? e.message : "검토 단계로 옮기지 못했어요. 단상은 저장되어 있습니다.",
         type: "error",
+        duration: 7000,
+        action: {
+          label: "다시 시도",
+          onPress: () => retryPromotionRef.current?.(),
+        },
       });
       return;
     }
@@ -1629,6 +1665,9 @@ export default function WritingScreen() {
       });
     }, { resumeGuardAfterRouteChange: true });
   }, [abortAutosaveTransition, commitAutosaveTransition, flush, getEditorContent, markDirty, prepareAutosaveTransition, promoteThought, queryClient, releaseDirectThoughtDraft, reportAutosaveFailure, router, setModeBoth, showToast, spaceId, spaceRoundId, thought, letterType, navigateAfterRemovingGuard]);
+  retryPromotionRef.current = () => {
+    void enterDividingMode();
+  };
 
   // ── 검토(article) → 단상(thought) 역승격 ──────────────────────────────────
   const returnToThoughtMode = useCallback(async () => {
@@ -2250,10 +2289,12 @@ export default function WritingScreen() {
   }, [flushLatestEditorSnapshot]);
 
   const handleInsertDivider = useCallback(() => {
+    if (isNavigatingRef.current) return;
     editorRef.current?.insertDivider();
   }, []);
 
   const handleShiftEnter = useCallback(() => {
+    if (isNavigatingRef.current) return;
     editorRef.current?.insertHardBreak();
   }, []);
 
@@ -2263,6 +2304,7 @@ export default function WritingScreen() {
 
   // "본문" 버튼 — 블록 타입 인라인 패널 토글 (read.tsx와 동일 동작)
   const handleToolbarFormat = useCallback(() => {
+    if (isNavigatingRef.current) return;
     if (inlineMenuMode === "blockType") {
       closePanelRestoreKeyboard();
       return;
@@ -2274,6 +2316,7 @@ export default function WritingScreen() {
 
   // [+] 버튼 — floating 팝업 토글 (read.tsx와 동일 동작)
   const handleOpenAddMenu = useCallback(() => {
+    if (isNavigatingRef.current) return;
     if (inlineMenuMode === "addMenu") {
       setInlineMenuMode(null);
       return;
@@ -2290,17 +2333,20 @@ export default function WritingScreen() {
   }, [inlineMenuMode, closePanelRestoreKeyboard]);
 
   const handleSelectQuoteFromAddMenu = useCallback(() => {
+    if (isNavigatingRef.current) return;
     editorRef.current?.blur();
     Keyboard.dismiss();
     setInlineMenuMode("quotePicker");
   }, []);
 
   const handleSelectQuoteSentence = useCallback((sentence: StoredSentence) => {
+    if (isNavigatingRef.current) return;
     editorRef.current?.insertQuote(sentence.text);
     closePanelRestoreKeyboard();
   }, [closePanelRestoreKeyboard]);
 
   const handleOnFormat = useCallback((type: FormatType) => {
+    if (isNavigatingRef.current) return;
     if (type === "bold" || type === "italic" || type === "underline") {
       editorRef.current?.toggleMark(type);
     } else if (type === "quote") {
@@ -2564,15 +2610,19 @@ export default function WritingScreen() {
     spellAppliedCountRef.current = {};
   }, []);
 
-  const stageMenuBusy =
+  const stageMenuDisabled =
     isNavigating || splitting || spellState.status === "loading";
+  // Stage transitions keep their synchronous duplicate-input lock, but route
+  // changes must not turn the stage label into a network progress spinner.
+  // Only work that intentionally stays on this screen (split/spellcheck) is
+  // represented as busy.
+  const stageMenuBusy = splitting || spellState.status === "loading";
   const stageMenuActions: WritingStageAction[] = mode === "dividing"
     ? [
         {
           label: "단상 단계로",
           onPress: () => void returnToThoughtMode(),
           disabled: isNavigating,
-          busy: isNavigating,
         },
         {
           label: "자동 분할",
@@ -2590,7 +2640,6 @@ export default function WritingScreen() {
           label: "마감 단계로",
           onPress: () => void handleNextToClosing(),
           disabled: isNavigating || splitting || spellCheckInFlightRef.current,
-          busy: isNavigating,
         },
       ]
     : [
@@ -2598,7 +2647,6 @@ export default function WritingScreen() {
           label: "검토 단계로",
           onPress: () => void enterDividingMode(),
           disabled: isNavigating,
-          busy: isNavigating,
         },
       ];
 
@@ -2710,7 +2758,7 @@ export default function WritingScreen() {
             <WritingStateBar
               current={isDividing ? "DIVIDING" : "DRAFT"}
               actions={stageMenuActions}
-              disabled={stageMenuBusy}
+              disabled={stageMenuDisabled}
               busy={stageMenuBusy}
             />
           </View>
@@ -2734,7 +2782,7 @@ export default function WritingScreen() {
                 titleValue={title}
                 placeholder="떠오르는 생각을 자유롭게 적어보세요..."
                 ensureTrailingParagraph={!isLocalDirectDraft}
-                editable
+                editable={!isNavigating}
                 onReload={handleEditorReload}
                 onReady={handleEditorReady}
                 onChange={handleEditorChange}
@@ -2753,7 +2801,11 @@ export default function WritingScreen() {
                         : "⤷ 이 편지를 답장으로 설정 ⚙️")
                     : ""
                 }
-                onSourceArticleSlotTap={isDividing ? () => setPickerVisible(true) : undefined}
+                onSourceArticleSlotTap={
+                  isDividing && !!dividingArticle && !isNavigating
+                    ? () => setPickerVisible(true)
+                    : undefined
+                }
               />
             </View>
           </View>
@@ -2769,7 +2821,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── 서식 툴바 — 키보드/인라인 패널 위 floating (read.tsx와 동일) ── */}
-        {Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
+        {!isNavigating && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
           (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
           <View
             style={[
@@ -2800,7 +2852,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── [+] 팝업 메뉴 (addMenu) ── */}
-        {inlineMenuMode === "addMenu" && (
+        {!isNavigating && inlineMenuMode === "addMenu" && (
           <AddMenuPopup
             keyboardHeight={keyboardHeight}
             plusBtnCenterX={plusBtnCenterX}
@@ -2810,13 +2862,14 @@ export default function WritingScreen() {
         )}
 
         {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ── */}
-        {inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
+        {!isNavigating && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
           <InlineMenuPanel
             mode={inlineMenuMode}
             panelHeight={inlinePanelHeight}
             activeBlock={selectionState.activeBlock}
             userId={userId ?? ""}
             onSelectBlock={(blockType) => {
+              if (isNavigatingRef.current) return;
               editorRef.current?.setBlockType(blockType);
               closePanelRestoreKeyboard();
             }}

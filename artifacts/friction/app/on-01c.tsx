@@ -551,25 +551,36 @@ export default function ClosingScreen() {
 
     // Navigate directly to the integrated writing/dividing screen. Save and
     // status transition are deliberately detached from the route change.
-    void Promise.allSettled([flushCoverSave()]).then((results) => {
-      if (results.some((result) => result.status === "rejected")) {
-        showToast({ message: "최신 내용을 모두 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
-      }
-      return transitionStatus.mutateAsync({
-        id,
-        data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
-      });
-    }).then(
-      () => {
-        void invalidateArticleLists(queryClient);
-      },
-      () => {
-        // Keep the optimistic detail snapshot visible so the destination
-        // screen is not replaced by a stale CLOSING response.
-        showToast({ message: "분할 단계로 전환하지 못했어요. 다시 시도해주세요.", type: "error" });
-        void invalidateArticleLists(queryClient);
-      },
-    );
+    const completeStepBackTransition = () => {
+      void Promise.allSettled([flushCoverSave()]).then((results) => {
+        if (results.some((result) => result.status === "rejected")) {
+          showToast({ message: "최신 내용을 모두 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
+        }
+        return transitionStatus.mutateAsync({
+          id,
+          data: { targetStatus: TransitionArticleBodyTargetStatus.DIVIDING },
+        });
+      }).then(
+        () => {
+          void invalidateArticleLists(queryClient);
+        },
+        () => {
+          // Keep the optimistic detail snapshot visible so the destination
+          // screen is not replaced by a stale CLOSING response.
+          showToast({
+            message: "분할 단계로 전환하지 못했어요. 다시 시도해주세요.",
+            type: "error",
+            duration: 7000,
+            action: {
+              label: "다시 시도",
+              onPress: completeStepBackTransition,
+            },
+          });
+          void invalidateArticleLists(queryClient);
+        },
+      );
+    };
+    completeStepBackTransition();
 
     const returnPageIdx = returnPageIdxRef.current;
     const returnBlockIdx = returnBlockIdxRef.current;

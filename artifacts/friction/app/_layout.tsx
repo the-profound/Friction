@@ -165,9 +165,15 @@ function ProtectedRouteStack({ userId }: { userId: string }) {
           <Stack.Screen name="of-space-start" />
           <Stack.Screen name="of-space-schedule-send" />
           <Stack.Screen name="of-space-archive" />
-          <Stack.Screen name="on-01a" options={{ animationTypeForReplace: "pop" }} />
-          <Stack.Screen name="on-01b" options={{ animationTypeForReplace: "pop" }} />
-          <Stack.Screen name="on-01c" />
+          <Stack.Screen
+            name="on-01a"
+            options={{ animation: "none", animationTypeForReplace: "pop" }}
+          />
+          <Stack.Screen
+            name="on-01b"
+            options={{ animation: "none", animationTypeForReplace: "pop" }}
+          />
+          <Stack.Screen name="on-01c" options={{ animation: "none" }} />
           <Stack.Screen name="to-03" />
           <Stack.Screen name="to-send" options={{ presentation: "card", animation: "slide_from_right" }} />
           <Stack.Screen name="mypage" />
