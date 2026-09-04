@@ -543,7 +543,8 @@ export function useGetUser<
 }
 
 /**
- * @summary Delete user
+ * Deletes the caller's application data and Supabase authentication identity in one transaction. Repeating the operation is safe; after completion, a later request may receive 401 because the authentication identity no longer exists.
+ * @summary Permanently delete the authenticated user's account and data
  */
 export const getDeleteUserUrl = (id: string) => {
   return `/api/users/${id}`;
@@ -604,7 +605,7 @@ export type DeleteUserMutationResult = NonNullable<
 export type DeleteUserMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Delete user
+ * @summary Permanently delete the authenticated user's account and data
  */
 export const useDeleteUser = <
   TError = ErrorType<ErrorResponse>,

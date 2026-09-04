@@ -65,7 +65,8 @@ export const GetUserResponse = zod.object({
 });
 
 /**
- * @summary Delete user
+ * Deletes the caller's application data and Supabase authentication identity in one transaction. Repeating the operation is safe; after completion, a later request may receive 401 because the authentication identity no longer exists.
+ * @summary Permanently delete the authenticated user's account and data
  */
 export const DeleteUserParams = zod.object({
   id: zod.coerce.string().uuid(),
@@ -2743,6 +2744,7 @@ export const StartSpaceParams = zod.object({
 export const startSpaceBodyPlannedStartsAtRegExp = new RegExp(
   "^\\d{4}-\\d{2}-\\d{2}$",
 );
+
 export const startSpaceBodyWeekdaysItemMin = 0;
 export const startSpaceBodyWeekdaysItemMax = 6;
 

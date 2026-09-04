@@ -4,6 +4,7 @@ import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useState, useRef } from "react";
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +22,11 @@ import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGetUser, useDeleteUser } from "@workspace/api-client-react";
+import {
+  AuthSessionUnavailableError,
+  createSubmissionLock,
+  runAuthenticatedMutation,
+} from "@/lib/authenticatedMutation";
 
 const PRIVACY_URL = "https://friction.app/privacy";
 const FEEDBACK_URL = "https://open.kakao.com/o/g8fT9bsi";
@@ -37,13 +43,16 @@ export default function MyPageScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { userId } = useUser();
-  const { signOut } = useAuth();
+  const { prepareAuthSession, signOut } = useAuth();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const logoutInflightRef = useRef(false);
+  const deleteSubmissionLockRef = useRef(createSubmissionLock());
+  const deleteRequestDispatchedRef = useRef(false);
 
   const {
     data: user,
@@ -68,16 +77,49 @@ export default function MyPageScreen() {
   }
 
   async function handleDeleteConfirm() {
+    // State updates are asynchronous; this lock closes the gap before the
+    // disabled confirm button is rendered after a fast double tap.
+    if (!deleteSubmissionLockRef.current.tryAcquire()) return;
+
     setIsDeleting(true);
+    setDeleteError(null);
     try {
-      await deleteUserMutation.mutateAsync({ id: userId });
-      await signOut();
+      await runAuthenticatedMutation({
+        prepareSession: prepareAuthSession,
+        mutate: () => {
+          deleteRequestDispatchedRef.current = true;
+          return deleteUserMutation.mutateAsync({ id: userId });
+        },
+      });
+      // The server has already removed the Supabase auth identity. signOut
+      // clears local state first, but its remote logout can therefore reject.
+      // That must not turn a completed account deletion into a retry prompt.
+      await signOut().catch(() => undefined);
       queryClient.clear();
       setDeleteModalVisible(false);
-    } catch {
-      showToast({ message: "탈퇴 처리에 실패했습니다. 다시 시도해주세요.", type: "error" });
-      setDeleteModalVisible(false);
+      router.replace("/login" as never);
+    } catch (error) {
+      if (
+        error instanceof AuthSessionUnavailableError &&
+        deleteRequestDispatchedRef.current
+      ) {
+        // A previous request may have committed and lost its response. Once
+        // the deleted auth identity can no longer authenticate, converge the
+        // local app to logged-out state instead of offering an impossible
+        // retry. This does not claim whether the ambiguous request committed.
+        await signOut().catch(() => undefined);
+        queryClient.clear();
+        setDeleteModalVisible(false);
+        router.replace("/login" as never);
+        return;
+      }
+      setDeleteError(
+        error instanceof AuthSessionUnavailableError
+          ? "로그인 상태를 확인할 수 없어요. 잠시 후 탈퇴하기를 다시 시도해주세요."
+          : "탈퇴 처리에 실패했습니다. 인터넷 연결을 확인한 뒤 탈퇴하기를 다시 눌러주세요.",
+      );
     } finally {
+      deleteSubmissionLockRef.current.release();
       setIsDeleting(false);
     }
   }
@@ -89,7 +131,7 @@ export default function MyPageScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
       <View style={styles.header}>
         <HeaderButton
           variant="back"
@@ -102,7 +144,10 @@ export default function MyPageScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (Platform.OS === "web" ? 34 : insets.bottom) + 32 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <Section title="활동">
@@ -180,13 +225,22 @@ export default function MyPageScreen() {
         description={
           isDeleting
             ? "탈퇴 처리 중입니다..."
-            : "탈퇴하면 모든 데이터가 삭제되며 복구할 수 없습니다."
+            : deleteError ?? "탈퇴하면 모든 데이터가 삭제되며 복구할 수 없습니다."
         }
         confirmLabel={isDeleting ? "처리 중..." : "탈퇴하기"}
         cancelLabel="취소"
         destructive
-        onConfirm={isDeleting ? () => {} : handleDeleteConfirm}
-        onCancel={isDeleting ? () => {} : () => setDeleteModalVisible(false)}
+        confirmDisabled={isDeleting}
+        cancelDisabled={isDeleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          setDeleteError(null);
+          setDeleteModalVisible(false);
+        }}
+        onBackdropPress={() => {
+          setDeleteError(null);
+          setDeleteModalVisible(false);
+        }}
       />
 
     </View>

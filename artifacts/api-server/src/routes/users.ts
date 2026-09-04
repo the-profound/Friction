@@ -11,9 +11,15 @@ const router: IRouter = Router();
 
 type UserSyncDatabase = Pick<typeof db, "transaction">;
 type UserSyncLogger = Pick<typeof logger, "info" | "warn" | "error">;
+type UserDeletionDatabase = Pick<typeof db, "transaction">;
 
 interface UserSyncDependencies {
   database?: UserSyncDatabase;
+  log?: UserSyncLogger;
+}
+
+interface UserDeletionDependencies {
+  database?: UserDeletionDatabase;
   log?: UserSyncLogger;
 }
 
@@ -275,14 +281,97 @@ router.patch("/users/:id", async (req, res) => {
   res.json(user);
 });
 
-router.delete("/users/:id", async (req, res) => {
-  const [deleted] = await db.delete(usersTable).where(eq(usersTable.id, req.params.id)).returning();
-  if (!deleted) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
-  res.status(204).send();
-});
+/**
+ * Erases a user and every row which can keep a foreign-key reference to that
+ * user.  Keep this as explicit SQL rather than relying on the mixed historic
+ * FK cascade policies: it is both auditable and works for databases created
+ * before individual cascade migrations existed.
+ *
+ * auth.users is deliberately part of this transaction.  There is no
+ * service-role credential in this service, and doing it here means a failed
+ * auth deletion rolls back the application-data deletion as well.
+ */
+export async function eraseUserInTransaction(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
+  const statements = [
+    // Records referring to inboxes/sends must go before either parent.
+    sql`DELETE FROM send_records WHERE sender_id = ${userId} OR recipient_id = ${userId} OR article_id IN (SELECT id FROM articles WHERE author_id = ${userId}) OR inbox_id IN (SELECT id FROM inbox WHERE sender_id = ${userId} OR recipient_id = ${userId}) OR reply_to_inbox_id IN (SELECT id FROM inbox WHERE sender_id = ${userId} OR recipient_id = ${userId}) OR space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId}) OR space_scheduled_send_id IN (SELECT ss.id FROM space_scheduled_sends ss JOIN space_letters sl ON sl.id = ss.space_letter_id WHERE sl.author_id = ${userId} OR sl.space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId}) OR ss.reservation_author_id = ${userId}) OR team_collection_id IN (SELECT id FROM team_collections WHERE creator_id = ${userId})`,
+    sql`DELETE FROM inbox WHERE sender_id = ${userId} OR recipient_id = ${userId} OR article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM user_article_reads WHERE user_id = ${userId} OR article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM reading_records WHERE user_id = ${userId} OR article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM thought_question_sources WHERE question_thought_id IN (SELECT id FROM thoughts WHERE author_id = ${userId}) OR source_thought_id IN (SELECT id FROM thoughts WHERE author_id = ${userId}) OR source_stored_sentence_id IN (SELECT id FROM stored_sentences WHERE user_id = ${userId}) OR source_article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    // A different user's thought may retain provenance to this user's saved
+    // sentence. Preserve that user's content while removing the deleted
+    // account's source reference.
+    sql`UPDATE thoughts SET source_stored_sentence_id = NULL WHERE source_stored_sentence_id IN (SELECT id FROM stored_sentences WHERE user_id = ${userId})`,
+    sql`UPDATE thoughts SET source_article_id = NULL WHERE author_id <> ${userId} AND source_article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`UPDATE thoughts SET migrated_from_article_id = NULL WHERE author_id <> ${userId} AND migrated_from_article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM stored_sentences WHERE user_id = ${userId} OR article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM my_collection_articles WHERE my_collection_id IN (SELECT id FROM my_collections WHERE owner_id = ${userId}) OR article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM team_collection_articles WHERE added_by = ${userId} OR article_id IN (SELECT id FROM articles WHERE author_id = ${userId}) OR team_collection_id IN (SELECT id FROM team_collections WHERE creator_id = ${userId})`,
+    sql`DELETE FROM team_collection_memberships WHERE user_id = ${userId} OR team_collection_id IN (SELECT id FROM team_collections WHERE creator_id = ${userId})`,
+    sql`DELETE FROM neighbors WHERE user_a_id = ${userId} OR user_b_id = ${userId}`,
+    sql`DELETE FROM neighbor_requests WHERE requester_id = ${userId} OR recipient_id = ${userId}`,
+    sql`DELETE FROM thought_promotions WHERE from_thought_id IN (SELECT id FROM thoughts WHERE author_id = ${userId}) OR to_draft_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM thought_question_queue WHERE user_id = ${userId} OR thought_id IN (SELECT id FROM thoughts WHERE author_id = ${userId})`,
+    sql`DELETE FROM article_questions WHERE article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM space_scheduled_send_recipients WHERE recipient_id = ${userId} OR scheduled_send_id IN (SELECT ss.id FROM space_scheduled_sends ss JOIN space_letters sl ON sl.id = ss.space_letter_id WHERE sl.author_id = ${userId} OR sl.space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId}) OR ss.reservation_author_id = ${userId})`,
+    sql`DELETE FROM space_scheduled_sends WHERE id IN (SELECT ss.id FROM space_scheduled_sends ss JOIN space_letters sl ON sl.id = ss.space_letter_id WHERE sl.author_id = ${userId} OR sl.space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId}) OR ss.reservation_author_id = ${userId})`,
+    sql`DELETE FROM letter_recipient_access WHERE user_id = ${userId} OR letter_id IN (SELECT id FROM space_letters WHERE author_id = ${userId} OR space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId}))`,
+    sql`UPDATE space_letters SET source_article_id = NULL WHERE author_id <> ${userId} AND source_article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM space_letters WHERE author_id = ${userId} OR space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId})`,
+    sql`DELETE FROM space_round_slots WHERE assigned_user_id = ${userId} OR space_round_id IN (SELECT sr.id FROM space_rounds sr JOIN spaces s ON s.id = sr.space_id WHERE s.creator_id = ${userId})`,
+    sql`DELETE FROM space_participations WHERE user_id = ${userId} OR space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId})`,
+    sql`DELETE FROM space_invitations WHERE invited_user_id = ${userId} OR invited_by = ${userId} OR space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId})`,
+    sql`DELETE FROM space_code_requests WHERE requester_id = ${userId} OR space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId})`,
+    sql`DELETE FROM space_rounds WHERE space_id IN (SELECT id FROM spaces WHERE creator_id = ${userId})`,
+    sql`DELETE FROM spaces WHERE creator_id = ${userId}`,
+    sql`DELETE FROM thoughts WHERE author_id = ${userId}`,
+    sql`UPDATE articles SET source_article_id = NULL WHERE author_id <> ${userId} AND source_article_id IN (SELECT id FROM articles WHERE author_id = ${userId})`,
+    sql`DELETE FROM articles WHERE author_id = ${userId}`,
+    sql`DELETE FROM my_collections WHERE owner_id = ${userId}`,
+    sql`DELETE FROM team_collections WHERE creator_id = ${userId}`,
+    sql`DELETE FROM users WHERE id = ${userId}`,
+    // This is intentionally last: all application cleanup and auth removal
+    // either commit together or neither commits.
+    sql`DELETE FROM auth.users WHERE id = ${userId}`,
+  ];
+
+  for (const statement of statements) await tx.execute(statement);
+}
+
+export function createDeleteUserHandler({
+  database = db,
+  log = logger,
+}: UserDeletionDependencies = {}) {
+  return async (req: Request, res: Response) => {
+    const userId = req.params.id;
+    if (req.user?.id !== userId) {
+      log.warn({ code: "USER_DELETE_IDENTITY_MISMATCH" }, "users/delete rejected");
+      res.status(403).json({ error: "Cannot delete another user", code: "USER_DELETE_IDENTITY_MISMATCH" });
+      return;
+    }
+
+    try {
+      await database.transaction((tx) => eraseUserInTransaction(tx, userId));
+      log.info({ outcome: "account-erased" }, "users/delete completed");
+      // An already-erased account is successful by design. This lets clients
+      // safely retry after a lost response without leaking account existence.
+      res.status(204).send();
+    } catch (err: unknown) {
+      const pgCode = getPgCode(err);
+      const code = pgCode === "42501" || pgCode === "3F000"
+        ? "USER_DELETE_AUTH_UNAVAILABLE"
+        : "USER_DELETE_FAILED";
+      log.error({ code, pgCode }, "users/delete failed");
+      res.status(503).json({ error: "Account deletion could not be completed", code });
+    }
+  };
+}
+
+router.delete("/users/:id", requireAuth, createDeleteUserHandler());
 
 router.get("/users/:id/space-letters", async (req, res) => {
   const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, req.params.id)).limit(1);

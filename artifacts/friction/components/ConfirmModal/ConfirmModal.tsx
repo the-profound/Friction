@@ -94,7 +94,13 @@ export default function ConfirmModal({
   const isNewLayout = !!displayActionButton;
 
   return (
-    <Modal transparent visible={visible} animationType="fade" statusBarTranslucent>
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={cancelDisabled ? () => undefined : (onBackdropPress ?? onCancel)}
+    >
         <Pressable style={styles.overlay} onPress={cancelDisabled ? undefined : (onBackdropPress ?? onCancel)}>
         <View style={styles.contentWrapper}>
           <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
@@ -137,7 +143,7 @@ export default function ConfirmModal({
                   onPress={onCancel}
                   disabled={cancelDisabled}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: cancelDisabled }}
+                  accessibilityState={{ disabled: cancelDisabled, busy: cancelDisabled }}
                 >
                   <Text style={styles.cancelText}>{displayCancelLabel}</Text>
                 </ScalePressable>

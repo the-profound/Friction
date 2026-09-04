@@ -142,14 +142,33 @@ paths:
     delete:
       operationId: deleteUser
       tags: [users]
-      summary: Delete user
+      summary: Permanently delete the authenticated user's account and data
+      description: >-
+        Deletes the caller's application data and Supabase authentication
+        identity in one transaction. Repeating the operation is safe; after
+        completion, a later request may receive 401 because the authentication
+        identity no longer exists.
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
         "204":
-          description: Deleted
-        "404":
-          description: Not found
+          description: Account deleted successfully
+        "401":
+          description: Authentication required or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Path user ID does not match the authenticated caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Account deletion could not be completed atomically
           content:
             application/json:
               schema:
