@@ -476,6 +476,13 @@ export default function RootLayout() {
 
   const appTree = (
     <SafeAreaProvider>
+      {Platform.OS === "web"
+        ? React.createElement(
+            "style",
+            {},
+            `input,textarea{caret-color:${Colors.cursorAccent}}`,
+          )
+        : null}
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>

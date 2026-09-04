@@ -40,6 +40,8 @@ const escapedJs = bundleJs
   .replace(/\r?\n/g, "\\n");
 
 const css = `
+/* Keep synchronized with Colors.cursorAccent in constants/tokens.ts. */
+:root{--editor-cursor-color:#92323D}
 *{margin:0;padding:0;box-sizing:border-box}
 html{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-size-adjust:none;text-size-adjust:none}
 body{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-size-adjust:none;text-size-adjust:none}
@@ -60,6 +62,7 @@ body{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-siz
   overflow:hidden;
    -webkit-tap-highlight-color:transparent;
    color-scheme:light;
+  caret-color:var(--editor-cursor-color);
   padding:8px 0;
   margin-bottom:12px;
   -webkit-text-size-adjust:none;
@@ -81,6 +84,7 @@ body{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-siz
   width:100%;
   max-width:100%;
   outline:none;
+  caret-color:var(--editor-cursor-color);
   min-height:200px;
   white-space:pre-wrap !important;
 }

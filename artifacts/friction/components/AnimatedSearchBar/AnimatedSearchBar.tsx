@@ -68,6 +68,7 @@ export default function AnimatedSearchBar({
           style={styles.searchInput}
           placeholder={placeholder}
           placeholderTextColor={Colors.searchPlaceholder}
+          cursorColor={Colors.cursorAccent}
           value={value}
           onChangeText={onChangeText}
           returnKeyType="search"

@@ -33,6 +33,7 @@ import { splitLeadingH1Markdown } from "@/utils/leadingH1";
 import { normalizePageDividersForMarkdownParser } from "@/lib/pageDividerMarkdown";
 import { handleTitleEnter, insertTitleSoftBreak } from "./titleKeyboardContract";
 import { createHeadingWithParagraphShortcut } from "./headingKeyboardShortcuts";
+import { Colors } from "@/constants/tokens";
 import {
   createEditorSurfaceTouchSession,
   isBlankEditorSurfaceTarget,
@@ -553,6 +554,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           "--body-letter-spacing": `${typography.letterSpacingPx}px`,
           "--title-font-size": `${typography.titleFontSizePx}px`,
           "--content-bottom-padding": `${Math.max(0, contentBottomPadding)}px`,
+           "--editor-cursor-color": Colors.cursorAccent,
         } as React.CSSProperties}
       >
         <style>{proseMirrorCss}</style>
@@ -607,6 +609,7 @@ const titleInputStyle: React.CSSProperties = {
   WebkitAppearance: "none",
   WebkitTapHighlightColor: "transparent",
   colorScheme: "light",
+  caretColor: "var(--editor-cursor-color)",
   padding: "8px 0",
   marginBottom: 12,
   boxSizing: "border-box",
@@ -646,6 +649,7 @@ ${editorTypographyCss}
   min-height: 100%;
   padding: 16px 0 var(--content-bottom-padding);
   outline: none;
+  caret-color: var(--editor-cursor-color);
 }
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

@@ -276,6 +276,7 @@ export default function LoginScreen() {
               style={styles.input}
               placeholder="이메일 주소"
               placeholderTextColor={Colors.zinc400}
+              cursorColor={Colors.cursorAccent}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -294,6 +295,7 @@ export default function LoginScreen() {
                 style={styles.passwordInput}
                 placeholder="비밀번호"
                 placeholderTextColor={Colors.zinc400}
+                cursorColor={Colors.cursorAccent}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -347,6 +349,7 @@ export default function LoginScreen() {
               style={styles.input}
               placeholder="이메일 주소"
               placeholderTextColor={Colors.zinc400}
+              cursorColor={Colors.cursorAccent}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -365,6 +368,7 @@ export default function LoginScreen() {
                 style={styles.passwordInput}
                 placeholder="비밀번호"
                 placeholderTextColor={Colors.zinc400}
+                cursorColor={Colors.cursorAccent}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -393,6 +397,7 @@ export default function LoginScreen() {
                 style={styles.passwordInput}
                 placeholder="비밀번호 확인"
                 placeholderTextColor={Colors.zinc400}
+                cursorColor={Colors.cursorAccent}
                 secureTextEntry={!showPasswordConfirm}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -455,6 +460,7 @@ export default function LoginScreen() {
               style={styles.input}
               placeholder="이름(닉네임)"
               placeholderTextColor={Colors.zinc400}
+              cursorColor={Colors.cursorAccent}
               autoCapitalize="none"
               autoCorrect={false}
               maxLength={20}

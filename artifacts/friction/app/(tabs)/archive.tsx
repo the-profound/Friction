@@ -688,6 +688,7 @@ export default function ArchiveScreen() {
             style={styles.createInput}
             placeholder="폴더 이름"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             value={newName}
             onChangeText={setNewName}
             autoFocus
@@ -696,6 +697,7 @@ export default function ArchiveScreen() {
             style={[styles.createInput, styles.createInputMulti]}
             placeholder="설명 (선택사항)"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             value={newDescription}
             onChangeText={setNewDescription}
             multiline

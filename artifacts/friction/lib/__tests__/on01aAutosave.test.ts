@@ -853,7 +853,7 @@ describe("on-01a keyboard reactivation", () => {
     expect(nativeEditorSource).toContain("editor.commands.focus()");
     expect(nativeEditorBundle).toContain("startedOnBlankSurface");
     expect(nativeEditorBundle).toContain('addEventListener("touchcancel"');
-    expect(nativeEditorBundle).toContain("3.25.0-");
+    expect(nativeEditorBundle).toContain("3.26.0-");
 
     expect(webEditorSource).toContain('container.addEventListener("pointerdown"');
     expect(webEditorSource).toContain('container.addEventListener("pointermove"');

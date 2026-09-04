@@ -558,6 +558,7 @@ function OperationSettingsStep({
           style={stepStyles.input}
           placeholder="예: 12"
           placeholderTextColor={Colors.zinc400}
+          cursorColor={Colors.cursorAccent}
           value={roundCountRaw}
           onChangeText={onRoundCountChange}
           keyboardType="number-pad"
@@ -576,6 +577,7 @@ function OperationSettingsStep({
           style={stepStyles.input}
           placeholder="제한 없음"
           placeholderTextColor={Colors.zinc400}
+          cursorColor={Colors.cursorAccent}
           value={form.maxParticipants}
           onChangeText={(v) => {
             const digits = v.replace(/\D/g, "");

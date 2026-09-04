@@ -583,6 +583,7 @@ export function NeighborsInline({
               style={styles.searchInput}
               placeholder="닉네임으로 검색"
               placeholderTextColor={Colors.zinc400}
+              cursorColor={Colors.cursorAccent}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoFocus

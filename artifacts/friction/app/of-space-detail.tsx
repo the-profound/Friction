@@ -953,6 +953,7 @@ function DescriptionSection({
           multiline
           placeholder="공간 설명을 입력해주세요"
           placeholderTextColor={Colors.zinc400}
+          cursorColor={Colors.cursorAccent}
           autoFocus
           maxLength={200}
         />

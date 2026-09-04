@@ -49,6 +49,8 @@ export const Colors = {
   noticeAccent: "#92323D",
   /** Primary action surface — save, confirm, create, and retry buttons. */
   primaryAction: "#92323D",
+  /** 편집 가능한 텍스트 입력의 커서/캐럿 강조색 */
+  cursorAccent: "#92323D",
   /** Primary action foreground with sufficient contrast on the brand red. */
   primaryActionForeground: "#FFFFFF",
   /** Disabled primary action surface; dimensions must remain unchanged. */

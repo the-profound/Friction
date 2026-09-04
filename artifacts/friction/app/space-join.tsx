@@ -148,6 +148,7 @@ function SpaceNicknameField({
         style={[styles.codeInput, !!error && styles.codeInputError]}
         placeholder="예: 달빛"
         placeholderTextColor={Colors.zinc400}
+        cursorColor={Colors.cursorAccent}
         value={value}
         onChangeText={onChangeText}
         maxLength={SPACE_NICKNAME_MAX_LENGTH}
@@ -620,6 +621,7 @@ export default function SpaceJoinScreen() {
             style={[styles.codeInput, !!codeError && styles.codeInputError]}
             placeholder="초대 문구 입력"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             value={inviteCode}
             onChangeText={(v) => {
               setInviteCode(v);

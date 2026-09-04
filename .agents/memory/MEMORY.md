@@ -84,3 +84,4 @@
 - [Native editor typography generations](native-editor-typography-generations.md) — apply width/font metrics before editable DOM creation; reject older generations after rotation or reload.
 - [Mutation-window query retirement](mutation-window-query-retirement.md) — cancel list queries both before mutation and after its response, before synchronous cache writes.
 - [Focus-effect query recovery](focus-effect-query-recovery.md) — never make a focused effect depend on fetching flags when it starts refetches; read volatile query state through refs.
+- [React Native cursor color limits](react-native-cursor-color-limits.md) — RN 0.86 cannot independently tint an iOS TextInput caret while preserving selection handles.

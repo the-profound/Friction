@@ -1053,6 +1053,7 @@ export default function ThoughtsBottomSheet({
                         textAlignVertical="top"
                         placeholder="단상을 적어보세요"
                         placeholderTextColor={Colors.zinc400}
+                        cursorColor={Colors.cursorAccent}
                         accessibilityLabel="단상 내용"
                         onContentSizeChange={() => scrollEditorBottomIntoView(editor.key)}
                       />
@@ -1102,6 +1103,7 @@ export default function ThoughtsBottomSheet({
                       textAlignVertical="top"
                       placeholder="단상을 적어보세요"
                       placeholderTextColor={Colors.zinc400}
+                      cursorColor={Colors.cursorAccent}
                       accessibilityLabel="새 단상 내용"
                       onContentSizeChange={() => scrollEditorBottomIntoView(editor.key)}
                     />

@@ -489,7 +489,7 @@ const MemoPageView = forwardRef<MemoPageViewRef, MemoPageViewProps>(
             autoCorrect={false}
             autoCapitalize="none"
             spellCheck={false}
-            cursorColor={Colors.zinc800}
+            cursorColor={Colors.cursorAccent}
             // 선택 영역 하이라이트(배경색이 있는 박스)가 그려지면, 그 위에서는
             // "배경색과 같은 색"으로 숨긴 글자(마커 포함)가 더 이상 배경과
             // 섞이지 않아 다시 보이게 된다(선택 중 마커/원문이 겹쳐 보이는

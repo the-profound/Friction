@@ -645,6 +645,7 @@ function RoundConfigStep({
             onChangeText={(t) => onChange(t, config.description)}
             placeholder={`예: ${roundIdx + 1}회차`}
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             maxLength={100}
             returnKeyType="next"
           />
@@ -659,6 +660,7 @@ function RoundConfigStep({
             onChangeText={(t) => onChange(config.title, t)}
             placeholder="이 회차에서 다룰 내용을 간단히 설명해주세요"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             multiline
             textAlignVertical="top"
             maxLength={300}

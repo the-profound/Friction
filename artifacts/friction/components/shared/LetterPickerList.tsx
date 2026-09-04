@@ -91,6 +91,7 @@ export function LetterPickerList<T>({
           style={styles.searchInput}
           placeholder="제목으로 검색"
           placeholderTextColor={Colors.searchPlaceholder}
+          cursorColor={Colors.cursorAccent}
           value={searchQuery}
           onChangeText={setSearchQuery}
           returnKeyType="search"

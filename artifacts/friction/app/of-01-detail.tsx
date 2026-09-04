@@ -643,6 +643,7 @@ export default function PersonalCollectionDetailScreen() {
             style={styles.editInput}
             placeholder="폴더 이름"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             value={editName}
             onChangeText={setEditName}
             autoFocus
@@ -651,6 +652,7 @@ export default function PersonalCollectionDetailScreen() {
             style={[styles.editInput, styles.editInputMulti]}
             placeholder="설명 (선택사항)"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             value={editDescription}
             onChangeText={setEditDescription}
             multiline

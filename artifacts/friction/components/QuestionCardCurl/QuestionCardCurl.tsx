@@ -664,6 +664,7 @@ function QuestionCardCurlInner({
                         } : undefined}
                         placeholder="생각을 자유롭게 적어보세요..."
                         placeholderTextColor={Colors.zinc400}
+                        cursorColor={Colors.cursorAccent}
                         multiline
                         scrollEnabled={false}
                         textAlignVertical="top"

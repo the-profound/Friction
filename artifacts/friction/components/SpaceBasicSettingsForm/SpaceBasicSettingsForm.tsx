@@ -43,6 +43,7 @@ export default function SpaceBasicSettingsForm({
           style={styles.input}
           placeholder="예: 2025 독서 모임"
           placeholderTextColor={Colors.zinc400}
+          cursorColor={Colors.cursorAccent}
           value={value.name}
           onChangeText={(next) => update("name", next)}
           maxLength={50}
@@ -61,6 +62,7 @@ export default function SpaceBasicSettingsForm({
           style={[styles.input, styles.inputMulti]}
           placeholder="이 공간은 어떤 목적으로 운영되나요?"
           placeholderTextColor={Colors.zinc400}
+          cursorColor={Colors.cursorAccent}
           value={value.description}
           onChangeText={(next) => update("description", next)}
           multiline
@@ -100,6 +102,7 @@ export default function SpaceBasicSettingsForm({
             style={styles.input}
             placeholder="예: 달빛"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             value={value.spaceNickname ?? ""}
             onChangeText={(next) => update("spaceNickname", next)}
             maxLength={20}

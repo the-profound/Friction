@@ -262,6 +262,7 @@ function RoundEditSheet({
             onChangeText={setTitle}
             placeholder="회차 제목 (선택)"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             maxLength={100}
           />
 
@@ -272,6 +273,7 @@ function RoundEditSheet({
             onChangeText={setDescription}
             placeholder="회차 설명 (선택)"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             multiline
             maxLength={300}
           />

@@ -342,6 +342,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
                 onChangeText={onTitleChange}
                 placeholder="메모 제목"
                 placeholderTextColor={Colors.zinc300}
+                cursorColor={Colors.cursorAccent}
                 returnKeyType="done"
                 blurOnSubmit
               />

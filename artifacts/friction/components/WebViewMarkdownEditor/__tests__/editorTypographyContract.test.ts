@@ -40,6 +40,35 @@ describe("native writing editor typography contract", () => {
     expect(read("package.json")).toContain('"check:editor-html"');
   });
 
+  it("uses the Friction cursor token for web and native editor carets", () => {
+    const tokens = read("constants/tokens.ts");
+    const webEditor = read(
+      "components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx",
+    );
+    const builder = read("components/WebViewMarkdownEditor/buildEditorHtml.mjs");
+    const generated = read("components/WebViewMarkdownEditor/editorHtml.ts");
+    const cursorColor = tokens.match(/cursorAccent:\s*"([^"]+)"/)?.[1];
+
+    expect(cursorColor).toBe("#92323D");
+    expect(webEditor).toContain(
+      '"--editor-cursor-color": Colors.cursorAccent',
+    );
+    expect(webEditor).toContain(
+      'caretColor: "var(--editor-cursor-color)"',
+    );
+    expect(webEditor).toContain(
+      "caret-color: var(--editor-cursor-color)",
+    );
+    for (const source of [builder, generated]) {
+      expect(source).toContain(
+        `:root{--editor-cursor-color:${cursorColor}}`,
+      );
+      expect(source).toContain(
+        "caret-color:var(--editor-cursor-color)",
+      );
+    }
+  });
+
   it("reports effective metrics and line boundaries for mixed writing samples", () => {
     const source = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
     const sample = [

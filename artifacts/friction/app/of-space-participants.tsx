@@ -152,6 +152,7 @@ function RejectReasonModal({
             onChangeText={setReason}
             placeholder="거절 사유를 입력하세요"
             placeholderTextColor={Colors.zinc400}
+            cursorColor={Colors.cursorAccent}
             multiline
             autoFocus
             maxLength={200}
