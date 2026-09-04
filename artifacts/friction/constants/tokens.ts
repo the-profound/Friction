@@ -1,4 +1,8 @@
 import { Platform } from "react-native";
+import {
+  BODY_REGULAR_FONT_FAMILY,
+  BODY_SEMIBOLD_FONT_FAMILY,
+} from "@/components/shared/bodyTypographyFonts";
 
 export const Colors = {
   zinc900: "#18181b",
@@ -378,11 +382,15 @@ export const ReaderTokens = {
   fontFamily: {
     serif: Platform.select({
       ios: "Eulyoo1945-Regular",
-      default: "Eulyoo1945-Regular",
+      android: "Eulyoo1945-Regular",
+      web: BODY_REGULAR_FONT_FAMILY,
+      default: BODY_REGULAR_FONT_FAMILY,
     }),
     serifBold: Platform.select({
       ios: "Eulyoo1945-SemiBold",
-      default: "Eulyoo1945-SemiBold",
+      android: "Eulyoo1945-SemiBold",
+      web: BODY_SEMIBOLD_FONT_FAMILY,
+      default: BODY_SEMIBOLD_FONT_FAMILY,
     }),
     notoSerif: Platform.select({
       ios: "NotoSerifKR_400Regular",

@@ -34,3 +34,17 @@ generic serif even though the intended font was ready.
 
 **How to apply:** Keep the detailed four-face status for diagnostics, but base
 the web primary/fallback choice on Eulyoo regular and semibold together.
+
+React Native native text does not interpret a CSS-style comma-separated
+`fontFamily` fallback list. Native body aliases therefore need a generated
+composite face: preserve every outlined Eulyoo glyph and fill only its missing
+modern Hangul slots from the matching bundled Noto Serif KR weight. WebViews
+should continue using stripped Eulyoo plus an explicit Noto CSS fallback.
+
+**Why:** The source Eulyoo OTF advertises thousands of zero-outline Hangul
+glyphs, so native text can render missing syllables as blanks instead of
+falling back. A font-family string alone cannot fix this on iOS or Android.
+
+**How to apply:** Rebuild both regular and semibold assets together. Validate
+full modern Hangul coverage and compare every originally outlined Eulyoo glyph's
+geometry, references, and advance metrics against the native composite.

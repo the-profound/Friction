@@ -1,5 +1,8 @@
 import type { BodyTypographyMetrics } from "./bodyLayout";
-import type { BodyFontReadyStatus } from "@/components/shared/bodyTypographyFonts";
+import {
+  BODY_FONT_FALLBACK_PROBE_TEXT,
+  type BodyFontReadyStatus,
+} from "@/components/shared/bodyTypographyFonts";
 
 declare const __DEV__: boolean | undefined;
 
@@ -61,7 +64,7 @@ function readWebBodyFontStatus(): BodyFontLoadStatus {
   return Object.fromEntries(
     FONT_PROBES.map(([key, shorthand]) => [
       key,
-      !!fonts?.check(shorthand, "가잓"),
+      !!fonts?.check(shorthand, BODY_FONT_FALLBACK_PROBE_TEXT),
     ]),
   ) as unknown as BodyFontLoadStatus;
 }
@@ -88,7 +91,9 @@ async function waitForWebBodyFontsOnce(): Promise<BodyFontLoadStatus> {
   }
 
   const load = Promise.all(
-    FONT_PROBES.map(([, shorthand]) => document.fonts.load(shorthand, "가잓")),
+    FONT_PROBES.map(([, shorthand]) =>
+      document.fonts.load(shorthand, BODY_FONT_FALLBACK_PROBE_TEXT),
+    ),
   ).then(() => document.fonts.ready);
   await Promise.race([
     load,

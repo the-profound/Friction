@@ -20,6 +20,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
 import type { BodyTypographyMetrics } from "../../../lib/bodyLayout";
 import { shouldApplyBodyTypographyGeneration } from "../../../lib/bodyTypographyDiagnostics";
+import { BODY_FONT_FALLBACK_PROBE_TEXT } from "../../shared/bodyTypographyFonts";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 import { handleTitleEnter, insertTitleSoftBreak } from "../titleKeyboardContract";
@@ -1839,10 +1840,10 @@ function spellFindRange(
                   Number.parseFloat(computed.fontSize) / metrics.fontSizePx,
                 fontFamily: computed.fontFamily,
                 fonts: {
-                  eulyooRegular: !!fonts?.check("400 16px 'Eulyoo1945-Regular'", "가잓"),
-                  eulyooSemiBold: !!fonts?.check("600 16px 'Eulyoo1945-SemiBold'", "가잓"),
-                  notoRegular: !!fonts?.check("400 16px 'NotoSerifKR_400Regular'", "가잓"),
-                  notoSemiBold: !!fonts?.check("600 16px 'NotoSerifKR_600SemiBold'", "가잓"),
+                  eulyooRegular: !!fonts?.check("400 16px 'Eulyoo1945-Regular'", BODY_FONT_FALLBACK_PROBE_TEXT),
+                  eulyooSemiBold: !!fonts?.check("600 16px 'Eulyoo1945-SemiBold'", BODY_FONT_FALLBACK_PROBE_TEXT),
+                  notoRegular: !!fonts?.check("400 16px 'NotoSerifKR_400Regular'", BODY_FONT_FALLBACK_PROBE_TEXT),
+                  notoSemiBold: !!fonts?.check("600 16px 'NotoSerifKR_600SemiBold'", BODY_FONT_FALLBACK_PROBE_TEXT),
                 },
                 lineBreakOffsets: readLineBreakOffsets(probe),
               },

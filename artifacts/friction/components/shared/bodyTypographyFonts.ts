@@ -27,10 +27,10 @@ export function resolveBodyFontFamilies(primaryReady: boolean): {
  * changes. The editor config version includes it so a font-metric change never
  * reuses initialization state produced by an older typography contract.
  */
-export const BODY_FONT_CONFIG_VERSION = "eulyoo1945-sanitized-noto-serif-kr-woff2-v4";
+export const BODY_FONT_CONFIG_VERSION = "eulyoo1945-noto-serif-kr-global-fallback-v5";
 export const BODY_FONT_PRIMARY_PROBE_TEXT = "가";
-export const BODY_FONT_FALLBACK_ONLY_PROBE_TEXT = "잓";
-export const BODY_FONT_FALLBACK_PROBE_TEXT = "가잓";
+export const BODY_FONT_FALLBACK_ONLY_PROBE_TEXT = "핟";
+export const BODY_FONT_FALLBACK_PROBE_TEXT = "가핟";
 export const BODY_FONT_ASSET_NAMES = [
   "Eulyoo1945-Regular",
   "Eulyoo1945-SemiBold",
@@ -42,6 +42,10 @@ export const BODY_FONT_ASSET_PATHS = [
   "assets/fonts/Eulyoo1945-SemiBold.woff2",
   "assets/fonts/NotoSerifKR-400Regular-korean.woff2",
   "assets/fonts/NotoSerifKR-600SemiBold-korean.woff2",
+] as const;
+export const BODY_NATIVE_FONT_ASSET_PATHS = [
+  "assets/fonts/Eulyoo1945-Regular-Body.otf",
+  "assets/fonts/Eulyoo1945-SemiBold-Body.otf",
 ] as const;
 
 export interface EmbeddedBodyFontOptions {
