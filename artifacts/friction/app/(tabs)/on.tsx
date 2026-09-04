@@ -1125,7 +1125,7 @@ const styles = StyleSheet.create({
   thoughtCardTitle: { fontFamily: ReaderTokens.fontFamily.serifBold, color: Colors.zinc900 },
   thoughtCardBody: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc800 },
   createButton: { height: 48, flexGrow: 0, flexShrink: 0 },
-  createButtonContent: { height: 48, flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, backgroundColor: Colors.zinc900, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  createButtonContent: { height: 48, flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, backgroundColor: Colors.noticeAccent, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   createButtonText: { ...Typography.bodySemiBold, color: Colors.white, fontSize: 15 },
   archive: { flex: 1, paddingHorizontal: Spacing.screenPx, paddingBottom: 16 },
   archiveTitle: { ...Typography.bodySemiBold, fontSize: 16, color: Colors.zinc900, textAlign: "center", paddingVertical: 12 },

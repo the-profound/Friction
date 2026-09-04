@@ -30,8 +30,6 @@ type SignupStep = 1 | 2;
 const SIGNUP_BACK_ROW_HEIGHT = 32;
 const SIGNUP_CHECKBOX_TOUCH_TARGET = 44;
 const SIGNUP_SUBMIT_BUTTON_HEIGHT = 52;
-const MINJI_EMAIL = "minji@test.com";
-const MINJI_PASSWORD_CANDIDATES = ["00000000", "000000"] as const;
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -85,14 +83,6 @@ function getLoginErrorMessage(error: {
   return "로그인에 실패했습니다. 다시 시도해주세요.";
 }
 
-function isInvalidCredentialsError(error: { message: string }): boolean {
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("invalid login credentials") ||
-    message.includes("invalid credentials")
-  );
-}
-
 const PRIVACY_URL = "https://friction.app/privacy";
 
 export default function LoginScreen() {
@@ -117,7 +107,6 @@ export default function LoginScreen() {
   const [signupDone, setSignupDone] = useState(false);
   const [signupFailurePopup, setSignupFailurePopup] = useState<SignupFailure | null>(null);
   const lastShownSignupDiagnosticIdRef = useRef<string | null>(null);
-  const minjiLoginInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!signupFailurePopup || isLoading) return;
@@ -215,62 +204,6 @@ export default function LoginScreen() {
       } else if (needsConfirmation) {
         setSignupDone(true);
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleDevLogin() {
-    if (minjiLoginInFlightRef.current || isLoading) return;
-
-    minjiLoginInFlightRef.current = true;
-    setErrorMessage(null);
-    setIsLoading(true);
-    try {
-      for (const [
-        candidateIndex,
-        candidatePassword,
-      ] of MINJI_PASSWORD_CANDIDATES.entries()) {
-        try {
-          const { error } = await signInWithPassword(
-            MINJI_EMAIL,
-            candidatePassword,
-          );
-          if (!error) return;
-
-          // Only a definitive credential rejection is safe to retry. In
-          // particular, a successful Supabase login followed by profile sync
-          // failure must not trigger another auth request.
-          if (candidateIndex === 0 && isInvalidCredentialsError(error)) {
-            continue;
-          }
-
-          setErrorMessage(getLoginErrorMessage(error));
-          return;
-        } catch {
-          setErrorMessage("네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
-          return;
-        }
-      }
-    } finally {
-      minjiLoginInFlightRef.current = false;
-      setIsLoading(false);
-    }
-  }
-
-  async function handleHyeonjunLogin() {
-    setIsLoading(true);
-    try {
-      await signInWithPassword("mrglassjelly@gmail.com", "rhdckdrud1emd");
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleIlgonLogin() {
-    setIsLoading(true);
-    try {
-      await signInWithPassword("thomthiswld@gmail.com", "Cham1234");
     } finally {
       setIsLoading(false);
     }
@@ -393,6 +326,7 @@ export default function LoginScreen() {
               style={styles.button}
               contentStyle={[
                 styles.buttonContent,
+                styles.loginButtonContent,
                 !canSubmitLogin && styles.buttonDisabledContent,
               ]}
               onPress={handleLogin}
@@ -659,32 +593,6 @@ export default function LoginScreen() {
           </View>
         )}
       </ScrollView>
-      <View style={[styles.devButtonRow, { bottom: insets.bottom + 12 }]}>
-        <ScalePressable
-          style={styles.devButton}
-          contentStyle={styles.devButtonContent}
-          onPress={handleDevLogin}
-          disabled={isLoading}
-        >
-          <Text style={styles.devButtonText}>민지</Text>
-        </ScalePressable>
-        <ScalePressable
-          style={styles.devButton}
-          contentStyle={styles.devButtonContent}
-          onPress={handleHyeonjunLogin}
-          disabled={isLoading}
-        >
-          <Text style={styles.devButtonText}>현준</Text>
-        </ScalePressable>
-        <ScalePressable
-          style={styles.devButton}
-          contentStyle={styles.devButtonContent}
-          onPress={handleIlgonLogin}
-          disabled={isLoading}
-        >
-          <Text style={styles.devButtonText}>일곤</Text>
-        </ScalePressable>
-      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -844,6 +752,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  loginButtonContent: {
+    backgroundColor: Colors.noticeAccent,
+  },
   buttonDisabledContent: {
     opacity: 0.45,
   },
@@ -929,22 +840,5 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     color: Colors.zinc900,
     textDecorationLine: "underline",
-  },
-  devButtonRow: {
-    position: "absolute",
-    alignSelf: "center",
-    flexDirection: "row",
-  },
-  devButton: {
-  },
-  devButtonContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    alignItems: "center",
-  },
-  devButtonText: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc900,
   },
 });
