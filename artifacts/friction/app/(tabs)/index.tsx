@@ -13,7 +13,6 @@ import {
 } from "react-native";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
@@ -21,7 +20,6 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
-import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta, type EnvelopeInfo } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useQueryClient, QueryClientContext } from "@tanstack/react-query";
@@ -38,7 +36,7 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
-import { getInboxReadingMode } from "@/lib/policies";
+import { getInboxReaderEntry } from "@/lib/policies";
 
 /** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
 function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
@@ -122,7 +120,6 @@ const groupKeyExtractor = (group: DateGroup) => group.dateKey;
 const inboxItemKey = (item: InboxItem) => item.id;
 
 function InboxScreenContent() {
-  const { startFadeToBlack } = useReaderTransition();
   const { tabReselectVersion } = useNavigation();
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
@@ -143,8 +140,6 @@ function InboxScreenContent() {
     captureScrollOffset,
     cancelScrollRestoration,
   } = useSelectionScrollRestoration(tapItem !== null, restoreInboxScrollOffset);
-
-  const [sourcePromptItem, setSourcePromptItem] = useState<InboxItem | null>(null);
 
   const { data: inboxData, isLoading, refetch } = useListInbox(
     // isRead=false tells the server to return only unread items, keeping the
@@ -322,24 +317,15 @@ function InboxScreenContent() {
       : null;
 
     if (inboxItem) {
-      const isReply = inboxItem.isReplyToMe === true || !!inboxItem.replyToArticleId;
-      if (isReply && inboxItem.hasReadSourceArticle === false) {
-        // The source-first prompt continues toward the reader, so it must not
-        // restore the list between selection mode and that navigation.
-        cancelScrollRestoration();
-        setTapItem(null);
-        setSourcePromptItem(inboxItem);
-        return;
-      }
       // CardSelectOverlay handles the fade-to-black internally (Modal renders above global overlay).
       // Here we just navigate immediately after the fade calls back.
       prepareInboxItem(inboxItem);
-      const mode = getInboxReadingMode(inboxItem.isRead, inboxItem.hasReadBefore);
+      const entry = getInboxReaderEntry(inboxItem);
       cancelScrollRestoration();
       setTapItem(null);
       router.push({
         pathname: "/read",
-        params: { articleId: inboxItem.articleId, inboxId: inboxItem.id, mode },
+        params: entry,
       });
     } else if (article) {
       cancelScrollRestoration();
@@ -350,48 +336,6 @@ function InboxScreenContent() {
       });
     }
   }, [prepareInboxItem, router, cancelScrollRestoration]);
-
-  const handleSourcePromptClose = useCallback(() => {
-    setSourcePromptItem(null);
-  }, []);
-
-  const handleReadSourceFirst = useCallback(() => {
-    const item = sourcePromptItem;
-    if (!item || !item.replyToArticleId) {
-      setSourcePromptItem(null);
-      return;
-    }
-    // 원글에 대응하는 (현재 사용자의) 미독 인박스 행이 있다면 함께 전달.
-    // 없으면 inboxId 없이 진입 — read.tsx가 inboxId 없이도 동작한다.
-    const sourceInboxId = (inboxData as InboxItem[] | undefined)?.find(
-      (it) => it.articleId === item.replyToArticleId,
-    )?.id;
-    startFadeToBlack(() => {
-      setSourcePromptItem(null);
-      router.push({
-        pathname: "/read",
-        params: {
-          articleId: item.replyToArticleId!,
-          ...(sourceInboxId ? { inboxId: sourceInboxId } : {}),
-          mode: "basic",
-        },
-      });
-    });
-  }, [sourcePromptItem, inboxData, startFadeToBlack, router]);
-
-  const handleSkipToReply = useCallback(() => {
-    const item = sourcePromptItem;
-    if (!item) { setSourcePromptItem(null); return; }
-    prepareInboxItem(item);
-    const mode = getInboxReadingMode(item.isRead, item.hasReadBefore);
-    startFadeToBlack(() => {
-      setSourcePromptItem(null);
-      router.push({
-        pathname: "/read",
-        params: { articleId: item.articleId, inboxId: item.id, mode },
-      });
-    });
-  }, [sourcePromptItem, prepareInboxItem, startFadeToBlack, router]);
 
   const handleDelete = useCallback(async () => {
     if (!tapItem) return;
@@ -623,16 +567,6 @@ function InboxScreenContent() {
         }
       />
 
-      <ConfirmModal
-        visible={sourcePromptItem !== null}
-        title="원래 편지를 먼저 읽어보시겠어요?"
-        description="맥락 파악을 위해 원래 편지를 먼저 읽는 것을 추천합니다."
-        cancelLabel="건너뛰고 답장 읽기"
-        confirmLabel="원래 편지 먼저 읽기"
-        onCancel={handleSkipToReply}
-        onConfirm={handleReadSourceFirst}
-        onBackdropPress={handleSourcePromptClose}
-      />
     </View>
   );
 }

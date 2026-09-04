@@ -74,6 +74,33 @@ export function getInboxReadingMode(
   return isRead || hasReadBefore ? "re_read" : "basic";
 }
 
+export interface InboxReaderEntryInput {
+  id: string;
+  articleId: string;
+  isRead?: boolean;
+  hasReadBefore?: boolean;
+  replyToArticleId?: string | null;
+  hasReadSourceArticle?: boolean;
+}
+
+export interface InboxReaderEntry {
+  articleId: string;
+  inboxId: string;
+  mode: ReadingMode;
+}
+
+/**
+ * Inbox selection always opens the selected delivery. Reply ancestry and
+ * source-reading history only affect the selection overlay, not navigation.
+ */
+export function getInboxReaderEntry(item: InboxReaderEntryInput): InboxReaderEntry {
+  return {
+    articleId: item.articleId,
+    inboxId: item.id,
+    mode: getInboxReadingMode(item.isRead, item.hasReadBefore),
+  };
+}
+
 /**
  * Re-reading from the inbox still owns an unread delivery that must be
  * committed when the completion screen is dismissed. Re-reading from a
