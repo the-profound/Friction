@@ -18,6 +18,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
+import HeaderButton from "@/components/shared/HeaderButton";
 import {
   useListStoredSentences,
   useDeleteStoredSentence,
@@ -310,13 +311,17 @@ export default function SentenceCollectionScreen() {
           </>
         ) : (
           <>
-            <ScalePressable onPress={() => router.back()} hitSlop={12}>
-              <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-            </ScalePressable>
+            <HeaderButton
+              variant="back"
+              onPress={() => router.back()}
+              accessibilityLabel="보관함에서 돌아가기"
+            />
             <Text style={styles.headerTitle}>수집한 문장</Text>
-            <ScalePressable onPress={enterSelectionMode} hitSlop={12}>
-              <Feather name="more-vertical" size={20} color={Colors.zinc600} />
-            </ScalePressable>
+            <HeaderButton
+              variant="menu"
+              onPress={enterSelectionMode}
+              accessibilityLabel="수집한 문장 선택 모드 열기"
+            />
           </>
         )}
       </View>

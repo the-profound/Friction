@@ -37,6 +37,7 @@ import type { MyCollectionArticleWithDetails, MyCollection, Article } from "@wor
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
+import HeaderButton from "@/components/shared/HeaderButton";
 import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
 import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
@@ -507,16 +508,20 @@ export default function PersonalCollectionDetailScreen() {
           </>
         ) : (
           <>
-            <ScalePressable onPress={() => router.back()} hitSlop={12}>
-              <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-            </ScalePressable>
+            <HeaderButton
+              variant="back"
+              onPress={() => router.back()}
+              accessibilityLabel="폴더에서 돌아가기"
+            />
             <Text style={styles.headerTitle} numberOfLines={1}>
               {collection?.name ?? initialName ?? "폴더"}
             </Text>
             <View style={styles.headerRight}>
-              <ScalePressable hitSlop={12} onPress={isArchive ? enterSelectionMode : handleMorePress}>
-                <Feather name="more-vertical" size={20} color={Colors.zinc600} />
-              </ScalePressable>
+              <HeaderButton
+                variant="menu"
+                onPress={isArchive ? enterSelectionMode : handleMorePress}
+                accessibilityLabel={isArchive ? "보관된 편지 선택 모드 열기" : "폴더 메뉴 열기"}
+              />
             </View>
           </>
         )}

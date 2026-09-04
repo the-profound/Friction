@@ -491,11 +491,13 @@ export default function UserProfileScreen() {
         accessibilityLabel="사용자 프로필에서 돌아가기"
       />
       {isOwnProfile ? (
-        <ScalePressable onPress={() => setMenuVisible(true)} hitSlop={12}>
-          <Feather name="menu" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="menu"
+          onPress={() => setMenuVisible(true)}
+          accessibilityLabel="프로필 메뉴 열기"
+        />
       ) : (
-        <View style={{ width: 20 }} />
+        <View style={{ width: Sizing.headerButtonTouchSize, height: Sizing.headerButtonTouchSize }} />
       )}
     </View>
   );

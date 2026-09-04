@@ -433,6 +433,7 @@ export default function MyScreen() {
               hideTitle
               showProfile
               onProfilePress={() => router.push("/mypage" as never)}
+              profileAccessibilityLabel="설정 및 활동 열기"
             />
 
             <View style={styles.profileSection} pointerEvents="none">

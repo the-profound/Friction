@@ -3,6 +3,7 @@ import React from "react";
 import { Image, ImageSourcePropType, Keyboard, Platform, StyleSheet, Text, TouchableWithoutFeedback, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 
 import { Colors, Shadows, Sizing, Spacing, Typography } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
@@ -23,6 +24,10 @@ interface PageHeaderProps {
   onProfilePress?: () => void;
   onHistoryPress?: () => void;
   onArchivePress?: () => void;
+  kebabDisabled?: boolean;
+  profileDisabled?: boolean;
+  kebabAccessibilityLabel?: string;
+  profileAccessibilityLabel?: string;
   searchActive?: boolean;
   addDisabled?: boolean;
   rightText?: string;
@@ -46,6 +51,10 @@ export function PageHeader({
   onProfilePress,
   onHistoryPress,
   onArchivePress,
+  kebabDisabled = false,
+  profileDisabled = false,
+  kebabAccessibilityLabel = "메뉴 열기",
+  profileAccessibilityLabel = "설정 및 활동 열기",
   searchActive = false,
   addDisabled = false,
   rightText,
@@ -122,14 +131,12 @@ export function PageHeader({
             </ScalePressable>
           )}
           {showKebab && (
-            <ScalePressable
-              style={styles.actionButton}
-              contentStyle={styles.actionButtonContent}
+            <HeaderButton
+              variant="menu"
               onPress={onKebabPress}
-              hitSlop={8}
-            >
-              <Feather name="check-square" size={20} color={Colors.zinc700} />
-            </ScalePressable>
+              disabled={kebabDisabled || !onKebabPress}
+              accessibilityLabel={kebabAccessibilityLabel}
+            />
           )}
           {searchLast && showSearch && (
             <ScalePressable
@@ -142,16 +149,12 @@ export function PageHeader({
             </ScalePressable>
           )}
           {showProfile && (
-            <ScalePressable
-              style={styles.profileButton}
-              contentStyle={styles.actionButtonContent}
+            <HeaderButton
+              variant="menu"
               onPress={onProfilePress}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="설정 및 활동"
-            >
-              <Feather name="menu" size={16} color={Colors.zinc700} />
-            </ScalePressable>
+              disabled={profileDisabled || !onProfilePress}
+              accessibilityLabel={profileAccessibilityLabel}
+            />
           )}
         </View>
       </View>
@@ -208,9 +211,5 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 15,
     color: Colors.zinc600,
-  },
-  profileButton: {
-    width: Sizing.searchButtonSize,
-    height: Sizing.searchButtonSize,
   },
 });

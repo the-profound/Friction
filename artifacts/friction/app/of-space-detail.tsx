@@ -25,6 +25,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { normalizeSpaceRouteId } from "@/lib/spaceBasicSettingsAccess";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
@@ -1407,10 +1408,12 @@ export default function SpaceDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <ScalePressable onPress={() => router.back()} hitSlop={12}>
-            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </ScalePressable>
-          <View style={{ width: 28 }} />
+          <HeaderButton
+            variant="back"
+            onPress={() => router.back()}
+            accessibilityLabel="공간에서 돌아가기"
+          />
+          <View style={styles.headerSideSpacer} />
         </View>
         <View style={styles.centerContainer}>
           <ActivityIndicator color={Colors.zinc400} />
@@ -1424,10 +1427,12 @@ export default function SpaceDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <ScalePressable onPress={() => router.back()} hitSlop={12}>
-            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </ScalePressable>
-          <View style={{ width: 28 }} />
+          <HeaderButton
+            variant="back"
+            onPress={() => router.back()}
+            accessibilityLabel="공간에서 돌아가기"
+          />
+          <View style={styles.headerSideSpacer} />
         </View>
         <View style={styles.centerContainer}>
           <Feather name="alert-circle" size={36} color={Colors.zinc300} />
@@ -1449,13 +1454,15 @@ export default function SpaceDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <ScalePressable onPress={() => router.back()} hitSlop={12}>
-            <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-          </ScalePressable>
+          <HeaderButton
+            variant="back"
+            onPress={() => router.back()}
+            accessibilityLabel="공간에서 돌아가기"
+          />
           <Text style={styles.headerTitle} numberOfLines={1}>
             {space.name}
           </Text>
-          <View style={{ width: 28 }} />
+          <View style={styles.headerSideSpacer} />
         </View>
         <View style={styles.centerContainer}>
           <Feather name="lock" size={36} color={Colors.zinc300} />
@@ -1483,20 +1490,19 @@ export default function SpaceDetailScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <ScalePressable onPress={() => router.back()} hitSlop={12}>
-          <Feather name="arrow-left" size={20} color={Colors.zinc600} />
-        </ScalePressable>
+        <HeaderButton
+          variant="back"
+          onPress={() => router.back()}
+          accessibilityLabel="공간에서 돌아가기"
+        />
         {isOperator ? (
-          <ScalePressable
+          <HeaderButton
+            variant="menu"
             onPress={() => setShowKebabSheet(true)}
-            hitSlop={12}
-            style={styles.kebabBtnOuter}
-            contentStyle={styles.kebabBtn}
-          >
-            <Feather name="more-horizontal" size={20} color={Colors.zinc600} />
-          </ScalePressable>
+            accessibilityLabel="공간 운영 메뉴 열기"
+          />
         ) : (
-          <View style={{ width: 28 }} />
+          <View style={styles.headerSideSpacer} />
         )}
       </View>
 
@@ -1860,13 +1866,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.screenPx,
     paddingVertical: 12,
   },
-  kebabBtnOuter: {
-    width: 28,
-    height: 28,
-  },
-  kebabBtn: {
-    alignItems: "center",
-    justifyContent: "center",
+  headerSideSpacer: {
+    width: Sizing.headerButtonTouchSize,
+    height: Sizing.headerButtonTouchSize,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   headerTitle: {
     ...Typography.bodySemiBold,

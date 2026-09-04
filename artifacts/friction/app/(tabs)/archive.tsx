@@ -608,6 +608,7 @@ export default function ArchiveScreen() {
           searchActive={searchActive}
           showKebab={activeSubTab === "sentence"}
           onKebabPress={enterSelectionMode}
+          kebabAccessibilityLabel="수집한 문장 선택 모드 열기"
           searchLast={activeSubTab === "sentence"}
         />
       )}
