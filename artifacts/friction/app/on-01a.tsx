@@ -110,6 +110,10 @@ import MemoToolbar, { type FormatType } from "@/components/MemoToolbar/MemoToolb
 import AddMenuPopup from "@/components/MemoToolbar/AddMenuPopup";
 import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 import HeaderButton from "@/components/shared/HeaderButton";
+import {
+  exportEditorTransitionSnapshot,
+  type EditorTransitionSnapshot,
+} from "@/lib/editorTransitionSnapshot";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
@@ -138,7 +142,7 @@ type EditorMode = "draft" | "dividing";
 
 interface PendingEditorExport {
   editorSessionId: string;
-  resolve: (markdown: string) => void;
+  resolve: (snapshot: EditorTransitionSnapshot) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -237,9 +241,12 @@ export default function WritingScreen() {
   // A non-dividing writing route is always a thought route. Decide this from
   // the URL before data arrives so a restored persisted thought can never
   // briefly autosave against the article endpoint during its first render.
-  const isThoughtMode = isLocalDirectDraft || !(
-    detailResolution.kind === "success"
-    && detailResolution.entity === "article"
+  const isThoughtMode = isLocalDirectDraft || (
+    modeParam !== "dividing"
+    && !(
+      detailResolution.kind === "success"
+      && detailResolution.entity === "article"
+    )
   );
 
   // Active article for dividing mode.
@@ -556,7 +563,7 @@ export default function WritingScreen() {
     }
   }, []);
 
-  const getEditorContent = useCallback((): Promise<string> => {
+  const requestCurrentEditorSnapshot = useCallback((): Promise<EditorTransitionSnapshot> => {
     return new Promise((resolve, reject) => {
       const doExport = () => {
         const editorSessionId = currentEditorSessionIdRef.current;
@@ -606,6 +613,18 @@ export default function WritingScreen() {
       }
     });
   }, [nextExportRequestId]);
+
+  const getEditorSnapshot = useCallback(async (): Promise<EditorTransitionSnapshot> => {
+    // A native WebView reload rejects the request that belonged to the old
+    // session. That is not an export failure: onReady rehydrates the newest RN
+    // snapshot, so wait for the replacement session and request once more.
+    return exportEditorTransitionSnapshot(requestCurrentEditorSnapshot);
+  }, [requestCurrentEditorSnapshot]);
+
+  const getEditorContent = useCallback(async (): Promise<string> => {
+    const snapshot = await getEditorSnapshot();
+    return snapshot.content;
+  }, [getEditorSnapshot]);
 
   const acceptEditorSnapshot = useCallback((payload: {
     markdown: string;
@@ -679,7 +698,10 @@ export default function WritingScreen() {
     if (pending) {
       pendingExportsRef.current.delete(payload.requestId);
       clearTimeout(pending.timer);
-      pending.resolve(persistableMarkdown);
+      pending.resolve({
+        title: payload.title ?? titleRef.current,
+        content: persistableMarkdown,
+      });
     }
   }, [acceptEditorSnapshot]);
 
@@ -1004,7 +1026,7 @@ export default function WritingScreen() {
         }, 2000);
         pendingExportsRef.current.set(requestId, {
           editorSessionId,
-          resolve: handleAutosaveExport,
+          resolve: (snapshot) => handleAutosaveExport(snapshot.content),
           reject: () => {
             markDirty(titleRef.current, contentRef.current);
             void reportAutosaveFailure();
@@ -1035,7 +1057,7 @@ export default function WritingScreen() {
         }, 2000);
         pendingExportsRef.current.set(requestId, {
           editorSessionId,
-          resolve: handleAutosaveExport,
+          resolve: (snapshot) => handleAutosaveExport(snapshot.content),
           reject: () => {
             markDirty(titleRef.current, contentRef.current);
             void reportAutosaveFailure();
@@ -1638,9 +1660,9 @@ export default function WritingScreen() {
     }
     exportPendingRef.current = false;
 
-    let latestContent: string;
+    let latestSnapshot: EditorTransitionSnapshot;
     try {
-      latestContent = await getEditorContent();
+      latestSnapshot = await getEditorSnapshot();
     } catch {
       await reportAutosaveFailure();
       isNavigatingRef.current = false;
@@ -1649,7 +1671,8 @@ export default function WritingScreen() {
       return;
     }
 
-    const latestTitle = titleRef.current;
+    const latestTitle = latestSnapshot.title;
+    const latestContent = latestSnapshot.content;
     const pendingSnapshot = pendingReverseSnapshotRef.current;
     const canRetryCommittedSnapshot =
       pendingSnapshot?.articleId === articleId &&
@@ -1801,7 +1824,7 @@ export default function WritingScreen() {
     commitAutosaveTransition,
     prepareAutosaveTransition,
     dividingArticle,
-    getEditorContent,
+    getEditorSnapshot,
     id,
     letterType,
     navigateAfterRemovingGuard,

@@ -57,6 +57,8 @@ export interface OnChangePayload {
 export interface OnExportMarkdownPayload {
   requestId: string;
   markdown?: string;
+  /** Title captured in the same editor turn as markdown. */
+  title?: string;
   isDirty: boolean;
   docVersion?: number;
   editorSessionId?: string;

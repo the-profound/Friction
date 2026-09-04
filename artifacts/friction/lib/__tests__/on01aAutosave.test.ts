@@ -94,15 +94,15 @@ describe("on-01a latest-snapshot autosave boundary", () => {
 
   it("fails a lost export instead of saving an older fallback as current", () => {
     const screen = readScreen();
-    const getEditorContent = screen.slice(
-      screen.indexOf("const getEditorContent"),
+    const exportFlow = screen.slice(
+      screen.indexOf("const requestCurrentEditorSnapshot"),
       screen.indexOf("const acceptEditorSnapshot"),
     );
 
-    expect(getEditorContent).toContain('pending.reject(new Error("Editor export timed out"))');
-    expect(getEditorContent).toContain('reject(new Error("Editor is not ready to export the latest document"))');
-    expect(getEditorContent).not.toContain("resolve(fallback)");
-    expect(getEditorContent).not.toContain("resolve(bestKnown)");
+    expect(exportFlow).toContain('pending.reject(new Error("Editor export timed out"))');
+    expect(exportFlow).toContain('reject(new Error("Editor is not ready to export the latest document"))');
+    expect(exportFlow).not.toContain("resolve(fallback)");
+    expect(exportFlow).not.toContain("resolve(bestKnown)");
   });
 
   it("turns background Markdown conversion failures into retryable save errors", () => {
@@ -129,6 +129,30 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(screen).toContain("rejectPendingExports(\"Editor reloaded before export completed\")");
     expect(screen).toContain("payload.editorSessionId !== pending.editorSessionId");
     expect(screen).toContain("onReload={handleEditorReload}");
+    expect(screen).toContain("const requestCurrentEditorSnapshot");
+    expect(screen).toContain(
+      "exportEditorTransitionSnapshot(requestCurrentEditorSnapshot)",
+    );
+  });
+
+  it("captures review title and body in the same export response", () => {
+    const screen = readScreen();
+    const editorSource = readEditorSource();
+    const editorWeb = readEditorWeb();
+    const types = readEditorTypes();
+
+    expect(types).toContain("title?: string;");
+    expect(editorSource).toContain('title: titleInput?.value ?? ""');
+    expect(editorWeb).toContain('title: titleRef.current?.value ?? ""');
+    expect(screen).toContain("pending.resolve({");
+    expect(screen).toContain("title: payload.title ?? titleRef.current");
+    expect(screen).toContain("const latestTitle = latestSnapshot.title;");
+    expect(screen).toContain("const latestContent = latestSnapshot.content;");
+  });
+
+  it("treats an explicit dividing route as an article while its query reloads", () => {
+    const screen = readScreen();
+    expect(screen).toContain('modeParam !== "dividing"');
   });
 
   it("uses the latest editor snapshot for local handoff on back and flushes other save boundaries", () => {
@@ -673,7 +697,9 @@ describe("on-01a guarded return navigation", () => {
 
     expect(screen).toContain("useRevertArticleToThought");
     expect(reverseHandler).toContain("if (isNavigatingRef.current) return;");
-    expect(reverseHandler).toContain("latestContent = await getEditorContent();");
+    expect(reverseHandler).toContain("latestSnapshot = await getEditorSnapshot();");
+    expect(reverseHandler).toContain("const latestTitle = latestSnapshot.title;");
+    expect(reverseHandler).toContain("const latestContent = latestSnapshot.content;");
     expect(reverseHandler).toContain("prepareAutosaveTransition");
     expect(reverseHandler).toContain("expectedUpdatedAt: transitionSnapshot.expectedUpdatedAt");
     expect(reverseHandler).toContain("requestId: transitionSnapshot.requestId");

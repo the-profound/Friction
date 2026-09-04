@@ -335,6 +335,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
             onExportMarkdownRef.current?.({
               requestId,
               markdown,
+              title: titleRef.current?.value ?? "",
               isDirty: false,
               editorSessionId: editorSessionIdRef.current,
             });

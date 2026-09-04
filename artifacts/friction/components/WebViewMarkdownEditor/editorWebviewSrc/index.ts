@@ -1634,7 +1634,7 @@ function spellFindRange(
           const initialMarkdown = payload.initialMarkdown || "";
           const placeholder = payload.placeholder || "여기에 메모를 작성하세요...";
           const titleValue = payload.titleValue || "";
-          const ensureTrailingParagraph = payload.ensureTrailingParagraph ?? true;
+            const ensureTrailingParagraph = cmd.ensureTrailingParagraph ?? true;
           editorSessionId = payload.editorSessionId || "";
 
           if (titleInput) {
@@ -1648,7 +1648,7 @@ function spellFindRange(
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-            const html = markdownToHtml(initialMarkdown, ensureTrailingParagraph);
+              const html = editor.getHTML();
             editor.commands.setContent(html);
           }
           // setupEditor / setContent 직후 캐시를 정합 상태로 맞춘다.
@@ -1664,7 +1664,11 @@ function spellFindRange(
         }
         case "setMarkdown": {
           if (editor && !editor.isDestroyed) {
-            const next = cmd.markdown || "";
+            const next = insertTitleSoftBreak(
+              titleInput.value,
+              titleInput.selectionStart,
+              titleInput.selectionEnd,
+            );
             const ensureTrailingParagraph = cmd.ensureTrailingParagraph ?? true;
             // 동일한 markdown 이 다시 들어오면 markdown→HTML 변환과
             // ProseMirror 전체 setContent 를 모두 생략한다 (no-op).
@@ -1683,7 +1687,7 @@ function spellFindRange(
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-            const html = markdownToHtml(next, ensureTrailingParagraph);
+              const html = editor.getHTML();
             editor.commands.setContent(html);
             if (wasFocused) {
               // 새 페이지 콘텐츠의 끝으로 커서를 옮기며 동기적으로 재포커스한다.
@@ -1745,6 +1749,7 @@ function spellFindRange(
               payload: {
                 requestId: cmd.requestId,
                 markdown,
+                  title: titleInput?.value ?? "",
                 isDirty: false,
                 docVersion: docChangeCounter,
                 editorSessionId,
@@ -1754,7 +1759,11 @@ function spellFindRange(
           break;
         }
         case "setEditable": {
-          const next = !!cmd.isEditable;
+            const next = insertTitleSoftBreak(
+              titleInput.value,
+              titleInput.selectionStart,
+              titleInput.selectionEnd,
+            );
           // 같은 값을 재전송한 경우 ProseMirror/DOM 작업을 생략한다.
           if (lastEditable !== next) {
             if (editor && !editor.isDestroyed) {
@@ -1771,13 +1780,17 @@ function spellFindRange(
         case "setOverflowRanges": {
           if (editor && !editor.isDestroyed) {
             const ranges = cmd.ranges || [];
-            const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
+              const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
             editor.view.dispatch(tr);
           }
           break;
         }
         case "setOverflowProbeConfig": {
-          const next = cmd.availableContentHeightPx;
+            const next = insertTitleSoftBreak(
+              titleInput.value,
+              titleInput.selectionStart,
+              titleInput.selectionEnd,
+            );
           const prev = overflowAvailableContentHeight;
           overflowAvailableContentHeight = (next != null && next > 0) ? next : null;
           overflowAutoSplit = !!cmd.autoSplit;
@@ -2297,7 +2310,7 @@ function spellFindRange(
 
     document.addEventListener("focusin", function (e) {
       if (!isEditorElement(e.target)) return;
-      const target = e.target as Element;
+      const target = e.target as Node;
       if (target.id === "title-input") {
         titleFocused = true;
       } else {
@@ -2308,7 +2321,7 @@ function spellFindRange(
 
     document.addEventListener("focusout", function (e) {
       if (!isEditorElement(e.target)) return;
-      const target = e.target as Element;
+      const target = e.target as Node;
       if (target.id === "title-input") {
         titleFocused = false;
       } else {
@@ -2326,21 +2339,18 @@ function spellFindRange(
         surfaceTouchSession = null;
         return;
       }
-      const t = e.touches[0];
-      surfaceTouchSession = createEditorSurfaceTouchSession(
-        t.clientX,
-        t.clientY,
-        isBlankEditorSurfaceTarget(e.target),
-      );
+      var t = e.touches[0];
+      if (t) {
+        selHandleDragStartX = t.clientX;
+        selHandleDragStartY = t.clientY;
+      }
+      selHandleDragging = false;
     }, { passive: true });
 
     document.addEventListener("touchmove", function (e) {
-      if (!surfaceTouchSession) return;
-      if (e.touches.length !== 1) {
-        surfaceTouchSession.moved = true;
-        return;
-      }
-      const t = e.touches[0];
+      if (selHandleDragging) return;
+      if (!selHandleHasActiveSelection) return;
+      var t = e.touches[0];
       updateEditorSurfaceTouchSession(surfaceTouchSession, t.clientX, t.clientY);
     }, { passive: true });
 
@@ -2369,7 +2379,7 @@ function spellFindRange(
       ) {
         return;
       }
-      const t = e.changedTouches[0];
+      var t = e.touches[0];
       if (
         !isStationaryBlankSurfaceTap(
           session,
@@ -2400,7 +2410,7 @@ function spellFindRange(
       if (!keyboardOpen) return;
       if (window.scrollY > 0) return;
       if (selHandleHasActiveSelection || selHandleDragging) return;
-      const dy = e.touches[0].clientY - swipeStartY;
+      var dy = t.clientY - selHandleDragStartY;
       if (dy > SWIPE_THRESHOLD) {
         swipeDismissed = true;
         postToRN({ type: "onSwipeDownToDismiss" });
