@@ -18,6 +18,7 @@ import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useToast } from "@/contexts/ToastContext";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface LetterOverlayMeta {
   collectionName?: string | null;
@@ -100,6 +101,7 @@ export function useLetterSelectionOverlay(
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { isLoading: authIsLoading } = useAuth();
 
   // Keep the callback ref fresh without listing it as a useCallback dep.
   const onBeforeReadRef = useRef(options?.onBeforeRead);
@@ -123,8 +125,12 @@ export function useLetterSelectionOverlay(
   const [isChangingVisibility, setIsChangingVisibility] = useState(false);
 
   // Space letters for the current user — used to show visibility badge and toggle.
+  // Guard on !authIsLoading so the request fires only after the auth token is
+  // available. Without this gate the query can fire unauthenticated, receive
+  // only PUBLIC letters (resolveCallerId returns 200 for anonymous callers),
+  // and React Query caches the empty result — preventing a re-fetch later.
   const spaceLettersQuery = useListUserSpaceLetters(userId ?? "", {
-    query: { enabled: Boolean(userId) },
+    query: { enabled: Boolean(userId) && !authIsLoading },
   });
   const updateVisibility = useUpdateSpaceLetterVisibility();
 

@@ -30,6 +30,7 @@ import {
   getListSpacesQueryKey,
   getListSendRecordsQueryKey,
   getListNeighborsQueryKey,
+  getListUserSpaceLettersQueryKey,
 } from "@workspace/api-client-react";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
@@ -121,6 +122,14 @@ export default function MyScreen() {
       }
       if (isQueryStale(queryClient, getListUserArticleReadsQueryKey({ userId }))) {
         refetchUserReads();
+      }
+      // Safety net: ensure space letters (owned by useLetterSelectionOverlay) are
+      // fresh when this tab is focused. Without this, a cached empty result from
+      // an unauthenticated early fetch would persist across navigations.
+      if (userId && isQueryStale(queryClient, getListUserSpaceLettersQueryKey(userId))) {
+        void queryClient.refetchQueries({
+          queryKey: getListUserSpaceLettersQueryKey(userId),
+        });
       }
     }, [queryClient, userId, refetchUser, refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchUserReads]),
   );
