@@ -13,6 +13,7 @@ import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEdito
 import type { InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
+export type MemoToolbarMode = "full" | "keyboardOnly";
 
 const BLOCK_LABELS: Record<string, string> = {
   paragraph: "본문",
@@ -44,6 +45,7 @@ function calcBtnW(scrollAreaWidth: number): number {
 }
 
 interface MemoToolbarProps {
+  mode?: MemoToolbarMode;
   onDismissKeyboard: () => void;
   onFormat?: (type: FormatType) => void;
   activeFormats?: Set<FormatType>;
@@ -69,6 +71,7 @@ const DEFAULT_SELECTION: OnSelectionUpdatePayload = {
 };
 
 export default function MemoToolbar({
+  mode = "full",
   onDismissKeyboard,
   onFormat,
   activeFormats,
@@ -127,21 +130,23 @@ export default function MemoToolbar({
   const isQuoteActive =
     selectionState.activeBlock === "blockquote" || activeFormats?.has("quote");
   const blockLabel = BLOCK_LABELS[selectionState.activeBlock] ?? "본문";
+  const keyboardOnly = mode === "keyboardOnly";
 
   return (
     <View style={styles.outerWrap}>
-      <View style={styles.capsule}>
+      <View style={[styles.capsule, keyboardOnly && styles.keyboardOnlyCapsule]}>
         {/* ── 스크롤 가능한 버튼 영역 ── */}
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          scrollEnabled={aaActive}
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.scrollContent}
-          style={styles.scrollArea}
-          onLayout={(e) => setScrollAreaWidth(e.nativeEvent.layout.width)}
-        >
+        {!keyboardOnly && (
+          <ScrollView
+            ref={scrollViewRef}
+            horizontal
+            scrollEnabled={aaActive}
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
+            style={styles.scrollArea}
+            onLayout={(e) => setScrollAreaWidth(e.nativeEvent.layout.width)}
+          >
           {/* 블록 타입 */}
           <ScalePressable
             style={styles.blockTypeBtn}
@@ -282,15 +287,19 @@ export default function MemoToolbar({
               <Feather name="corner-down-left" size={15} color="#3f3f46" />
             </ScalePressable>
           )}
-        </ScrollView>
+          </ScrollView>
+        )}
 
         {/* ── 구분선 + 키보드 해제 버튼 ── */}
-        <View style={styles.keyboardSeparator} />
+        {!keyboardOnly && <View style={styles.keyboardSeparator} />}
         <ScalePressable
-          style={styles.keyboardBtn}
-          contentStyle={styles.btnContent}
+          style={[styles.keyboardBtn, keyboardOnly && styles.keyboardOnlyBtn]}
+          contentStyle={[styles.btnContent, keyboardOnly && styles.keyboardOnlyBtnContent]}
           onPress={onDismissKeyboard}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="키보드 내리기"
+          testID="memo-toolbar-dismiss-keyboard"
         >
           <MaterialCommunityIcons name="keyboard-off-outline" size={20} color="#3f3f46" />
         </ScalePressable>
@@ -323,6 +332,11 @@ const styles = StyleSheet.create({
       },
       android: { elevation: 6 },
     }),
+  },
+  keyboardOnlyCapsule: {
+    alignSelf: "flex-end",
+    paddingLeft: 4,
+    paddingRight: 4,
   },
   scrollArea: {
     flex: 1,
@@ -373,6 +387,18 @@ const styles = StyleSheet.create({
   keyboardBtn: {
     width: 36,
     height: 36,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  keyboardOnlyBtn: {
+    width: 44,
+    height: 44,
+  },
+  keyboardOnlyBtnContent: {
+    width: 44,
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   btnContent: {
     width: "100%",

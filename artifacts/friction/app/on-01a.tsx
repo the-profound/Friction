@@ -256,6 +256,7 @@ export default function WritingScreen() {
   isThoughtModeRef.current = isThoughtMode;
 
   const dataLoading = !!id && !isLocalDirectDraft && detailResolution.kind === "loading";
+  const isReadingMemo = isThoughtMode && thought?.createdFrom === "reading";
 
   // Mutations
   const updateArticle = useUpdateArticle();
@@ -338,6 +339,13 @@ export default function WritingScreen() {
     const t = setTimeout(() => setKeyboardRestorePending(false), 1000);
     return () => clearTimeout(t);
   }, [keyboardRestorePending]);
+
+  useEffect(() => {
+    if (!isReadingMemo) return;
+    addMenuPendingRef.current = false;
+    setInlineMenuMode(null);
+    setKeyboardRestorePending(false);
+  }, [isReadingMemo]);
 
   // 인라인 메뉴 패널 높이: 키보드가 한 번이라도 올라왔으면 그 높이를,
   // 아직 키보드 이벤트가 없었으면 화면의 40%로 폴백한다.
@@ -2785,7 +2793,7 @@ export default function WritingScreen() {
 
         {/* ── 서식 툴바 — 키보드/인라인 패널 위 floating (read.tsx와 동일) ── */}
         {!isNavigating && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
-          (keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
+          (isReadingMemo ? keyboardVisible : keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
           <View
             style={[
               styles.memoToolbarWrap,
@@ -2794,6 +2802,7 @@ export default function WritingScreen() {
             pointerEvents="box-none"
           >
             <MemoToolbar
+              mode={isReadingMemo ? "keyboardOnly" : "full"}
               onDismissKeyboard={() => {
                 handleDismissKeyboard();
               }}
@@ -2815,7 +2824,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── [+] 팝업 메뉴 (addMenu) ── */}
-        {!isNavigating && inlineMenuMode === "addMenu" && (
+        {!isNavigating && !isReadingMemo && inlineMenuMode === "addMenu" && (
           <AddMenuPopup
             keyboardHeight={keyboardHeight}
             plusBtnCenterX={plusBtnCenterX}
@@ -2825,7 +2834,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ── */}
-        {!isNavigating && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
+        {!isNavigating && !isReadingMemo && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
           <InlineMenuPanel
             mode={inlineMenuMode}
             panelHeight={inlinePanelHeight}

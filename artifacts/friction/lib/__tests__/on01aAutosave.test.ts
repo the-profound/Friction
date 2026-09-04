@@ -42,6 +42,54 @@ const readEditorTypes = () =>
   );
 
 describe("on-01a editor hydration and initialization", () => {
+  it("shows only the keyboard dismiss action for loaded reading memos", () => {
+    const screen = readScreen();
+    const toolbar = readFileSync(
+      join(appRoot, "components/MemoToolbar/MemoToolbar.tsx"),
+      "utf8",
+    );
+
+    expect(screen).toContain(
+      'const isReadingMemo = isThoughtMode && thought?.createdFrom === "reading";',
+    );
+    expect(screen.indexOf("if ((!isLocalDirectDraft && !id) || dataLoading)")).toBeLessThan(
+      screen.indexOf("<MemoToolbar"),
+    );
+    expect(screen).toContain('mode={isReadingMemo ? "keyboardOnly" : "full"}');
+    expect(screen).toContain(
+      "(isReadingMemo ? keyboardVisible : keyboardVisible || inlineMenuMode !== null || keyboardRestorePending)",
+    );
+    expect(screen).toContain(
+      '!isNavigating && !isReadingMemo && inlineMenuMode === "addMenu"',
+    );
+    expect(screen).toContain(
+      '!isNavigating && !isReadingMemo && inlineMenuMode !== null && inlineMenuMode !== "addMenu"',
+    );
+
+    expect(toolbar).toContain('export type MemoToolbarMode = "full" | "keyboardOnly";');
+    expect(toolbar).toContain("{!keyboardOnly && (");
+    expect(toolbar).toContain("{!keyboardOnly && <View style={styles.keyboardSeparator} />}");
+    expect(toolbar).toContain('accessibilityLabel="키보드 내리기"');
+    expect(toolbar).toContain('testID="memo-toolbar-dismiss-keyboard"');
+    expect(toolbar).toContain("width: 44");
+    expect(toolbar).toContain("height: 44");
+  });
+
+  it("keeps the complete toolbar and inline menus for other thoughts and dividing", () => {
+    const screen = readScreen();
+    const toolbar = readFileSync(
+      join(appRoot, "components/MemoToolbar/MemoToolbar.tsx"),
+      "utf8",
+    );
+
+    expect(toolbar).toContain('mode = "full"');
+    expect(toolbar).toContain("onFormat?.(\"bold\")");
+    expect(toolbar).toContain("onOpenAddMenu");
+    expect(toolbar).toContain("onInsertDivider");
+    expect(toolbar).toContain("onShiftEnter");
+    expect(screen).toContain('mode={isReadingMemo ? "keyboardOnly" : "full"}');
+  });
+
   it("ignores only the export caused by unchanged server hydration", () => {
     const screen = readScreen();
     const exportHandler = screen.slice(
