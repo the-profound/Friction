@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { shouldMoveTitleFocusToBody } from "../../components/WebViewMarkdownEditor/titleKeyboardContract";
+import {
+  handleTitleEnter,
+  insertTitleSoftBreak,
+  shouldMoveTitleFocusToBody,
+} from "../../components/WebViewMarkdownEditor/titleKeyboardContract";
 import {
   createEditorSurfaceTouchSession,
   isStationaryBlankSurfaceTap,
@@ -825,6 +829,98 @@ describe("shared title keyboard contract", () => {
     ).toBe(false);
   });
 
+  it.each([
+    {
+      name: "plain Enter",
+      event: { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13 },
+      compositionActive: false,
+      handled: true,
+      title: "첫 줄",
+      activeElement: "body",
+    },
+    {
+      name: "Shift+Enter",
+      event: { key: "Enter", shiftKey: true, isComposing: false, keyCode: 13 },
+      compositionActive: false,
+      handled: false,
+      title: "첫 줄\n",
+      activeElement: "title",
+    },
+    {
+      name: "IME Enter",
+      event: { key: "Enter", shiftKey: false, isComposing: true, keyCode: 229 },
+      compositionActive: true,
+      handled: false,
+      title: "첫 줄",
+      activeElement: "title",
+    },
+  ])(
+    "applies the real key-event and focus behavior for $name",
+    ({ event, compositionActive, handled, title: expectedTitle, activeElement: expectedFocus }) => {
+      let title = "첫 줄";
+      let activeElement = "title";
+      let defaultPrevented = false;
+
+      const result = handleTitleEnter(
+        event,
+        {
+          preventDefault: () => {
+            defaultPrevented = true;
+          },
+          focusBodyStart: () => {
+            activeElement = "body";
+          },
+        },
+        compositionActive,
+      );
+
+      // Model the textarea's native default action, which is precisely what
+      // Shift+Enter must retain and plain Enter must suppress.
+      if (event.key === "Enter" && !defaultPrevented && !event.isComposing) {
+        title += "\n";
+      }
+
+      expect(result).toBe(handled);
+      expect(defaultPrevented).toBe(handled);
+      expect(title).toBe(expectedTitle);
+      expect(activeElement).toBe(expectedFocus);
+    },
+  );
+
+  it("inserts the toolbar soft break at the title selection without losing surrounding text", () => {
+    expect(insertTitleSoftBreak("앞뒤", 1, 1)).toEqual({
+      value: "앞\n뒤",
+      caret: 2,
+    });
+    expect(insertTitleSoftBreak("앞 지울 부분 뒤", 2, 7)).toEqual({
+      value: "앞 \n 뒤",
+      caret: 3,
+    });
+    expect(insertTitleSoftBreak("끝", null, null)).toEqual({
+      value: "끝\n",
+      caret: 2,
+    });
+  });
+
+  it("keeps the toolbar Shift+Enter command in a focused title on web and native", () => {
+    const editorWeb = readEditorWeb();
+    const editorSource = readEditorSource();
+    const editorBundle = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/editorHtml.ts"),
+      "utf8",
+    );
+
+    expect(editorWeb).toContain("document.activeElement === title");
+    expect(editorWeb).toContain("insertTitleSoftBreak(");
+    expect(editorWeb).toContain("onTitleChange?.(next.value)");
+    expect(editorSource).toContain("if (titleFocused && titleInput)");
+    expect(editorSource).toContain("insertTitleSoftBreak(");
+    expect(editorSource).toContain('titleInput.dispatchEvent(new Event("input", { bubbles: true }))');
+    expect(editorBundle).toContain("selectionStart");
+    expect(editorBundle).toContain("setSelectionRange");
+    expect(editorBundle).toContain('new Event("input",{bubbles:!0})');
+  });
+
   it("commits plain Enter to the body while preserving title soft breaks and IME input", () => {
     const editorWeb = readEditorWeb();
     const editorSource = readEditorSource();
@@ -834,7 +930,7 @@ describe("shared title keyboard contract", () => {
     );
 
     expect(editorWeb).toContain("const handleTitleKeyDown");
-    expect(editorWeb).toContain("shouldMoveTitleFocusToBody({");
+    expect(editorWeb).toContain("handleTitleEnter(");
     expect(editorWeb).toContain("shiftKey: e.shiftKey");
     expect(editorWeb).toContain("isComposing: e.nativeEvent.isComposing");
     expect(editorWeb).toContain("keyCode: e.nativeEvent.keyCode");
@@ -846,7 +942,7 @@ describe("shared title keyboard contract", () => {
     expect(editorSource).toContain('titleInput.addEventListener("compositionend"');
     expect(editorSource).toContain('titleInput.addEventListener("keydown", handleTitleKeydown)');
     expect(editorSource).toContain(
-      "shouldMoveTitleFocusToBody(event, titleComposing)",
+      "handleTitleEnter(",
     );
     expect(editorSource).toContain("focusEditorStartFromTitle");
 

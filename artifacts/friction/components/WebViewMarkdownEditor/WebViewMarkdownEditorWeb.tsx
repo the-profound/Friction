@@ -30,7 +30,7 @@ import {
 } from "@/lib/bodyTypographyDiagnostics";
 import { splitLeadingH1Markdown } from "@/utils/leadingH1";
 import { normalizePageDividersForMarkdownParser } from "@/lib/pageDividerMarkdown";
-import { shouldMoveTitleFocusToBody } from "./titleKeyboardContract";
+import { handleTitleEnter, insertTitleSoftBreak } from "./titleKeyboardContract";
 import { createHeadingWithParagraphShortcut } from "./headingKeyboardShortcuts";
 import {
   createEditorSurfaceTouchSession,
@@ -454,6 +454,20 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         }
       },
       insertHardBreak() {
+        const title = titleRef.current;
+        if (title && document.activeElement === title) {
+          const next = insertTitleSoftBreak(
+            title.value,
+            title.selectionStart,
+            title.selectionEnd,
+          );
+          title.value = next.value;
+          title.setSelectionRange(next.caret, next.caret);
+          onTitleChange?.(next.value);
+          title.style.height = "auto";
+          title.style.height = title.scrollHeight + "px";
+          return;
+        }
         if (editor && !editor.isDestroyed) {
           editor.chain().focus().setHardBreak().run();
         }
@@ -493,22 +507,23 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         // Let the IME finish its composition. Some browsers report Enter as
         // keyCode 229 even when isComposing has already been cleared.
-        if (!shouldMoveTitleFocusToBody({
-          key: e.key,
-          shiftKey: e.shiftKey,
-          isComposing: e.nativeEvent.isComposing,
-          keyCode: e.nativeEvent.keyCode,
-        })) {
-          return;
-        }
-
-        // Shift+Enter intentionally keeps the textarea's native soft-break
-        // behavior. A plain Enter commits the title and starts the body.
-        e.preventDefault();
-        titleRef.current?.blur();
-        if (editor && !editor.isDestroyed) {
-          editor.commands.focus("start", { scrollIntoView: false });
-        }
+        handleTitleEnter(
+          {
+            key: e.key,
+            shiftKey: e.shiftKey,
+            isComposing: e.nativeEvent.isComposing,
+            keyCode: e.nativeEvent.keyCode,
+          },
+          {
+            preventDefault: () => e.preventDefault(),
+            focusBodyStart: () => {
+              titleRef.current?.blur();
+              if (editor && !editor.isDestroyed) {
+                editor.commands.focus("start", { scrollIntoView: false });
+              }
+            },
+          },
+        );
       },
       [editor],
     );

@@ -20,7 +20,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
-import { shouldMoveTitleFocusToBody } from "../titleKeyboardContract";
+import { handleTitleEnter, insertTitleSoftBreak } from "../titleKeyboardContract";
 import { createHeadingWithParagraphShortcut } from "../headingKeyboardShortcuts";
 import {
   createEditorSurfaceTouchSession,
@@ -1387,14 +1387,14 @@ function spellFindRange(
   }
 
   function handleTitleKeydown(event: KeyboardEvent) {
-    if (!shouldMoveTitleFocusToBody(event, titleComposing)) {
-      return;
-    }
-
-    // Shift+Enter intentionally uses the textarea's native soft-break
-    // behavior. A plain Enter commits the title and starts the body.
-    event.preventDefault();
-    focusEditorStartFromTitle();
+    handleTitleEnter(
+      event,
+      {
+        preventDefault: () => event.preventDefault(),
+        focusBodyStart: focusEditorStartFromTitle,
+      },
+      titleComposing,
+    );
   }
 
   function getSelectionPayload(ed: Editor) {
@@ -1909,6 +1909,17 @@ function spellFindRange(
           break;
         }
         case "insertHardBreak": {
+          if (titleFocused && titleInput) {
+            const next = insertTitleSoftBreak(
+              titleInput.value,
+              titleInput.selectionStart,
+              titleInput.selectionEnd,
+            );
+            titleInput.value = next.value;
+            titleInput.setSelectionRange(next.caret, next.caret);
+            titleInput.dispatchEvent(new Event("input", { bubbles: true }));
+            break;
+          }
           if (editor && !editor.isDestroyed) {
             editor.chain().focus().setHardBreak().run();
           }
