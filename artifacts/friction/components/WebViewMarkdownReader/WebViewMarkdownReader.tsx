@@ -16,6 +16,8 @@ import {
   logBodyTypographyDiagnostic,
 } from "@/lib/bodyTypographyDiagnostics";
 import {
+  BODY_FALLBACK_REGULAR_FONT_FAMILY,
+  BODY_FALLBACK_SEMIBOLD_FONT_FAMILY,
   isVerifiedBodyFontReadyStatus,
   type BodyFontReadyStatus,
 } from "@/components/shared/bodyTypographyFonts";
@@ -137,8 +139,8 @@ export default function WebViewMarkdownReader({
           bridge.markReady();
           if (getNativeBodyFontMode() === "fallback") {
             bridge.injectRaw(
-              `document.documentElement.style.setProperty("--body-regular-font-family","serif");` +
-              `document.documentElement.style.setProperty("--body-semibold-font-family","serif");true;`,
+              `document.documentElement.style.setProperty("--body-regular-font-family",${JSON.stringify(BODY_FALLBACK_REGULAR_FONT_FAMILY)});` +
+              `document.documentElement.style.setProperty("--body-semibold-font-family",${JSON.stringify(BODY_FALLBACK_SEMIBOLD_FONT_FAMILY)});true;`,
             );
           }
           prevHtmlRef.current = htmlRef.current;
@@ -208,8 +210,8 @@ export default function WebViewMarkdownReader({
   useEffect(() => subscribeNativeBodyFontMode((mode) => {
     if (mode !== "fallback" || !bridge.isReady()) return;
     bridge.injectRaw(
-      `document.documentElement.style.setProperty("--body-regular-font-family","serif");` +
-      `document.documentElement.style.setProperty("--body-semibold-font-family","serif");true;`,
+      `document.documentElement.style.setProperty("--body-regular-font-family",${JSON.stringify(BODY_FALLBACK_REGULAR_FONT_FAMILY)});` +
+      `document.documentElement.style.setProperty("--body-semibold-font-family",${JSON.stringify(BODY_FALLBACK_SEMIBOLD_FONT_FAMILY)});true;`,
     );
   }), [bridge]);
 

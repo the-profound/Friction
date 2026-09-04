@@ -24,4 +24,5 @@ whose glyph has no outline. Sanitize those mappings in WebView assets and verify
 both a primary glyph and a fallback-only glyph by comparing non-empty canvas
 rasters for every weight. Native consumers should accept custom mode only when
 the complete face-load and glyph-selection result is explicitly verified;
-otherwise switch the shared session-sticky mode to system serif.
+otherwise switch the shared session-sticky mode to the bundled Noto Serif KR
+faces, never a platform generic serif.

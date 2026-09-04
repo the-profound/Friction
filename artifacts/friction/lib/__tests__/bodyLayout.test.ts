@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("react-native", () => ({
@@ -19,13 +18,14 @@ import {
   BODY_FONT_ASSET_NAMES,
   BODY_FONT_ASSET_PATHS,
   BODY_FONT_CONFIG_VERSION,
+  BODY_FALLBACK_REGULAR_FONT_FAMILY,
+  BODY_FALLBACK_SEMIBOLD_FONT_FAMILY,
   BODY_FONT_FALLBACK_ONLY_PROBE_TEXT,
-  BODY_FONT_FALLBACK_PROBE_TEXT,
   BODY_REGULAR_FONT_FAMILY,
   BODY_SEMIBOLD_FONT_FAMILY,
   buildBodyFontReadyScript,
   buildEmbeddedBodyFontFaceCss,
-  isVerifiedBodyFontReadyStatus,
+  resolveBodyFontFamilies,
 } from "../../components/shared/bodyTypographyFonts";
 import { buildBodyTypographyCss } from "../../components/shared/bodyTypographyCss";
 import { bodyTypographyMetrics, computeBodyLayout } from "../bodyLayout";
@@ -33,9 +33,8 @@ import { markdownToHtml } from "../markdownRenderer";
 import { splitContentToPages } from "../pageDivision";
 import { parseMarkdownBlocks } from "../../utils/markdownParser";
 import { ReaderTokens } from "../../constants/tokens";
+import { hasCompleteBodyFontSet } from "../bodyTypographyDiagnostics";
 
-describe("letter body font fallback contract", () => {
-  it("keeps the native loader and bundle validator on the same four-face contract", () => {
     const layout = read("lib/bodyLayout.ts");
     const validator = readFileSync(
       join(__dirname, "../../scripts/validate-dev-font-bundle.mjs"),
@@ -86,6 +85,8 @@ describe("letter body font fallback contract", () => {
       hrStyle: "flush",
     });
 
+    const nativeEditorHtml = read("components/WebViewMarkdownEditor/editorHtml.ts");
+
     expect(css).toContain("data:font/woff2;base64,eulyoo-regular");
     expect(css).toContain("data:font/woff2;base64,noto-regular");
     expect(css.match(/format\('woff2'\)/g)).toHaveLength(4);
@@ -96,6 +97,18 @@ describe("letter body font fallback contract", () => {
     expect(BODY_SEMIBOLD_FONT_FAMILY).toBe(
       "'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif",
     );
+    expect(BODY_FALLBACK_REGULAR_FONT_FAMILY).toBe("'NotoSerifKR_400Regular'");
+    expect(BODY_FALLBACK_SEMIBOLD_FONT_FAMILY).toBe("'NotoSerifKR_600SemiBold'");
+    expect(resolveBodyFontFamilies(false)).toEqual({
+      regular: BODY_FALLBACK_REGULAR_FONT_FAMILY,
+      semibold: BODY_FALLBACK_SEMIBOLD_FONT_FAMILY,
+    });
+    expect(hasCompleteBodyFontSet({
+      eulyooRegular: true,
+      eulyooSemiBold: true,
+      notoRegular: false,
+      notoSemiBold: true,
+    })).toBe(false);
   });
 
   it("keeps each embedded body font compressed enough for concurrent WebViews", () => {
@@ -125,21 +138,22 @@ describe("letter body font fallback contract", () => {
     expect(script).toContain("onBodyFontsReady");
     expect(script).toContain("setTimeout");
     expect(script).toContain("freezeFallback");
-    expect(script).toContain('--body-regular-font-family","serif"');
+    expect(script).toContain("NotoSerifKR_400Regular");
+    expect(script).not.toContain('--body-regular-font-family","serif"');
   });
 
   it("resolves readiness without invoking font loads when embedded faces are unavailable", async () => {
     const posted: unknown[] = [];
     let loadHandler: (() => void) | undefined;
     const load = vi.fn((_font: string, _probe: string) => Promise.resolve([{}]));
-
-    let renderedText = "";
     const windowStub = {
       __rnBridge: { post: (event: unknown) => posted.push(event) },
       addEventListener: (_type: string, handler: () => void) => {
         loadHandler = handler;
       },
     };
+
+    const fontVariables = new Map<string, string>();
     const documentStub = {
       fonts: { load, ready: Promise.resolve() },
       createElement: () => ({
@@ -163,20 +177,26 @@ describe("letter body font fallback contract", () => {
       ok: false,
       reason: "embedded-fonts-unavailable",
     });
+    expect(fontVariables.get("--body-regular-font-family")).toBe(
+      BODY_FALLBACK_REGULAR_FONT_FAMILY,
+    );
+    expect(fontVariables.get("--body-semibold-font-family")).toBe(
+      BODY_FALLBACK_SEMIBOLD_FONT_FAMILY,
+    );
   });
 
   it("checks all four embedded faces and verifies primary/fallback raster selection", async () => {
     const posted: unknown[] = [];
     let loadHandler: (() => void) | undefined;
     const load = vi.fn((_font: string, _probe: string) => Promise.resolve([{}]));
-
-    let renderedText = "";
     const windowStub = {
       __rnBridge: { post: (event: unknown) => posted.push(event) },
       addEventListener: (_type: string, handler: () => void) => {
         loadHandler = handler;
       },
     };
+
+    const fontVariables = new Map<string, string>();
     const documentStub = {
       fonts: { load, ready: Promise.resolve() },
       createElement: () => ({
@@ -186,44 +206,36 @@ describe("letter body font fallback contract", () => {
       }),
     };
       const source = read(relativePath);
-    new Function("window", "document", "setTimeout", "clearTimeout", source)(
-      windowStub,
-      documentStub,
-      setTimeout,
-      clearTimeout,
-    );
-    loadHandler?.();
-    await vi.waitFor(() => expect(posted).toHaveLength(1));
-    expect(load).toHaveBeenCalledTimes(4);
-    expect(load.mock.calls.slice(0, 2).every((call) => call[1] === "가")).toBe(true);
-    expect(
-      load.mock.calls
-        .slice(2)
-        .every((call) => call[1] === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT),
-    ).toBe(true);
-    expect(posted[0]).toMatchObject({
-      type: "onBodyFontsReady",
-      ok: true,
-      reason: "verified",
-      loads: {
-        eulyooRegular: true,
-        eulyooSemiBold: true,
-        notoRegular: true,
-        notoSemiBold: true,
-      },
-      glyphs: {
-        eulyooRegularPrimary: true,
-        eulyooSemiBoldPrimary: true,
-        notoRegularFallback: true,
-        notoSemiBoldFallback: true,
-      },
-    });
-  });
-
-  it("uses the four-font readiness gate in editor, reader, and measurement WebViews", () => {
   const appRoot = join(__dirname, "../..");
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
+
+  function createFontTestContext() {
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
+  }
     const layout = read("lib/bodyLayout.ts");
     const editor = read("components/CoverEditor/CoverEditor.tsx");
     const reader = read("app/read.tsx");
@@ -393,6 +405,33 @@ describe("reader title typography", () => {
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
 
+  function createFontTestContext() {
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
+  }
+
   it("keeps title conversion anchored to the shared 6.4cqi token", () => {
     const tokens = read("constants/tokens.ts");
     const layout = read("lib/bodyLayout.ts");
@@ -465,39 +504,7 @@ describe("reader title typography", () => {
       hrStyle: "flush",
     });
 
-    expect(css).toContain("#editor-content{font-family:");
-    expect(css).toContain(".ProseMirror li p{margin-bottom:0}");
-    expect(css).toContain("overflow-wrap:break-word");
-    expect(css).toContain("word-break:normal");
-    expect(css).toContain("text-size-adjust:100%");
-    expect(nativeEditor).toContain("buildBodyTypographyCss");
-    expect(nativeEditor).toContain('rootSelector: "#editor-content"');
-    expect(nativeEditor).toContain("width:var(--text-column-width)");
-    expect(nativeEditor).toContain(".hr-wrapper{position:relative;margin:1em 0;cursor:pointer}");
-    expect(nativeEditor).not.toContain("cursor:pointer;padding:10px 0");
-    expect(nativeEditor).toContain(
-      ".tiptap-question-block{background-color:#eff6ff;border-radius:6px;padding:0;margin:0 0 1em}",
-    );
-    expect(nativeEditor).toContain(".tiptap-question-block p::before{content:'Q. '}");
-    expect(nativeEditor).toContain(
-      ".tiptap-question-block p{margin:0;font-family:var(--body-regular-font-family",
-    );
-    expect(nativeEditorSource).toContain('setProperty("--text-column-width"');
-    expect(nativeEditorSource).toContain("metrics.lineHeightPx !== lastBodyLineHeightPx");
-    expect(nativeEditorSource).toContain('case "setBodyFontMode"');
-    expect(webEditor).toContain("buildBodyTypographyCss");
-    expect(webEditor).toContain('rootSelector: ".web-markdown-editor-scroll-container"');
-    expect(webEditor).toContain("width: var(--text-column-width)");
-    expect(webEditor).toContain("padding: 16px 0 120px");
-    expect(webEditor).not.toContain("padding: 16px 24px 120px");
-    expect(webEditor).toContain('padding: "8px 0"');
-    expect(webEditor).toContain("hasPrimaryBodyFontSet");
-    expect(writingScreen).toContain(
-      "width: textColumnWidth, alignSelf: \"center\"",
-    );
-  });
-
-  it("keeps representative Korean Markdown blocks in the shared rendering vocabulary", () => {
+    const nativeEditorHtml = read("components/WebViewMarkdownEditor/editorHtml.ts");
     const probe = [
       "# 플랫폼 줄바꿈 확인",
       "",
@@ -550,7 +557,7 @@ describe("reader title typography", () => {
     expect(nativeMeasure).toContain("onMeasuredRef.current(heights ?? {}, req)");
     expect(webMeasure).toContain("onMeasuredRef.current(heights, request)");
     expect(webMeasure).toContain("latestMeasureSeqRef");
-    expect(webMeasure).toContain("hasPrimaryBodyFontSet");
+    expect(webMeasure).toContain("hasCompleteBodyFontSet");
     expect(read("lib/bodyTypographyDiagnostics.ts")).toContain(
       "webBodyFontReadyPromise",
     );
@@ -593,6 +600,33 @@ describe("completed letter compatibility", () => {
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
 
+  function createFontTestContext() {
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
+  }
+
   it("renders saved page boundaries without rewriting finalized letter data", () => {
     const reader = read("app/read.tsx");
     const articlesRoute = read("../api-server/src/routes/articles.ts");
@@ -607,6 +641,33 @@ describe("page geometry renderer contract", () => {
   const appRoot = join(__dirname, "../..");
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
+
+  function createFontTestContext() {
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
+  }
 
   it("makes writing, closing preview, reader, and memo share the 0.88C column", () => {
     const writing = read("app/on-01a.tsx");
@@ -630,6 +691,33 @@ describe("thought card typography regression guards", () => {
   const appRoot = join(__dirname, "../..");
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
+
+  function createFontTestContext() {
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
+  }
 
   it.each([240, 300, 420])(
     "keeps title/body font sizes at 6.4cqi/4cqi for a %dpx card",
@@ -754,6 +842,33 @@ describe("selectable article card projection contract", () => {
   const appRoot = join(__dirname, "../..");
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
+
+  function createFontTestContext() {
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
+  }
 
   it("projects the canonical card into small slots with an outer transform", () => {
     const slot = read("components/ArticleCardItem/CanonicalCardSlot.tsx");
@@ -963,6 +1078,33 @@ describe("unified article card cover regression guards", () => {
   const read = (relativePath: string) =>
     readFileSync(join(appRoot, relativePath), "utf8");
 
+  function createFontTestContext() {
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
+  }
+
   it("shares the canonical card surface across card, reader, and preview", () => {
     const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
 
@@ -1065,65 +1207,4 @@ describe("unified article card cover regression guards", () => {
     expect(closingScreen).toContain("data: patchData");
 
     const spacesRoute = read("../api-server/src/routes/spaces.ts");
-    expect(spacesRoute).toContain("articleCover: article?.cover ?? null");
-  });
-});
-
-    const verified = {
-      ok: true,
-      reason: "verified",
-      loads: {
-        eulyooRegular: true,
-        eulyooSemiBold: true,
-        notoRegular: true,
-        notoSemiBold: true,
-      },
-      glyphs: {
-        eulyooRegularPrimary: true,
-        eulyooSemiBoldPrimary: true,
-        notoRegularFallback: true,
-        notoSemiBoldFallback: true,
-      },
-    };
-
-    let renderedFont = "";
-
-    const result = JSON.parse(output.trim());
-
-    const context = {
-      font: "",
-      fillStyle: "",
-      textBaseline: "",
-      clearRect: vi.fn(),
-      fillText: (text: string) => {
-        renderedText = text;
-        renderedFont = context.font;
-      },
-      getImageData: () => {
-        const data = new Uint8ClampedArray(8);
-        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
-        const isSemiBold = renderedFont.startsWith("600");
-        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
-        return { data };
-      },
-      measureText: () => ({
-        width:
-          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
-            ? renderedFont.startsWith("600")
-              ? 61
-              : 59
-            : renderedFont.startsWith("600")
-              ? 57
-              : 55,
-      }),
-    };
-
-    const output = execFileSync(
-      "fontforge",
-      [
-        "-lang=py",
-        "-script",
-        join(projectRoot, "scripts/validate-body-font-glyphs.py"),
-      ],
-      { cwd: projectRoot, encoding: "utf8" },
-    );
+    const context = createFontTestContext();

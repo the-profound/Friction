@@ -2,13 +2,32 @@ export const BODY_REGULAR_FONT_FAMILY =
   "'Eulyoo1945-Regular','NotoSerifKR_400Regular',serif";
 export const BODY_SEMIBOLD_FONT_FAMILY =
   "'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif";
+export const BODY_FALLBACK_REGULAR_FONT_FAMILY =
+  "'NotoSerifKR_400Regular'";
+export const BODY_FALLBACK_SEMIBOLD_FONT_FAMILY =
+  "'NotoSerifKR_600SemiBold'";
+
+export function resolveBodyFontFamilies(primaryReady: boolean): {
+  regular: string;
+  semibold: string;
+} {
+  return primaryReady
+    ? {
+        regular: BODY_REGULAR_FONT_FAMILY,
+        semibold: BODY_SEMIBOLD_FONT_FAMILY,
+      }
+    : {
+        regular: BODY_FALLBACK_REGULAR_FONT_FAMILY,
+        semibold: BODY_FALLBACK_SEMIBOLD_FONT_FAMILY,
+      };
+}
 
 /**
  * Bump this whenever the embedded body-font files, formats, or family order
  * changes. The editor config version includes it so a font-metric change never
  * reuses initialization state produced by an older typography contract.
  */
-export const BODY_FONT_CONFIG_VERSION = "eulyoo1945-sanitized-noto-serif-kr-woff2-v3";
+export const BODY_FONT_CONFIG_VERSION = "eulyoo1945-sanitized-noto-serif-kr-woff2-v4";
 export const BODY_FONT_PRIMARY_PROBE_TEXT = "가";
 export const BODY_FONT_FALLBACK_ONLY_PROBE_TEXT = "잓";
 export const BODY_FONT_FALLBACK_PROBE_TEXT = "가잓";
@@ -106,11 +125,14 @@ export function buildBodyFontReadyScript(hasEmbeddedFonts: boolean): string {
   const primaryProbe = JSON.stringify(BODY_FONT_PRIMARY_PROBE_TEXT);
   const fallbackProbe = JSON.stringify(BODY_FONT_FALLBACK_ONLY_PROBE_TEXT);
 
+  const fallbackRegular = JSON.stringify(BODY_FALLBACK_REGULAR_FONT_FAMILY);
+  const fallbackSemibold = JSON.stringify(BODY_FALLBACK_SEMIBOLD_FONT_FAMILY);
+
   return `<script>(function(){
 var settled=false;
 var emptyLoads={eulyooRegular:false,eulyooSemiBold:false,notoRegular:false,notoSemiBold:false};
 var emptyGlyphs={eulyooRegularPrimary:false,eulyooSemiBoldPrimary:false,notoRegularFallback:false,notoSemiBoldFallback:false};
-function freezeFallback(){var s=document.documentElement&&document.documentElement.style;if(!s)return;s.setProperty("--body-regular-font-family","serif");s.setProperty("--body-semibold-font-family","serif");}
+function freezeFallback(){var s=document.documentElement&&document.documentElement.style;if(!s)return;s.setProperty("--body-regular-font-family",${fallbackRegular});s.setProperty("--body-semibold-font-family",${fallbackSemibold});}
 function failure(reason,loads,glyphs){return{ok:false,reason:reason,loads:loads||emptyLoads,glyphs:glyphs||emptyGlyphs};}
 function done(status){if(settled)return;settled=true;if(!status.ok)freezeFallback();window.__bodyFontsReady=Promise.resolve(status);window.__rnBridge.post({type:"onBodyFontsReady",ok:status.ok,reason:status.reason,loads:status.loads,glyphs:status.glyphs});}
 function loadFace(fonts,loads,key,shorthand,text){return fonts.load(shorthand,text).then(function(faces){loads[key]=!!(faces&&faces.length);return loads[key];});}

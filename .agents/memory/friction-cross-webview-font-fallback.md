@@ -10,6 +10,10 @@ Measurement request identity must include that mode, including imperative
 auto-division requests, so a result from the previous font mode cannot resolve
 after the mode changes.
 
+Fallback mode means the bundled Noto Serif KR regular/semibold faces. Do not
+set a generic `serif`: iOS, Android, and browsers resolve that family
+differently and reintroduce platform-specific line boundaries.
+
 **Why:** Independent WebView timers can straddle the timeout: one document may
 finish with the custom face while another freezes a system fallback. Equal
 numeric font size and width do not make those two layouts equivalent.

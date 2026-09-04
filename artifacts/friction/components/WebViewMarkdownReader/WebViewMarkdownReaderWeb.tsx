@@ -5,10 +5,10 @@ import { markdownToHtml } from "@/lib/markdownRenderer";
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import {
   BODY_REGULAR_FONT_FAMILY,
-  BODY_SEMIBOLD_FONT_FAMILY,
+  resolveBodyFontFamilies,
 } from "@/components/shared/bodyTypographyFonts";
 import {
-  hasPrimaryBodyFontSet,
+  hasCompleteBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -86,7 +86,9 @@ export default function WebViewMarkdownReaderWeb({
     onTextSelectRef.current?.("", true);
   }, [clearSelectionSignal]);
 
-  const contentStyle: React.CSSProperties = useMemo(() => ({
+  const contentStyle: React.CSSProperties = useMemo(() => {
+    const families = resolveBodyFontFamilies(hasCompleteBodyFontSet(fontStatus));
+    return {
     width: typography.textColumnWidth,
     fontFamily: `var(--body-regular-font-family, ${BODY_REGULAR_FONT_FAMILY})`,
     fontSize: typography.fontSizePx,
@@ -97,22 +99,19 @@ export default function WebViewMarkdownReaderWeb({
     "--body-paragraph-gap": `${typography.paragraphGapPx}px`,
     "--body-letter-spacing": `${typography.letterSpacingPx}px`,
     "--title-font-size": `${typography.titleFontSizePx}px`,
-    "--body-regular-font-family": hasPrimaryBodyFontSet(fontStatus)
-      ? BODY_REGULAR_FONT_FAMILY
-      : "serif",
-    "--body-semibold-font-family": hasPrimaryBodyFontSet(fontStatus)
-      ? BODY_SEMIBOLD_FONT_FAMILY
-      : "serif",
+    "--body-regular-font-family": families.regular,
+    "--body-semibold-font-family": families.semibold,
     color: "#1A1A1A",
     textAlign: "justify" as const,
-    overflowWrap: "break-word" as const,
+    overflowWrap: "anywhere" as const,
     wordWrap: "break-word" as const,
     wordBreak: "normal" as const,
     hyphens: "auto",
     WebkitHyphens: "auto",
     userSelect: "text" as const,
     WebkitUserSelect: "text" as const,
-  }), [fontStatus, typography]);
+    };
+  }, [fontStatus, typography]);
 
   return (
     <div style={{ ...wrapperStyle, visibility: fontsReady ? "visible" : "hidden" }}>

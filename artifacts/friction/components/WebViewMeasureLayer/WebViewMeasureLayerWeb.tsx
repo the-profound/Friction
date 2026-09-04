@@ -12,10 +12,10 @@ import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
 import {
   BODY_REGULAR_FONT_FAMILY,
-  BODY_SEMIBOLD_FONT_FAMILY,
+  resolveBodyFontFamilies,
 } from "@/components/shared/bodyTypographyFonts";
 import {
-  hasPrimaryBodyFontSet,
+  hasCompleteBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -50,6 +50,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
   const [fontsReady, setFontsReady] = useState(false);
   const fontStatusRef = useRef<BodyFontLoadStatus | null>(null);
   const latestMeasureSeqRef = useRef(0);
+  const families = resolveBodyFontFamilies(hasCompleteBodyFontSet(fontStatusRef.current));
   useEffect(() => {
     let active = true;
     waitForWebBodyFonts().then((status) => {
@@ -134,16 +135,12 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
         style={{
           ...CONTAINER_STYLE,
           fontFamily: `var(--body-regular-font-family, ${BODY_REGULAR_FONT_FAMILY})`,
-          "--body-regular-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
-            ? BODY_REGULAR_FONT_FAMILY
-            : "serif",
-          "--body-semibold-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
-            ? BODY_SEMIBOLD_FONT_FAMILY
-            : "serif",
+          "--body-regular-font-family": families.regular,
+          "--body-semibold-font-family": families.semibold,
           textSizeAdjust: "100%",
           WebkitTextSizeAdjust: "100%",
           color: "#1A1A1A",
-          overflowWrap: "break-word" as const,
+          overflowWrap: "anywhere" as const,
           wordWrap: "break-word" as const,
           textAlign: "justify" as const,
         } as React.CSSProperties}

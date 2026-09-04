@@ -1830,8 +1830,8 @@ function spellFindRange(
         case "setBodyFontMode": {
           if (cmd.mode !== "fallback") break;
           const root = document.documentElement;
-          root.style.setProperty("--body-regular-font-family", "serif");
-          root.style.setProperty("--body-semibold-font-family", "serif");
+          root.style.setProperty("--body-regular-font-family", BODY_FALLBACK_REGULAR_FONT_FAMILY);
+          root.style.setProperty("--body-semibold-font-family", BODY_FALLBACK_SEMIBOLD_FONT_FAMILY);
           scheduleOverflowProbe(50);
           break;
         }

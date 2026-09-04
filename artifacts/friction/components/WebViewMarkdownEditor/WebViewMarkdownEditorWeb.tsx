@@ -15,6 +15,7 @@ import { PixelRatio } from "react-native";
 import {
   BODY_REGULAR_FONT_FAMILY,
   BODY_SEMIBOLD_FONT_FAMILY,
+  resolveBodyFontFamilies,
 } from "@/components/shared/bodyTypographyFonts";
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
 import type {
@@ -23,7 +24,7 @@ import type {
   OnChangePayload,
 } from "./types";
 import {
-  hasPrimaryBodyFontSet,
+  hasCompleteBodyFontSet,
   logWebBodyTypographyDiagnostic,
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
@@ -528,7 +529,8 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       [editor],
     );
 
-    return (
+      const families = resolveBodyFontFamilies(hasCompleteBodyFontSet(fontStatusRef.current));
+      return (
       <div
         ref={containerRef}
         className="web-markdown-editor-scroll-container"
@@ -542,12 +544,8 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           lineHeight: `${typography.lineHeightPx}px`,
           letterSpacing: typography.letterSpacingPx,
           "--text-column-width": `${typography.textColumnWidth}px`,
-          "--body-regular-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
-            ? BODY_REGULAR_FONT_FAMILY
-            : "serif",
-          "--body-semibold-font-family": hasPrimaryBodyFontSet(fontStatusRef.current)
-            ? BODY_SEMIBOLD_FONT_FAMILY
-            : "serif",
+          "--body-regular-font-family": families.regular,
+          "--body-semibold-font-family": families.semibold,
           "--body-font-size": `${typography.fontSizePx}px`,
           "--body-line-height": `${typography.lineHeightPx}px`,
           "--body-paragraph-gap": `${typography.paragraphGapPx}px`,
