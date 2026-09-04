@@ -5,10 +5,11 @@ import type { Neighbor, NeighborRequest } from "@workspace/db";
 import { CreateUserBody, UpdateUserBody, UpdateUserRecentCollectionBody } from "@workspace/api-zod";
 import { requireAuth, resolveCallerId } from "../middlewares/requireAuth";
 import { logger } from "../lib/logger";
+import { ensureImpressionCollectionInTransaction } from "../lib/impressionCollection";
 
 const router: IRouter = Router();
 
-type UserSyncDatabase = Pick<typeof db, "insert" | "select">;
+type UserSyncDatabase = Pick<typeof db, "transaction">;
 type UserSyncLogger = Pick<typeof logger, "info" | "warn" | "error">;
 
 interface UserSyncDependencies {
@@ -81,18 +82,23 @@ export function createUserSyncHandler({
     const resolvedNickname = trimmedNickname ?? deriveNicknameFromEmail(email);
 
     try {
-      const [user] = await database
-        .insert(usersTable)
-        .values({ id, email, nickname: resolvedNickname })
-        .onConflictDoUpdate({
-          target: usersTable.id,
-          // Preserve the existing nickname; only refresh email + updatedAt. If
-          // the caller explicitly provided a nickname we honor it.
-          set: trimmedNickname
-            ? { email, nickname: trimmedNickname, updatedAt: new Date() }
-            : { email, updatedAt: new Date() },
-        })
-        .returning();
+      const user = await database.transaction(async (tx) => {
+        const [persistedUser] = await tx
+          .insert(usersTable)
+          .values({ id, email, nickname: resolvedNickname })
+          .onConflictDoUpdate({
+            target: usersTable.id,
+            // Preserve the existing nickname; only refresh email + updatedAt. If
+            // the caller explicitly provided a nickname we honor it.
+            set: trimmedNickname
+              ? { email, nickname: trimmedNickname, updatedAt: new Date() }
+              : { email, updatedAt: new Date() },
+          })
+          .returning();
+
+        await ensureImpressionCollectionInTransaction(id, tx);
+        return persistedUser;
+      });
 
       log.info({ flowId, outcome: "profile-persisted" }, "users/sync completed");
       res.json({ user, ...(flowId ? { diagnosticId: flowId } : {}) });

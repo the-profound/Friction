@@ -21,14 +21,20 @@ const userId = "11111111-1111-4111-8111-111111111111";
 const email = "signup-contract@example.test";
 
 function createDatabase(result: () => Promise<unknown>) {
-  return {
-    insert: vi.fn(() => ({
-      values: vi.fn(() => ({
-        onConflictDoUpdate: vi.fn(() => ({
-          returning: vi.fn(result),
-        })),
+  const execute = vi.fn(() => Promise.resolve());
+  const insert = vi.fn(() => ({
+    values: vi.fn(() => ({
+      onConflictDoUpdate: vi.fn(() => ({
+        returning: vi.fn(result),
       })),
     })),
+  }));
+  return {
+    execute,
+    insert,
+    transaction: vi.fn(async (
+      callback: (tx: { execute: typeof execute; insert: typeof insert }) => Promise<unknown>,
+    ) => callback({ execute, insert })),
   };
 }
 
@@ -97,6 +103,7 @@ describe("POST /api/users/sync contract", () => {
       });
     });
     expect(database.insert).toHaveBeenCalledOnce();
+    expect(database.transaction).toHaveBeenCalledOnce();
   });
 
   it("distinguishes invalid tokens and delayed authentication services", async () => {
@@ -195,6 +202,7 @@ describe("POST /api/users/sync contract", () => {
       });
     });
     expect(database.insert).not.toHaveBeenCalled();
+    expect(database.transaction).not.toHaveBeenCalled();
   });
 
   it("returns stable conflict and database-unavailable codes without database details", async () => {
@@ -216,6 +224,30 @@ describe("POST /api/users/sync contract", () => {
         expect(JSON.stringify(body)).not.toContain("connection refused");
       });
     }
+  });
+
+  it("fails the atomic sync when impression-folder repair fails", async () => {
+    const database = createDatabase(
+      () => Promise.resolve([{ id: userId, email, nickname: "contract" }]),
+    );
+    database.execute.mockRejectedValueOnce(new Error("repair unavailable"));
+    const handler = [
+      createRequireAuth({ getUser: authenticatedUser() }),
+      createUserSyncHandler({ database: database as never, log: silentLogger }),
+    ];
+
+    await withServer(handler as unknown as RequestHandler, async (baseUrl) => {
+      const response = await syncRequest(baseUrl);
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        code: "SYNC_DATABASE_UNAVAILABLE",
+        diagnosticId: flowId,
+      });
+      expect(JSON.stringify(body)).not.toContain("repair unavailable");
+    });
+    expect(database.transaction).toHaveBeenCalledOnce();
+    expect(database.insert).toHaveBeenCalledOnce();
   });
 });
 

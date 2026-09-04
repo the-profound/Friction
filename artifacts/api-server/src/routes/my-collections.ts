@@ -34,14 +34,20 @@ const articleCollectionIdSubquery = sql<string | null>`(
   LIMIT 1
 )`;
 import { CreateMyCollectionBody, UpdateMyCollectionBody, AddArticleToMyCollectionBody } from "@workspace/api-zod";
+import { ensureImpressionCollection, IMPRESSION_COLLECTION_NAME } from "../lib/impressionCollection";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
-router.get("/my-collections", async (req, res) => {
+router.get("/my-collections", requireAuth, async (req, res) => {
   const { ownerId } = req.query;
   const articleIdParam = req.query.articleId;
   if (!ownerId || typeof ownerId !== "string") {
     res.status(400).json({ error: "ownerId is required" });
+    return;
+  }
+  if (req.user?.id !== ownerId) {
+    res.status(403).json({ error: "Cannot list another user's collections" });
     return;
   }
   if (articleIdParam !== undefined && typeof articleIdParam !== "string") {
@@ -49,6 +55,8 @@ router.get("/my-collections", async (req, res) => {
     return;
   }
   const articleId = articleIdParam;
+
+  await ensureImpressionCollection(ownerId);
 
   const collections = await db
     .select({
@@ -89,13 +97,13 @@ router.post("/my-collections", async (req, res) => {
     return;
   }
   const { ownerId, name, description, isPublic, isImpression, coverImageUrl } = parsed.data;
-  const resolvedName = isImpression ? "인상깊은 편지" : name;
+  const resolvedName = isImpression ? IMPRESSION_COLLECTION_NAME : name;
 
   const [collection] = await db.insert(myCollectionsTable).values({
     ownerId,
     name: resolvedName,
     description: description ?? null,
-    isPublic: isPublic ?? false,
+    isPublic: isImpression ? false : (isPublic ?? false),
     isImpression: isImpression ?? false,
     coverImageUrl: coverImageUrl ?? null,
   }).returning();

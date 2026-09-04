@@ -1,5 +1,6 @@
 import { pool } from "@workspace/db";
 import { logger } from "./lib/logger";
+import { backfillImpressionCollections } from "./lib/impressionCollection";
 
 /**
  * Seeds deterministic dev data into the Supabase database.
@@ -15,6 +16,7 @@ import { logger } from "./lib/logger";
  * All other dev-seed logic is skipped when NODE_ENV=production.
  */
 export async function seedDevData(): Promise<void> {
+  await backfillImpressionCollections();
   const client = await pool.connect();
   try {
     // -----------------------------------------------------------------------
@@ -62,34 +64,6 @@ export async function seedDevData(): Promise<void> {
       await client.query("ROLLBACK");
       console.warn("[seed] impression folder rename migration failed:", e);
     }
-
-    // Always-run backfill (ALL environments): create/promote the
-    // "인상깊은 편지" impression folder for every user who does not yet have
-    // one.  Idempotent — safe to run multiple times.
-    //
-    // Step 1: if a user already has a regular folder named "인상깊은 편지"
-    //   but no impression folder yet, promote that folder in place.
-    // Step 2: for users who still have no impression folder, insert one.
-    // -----------------------------------------------------------------------
-    await client.query(`
-      UPDATE my_collections
-      SET is_impression = true, updated_at = NOW()
-      WHERE name = '인상깊은 편지'
-        AND is_impression = false
-        AND NOT EXISTS (
-          SELECT 1 FROM my_collections mc2
-          WHERE mc2.owner_id = my_collections.owner_id AND mc2.is_impression = true
-        )
-    `);
-    await client.query(`
-      INSERT INTO my_collections (id, owner_id, name, is_impression, is_public, created_at, updated_at)
-      SELECT gen_random_uuid(), u.id, '인상깊은 편지', true, false, NOW(), NOW()
-      FROM users u
-      WHERE NOT EXISTS (
-        SELECT 1 FROM my_collections mc
-        WHERE mc.owner_id = u.id AND mc.is_impression = true
-      )
-    `);
 
     if (process.env.NODE_ENV === "production") return;
 
