@@ -269,7 +269,7 @@ import { hasCompleteBodyFontSet } from "../bodyTypographyDiagnostics";
     );
     const editableCase = editorSource.slice(
       editorSource.indexOf('case "setEditable"'),
-      editorSource.indexOf('case "setSourceArticleSlot"'),
+      editorSource.indexOf('case "setOverflowRanges"'),
     );
     const overflowCase = editorSource.slice(
       editorSource.indexOf('case "setOverflowRanges"'),

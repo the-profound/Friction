@@ -149,7 +149,6 @@ function InboxScreenContent() {
   const { data: inboxData, isLoading, refetch } = useListInbox(
     // isRead=false tells the server to return only unread items, keeping the
     // response payload small as read letters accumulate over time.
-    // The picker (SourceArticlePickerSheet) omits this param to see all visible items.
     { recipientId: userId, isRead: false } as Parameters<typeof useListInbox>[0],
   );
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);

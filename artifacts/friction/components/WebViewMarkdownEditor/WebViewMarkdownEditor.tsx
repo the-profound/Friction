@@ -50,9 +50,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       onKeyboardVisibilityChange,
       onSelectionUpdate,
       onTextSelectionActiveChange,
-      sourceArticleSlotText,
-      onSourceArticleSlotTap,
-       typography,
+      typography,
       hideTitle,
       scrollEnabled = true,
       contentBottomPadding = 120,
@@ -188,7 +186,6 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                 bridge.injectRaw(
                   `(function(){try{` +
                     `var t=document.getElementById('title-input');if(t)t.style.display='none';` +
-                    `var s=document.getElementById('source-article-slot');if(s)s.style.display='none';` +
                     `if(document.body)document.body.style.paddingTop='0px';` +
                     `var ec=document.getElementById('editor-content');if(ec)ec.style.paddingBottom='24px';` +
                     `}catch(e){}})();true;`,
@@ -227,9 +224,6 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               Keyboard.dismiss();
               break;
             }
-            case "onSourceArticleSlotTap":
-              onSourceArticleSlotTap?.();
-              break;
             case "onSelectionUpdate":
               onSelectionUpdate?.(data.payload);
               break;
@@ -252,7 +246,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           }
         });
       },
-      [bridge, sendCommand, initialMarkdown, editorConfigVersion, placeholder, titleValue, ensureTrailingParagraph, typography, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onSourceArticleSlotTap, onOverflowSplit, swipeDownToDismissKeyboard],
+      [bridge, sendCommand, initialMarkdown, editorConfigVersion, placeholder, titleValue, ensureTrailingParagraph, typography, hideTitle, onReady, onChange, onExportMarkdown, onTitleChange, onError, onKeyboardVisibilityChange, onSelectionUpdate, onTextSelectionActiveChange, onOverflowSplit, swipeDownToDismissKeyboard],
     );
 
     useEffect(() => {
@@ -271,10 +265,6 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
         paddingPx: Math.max(0, contentBottomPadding),
       });
     }, [contentBottomPadding, sendCommand]);
-
-    useEffect(() => {
-      sendCommand({ type: "setSourceArticleSlot", text: sourceArticleSlotText ?? "" });
-    }, [sourceArticleSlotText, sendCommand]);
 
     const [fonts, setFonts] = useState<EditorFontState>(() => getEditorFonts());
     const [nativeBodyFontMode, setNativeBodyFontMode] = useState(getNativeBodyFontMode);

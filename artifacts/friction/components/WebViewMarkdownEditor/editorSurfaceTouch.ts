@@ -2,7 +2,6 @@ export const SURFACE_TAP_THRESHOLD = 10;
 
 const EDITOR_OWNED_TARGET_SELECTOR = [
   "#title-input",
-  "#source-article-slot",
   ".ProseMirror",
   ".hr-wrapper",
   "button",

@@ -28,16 +28,12 @@ import {
   useRemoveArticleFromMyCollection,
   useListArticles,
   useListMyCollections,
-  useUpdateArticle,
-  getListMyCollectionArticlesQueryKey,
 } from "@workspace/api-client-react";
 import {
   invalidateMyCollections,
   invalidateMyCollectionDetail,
-  invalidateArticleDetail,
 } from "@/lib/queryInvalidation";
 import type { MyCollectionArticleWithDetails, MyCollection, Article } from "@workspace/api-client-react";
-import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
@@ -62,8 +58,7 @@ export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { userId, nickname } = useUser();
-  const isAdmin = (nickname ?? "").startsWith("[운영진]");
+  const { userId } = useUser();
   const { id, name: initialName } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const [showPicker, setShowPicker] = useState(false);
@@ -85,10 +80,6 @@ export default function PersonalCollectionDetailScreen() {
   const [moreSheetVisible, setMoreSheetVisible] = useState(false);
   const { showToast } = useToast();
 
-  const [longPressTargetArticle, setLongPressTargetArticle] = useState<MyCollectionArticleWithDetails | null>(null);
-  const [isLongPressMenuVisible, setIsLongPressMenuVisible] = useState(false);
-  const [isSourcePickerVisible, setIsSourcePickerVisible] = useState(false);
-  const [longPressSourceTitle, setLongPressSourceTitle] = useState<string | null>(null);
   const [view, setView] = useState<FolderView>("card");
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
@@ -131,7 +122,6 @@ export default function PersonalCollectionDetailScreen() {
   const deleteCollection = useDeleteMyCollection();
   const addArticle = useAddArticleToMyCollection();
   const removeArticle = useRemoveArticleFromMyCollection();
-  const updateArticle = useUpdateArticle();
 
   const closeOpenRow = useCallback(() => {
     if (openRowRef.current) {
@@ -330,57 +320,6 @@ export default function PersonalCollectionDetailScreen() {
     setIsMoveSheetVisible(true);
   }, [selectedIds]);
 
-  const handleLongPress = useCallback(
-    (item: MyCollectionArticleWithDetails) => {
-      if (item.article?.authorId !== userId && !isAdmin) return;
-      setLongPressTargetArticle(item);
-      setLongPressSourceTitle(null);
-      setIsLongPressMenuVisible(true);
-    },
-    [userId, isAdmin],
-  );
-
-  const handleSourceArticleSelect = useCallback(
-    async (articleId: string, articleTitle: string) => {
-      if (!longPressTargetArticle) return;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await updateArticle.mutateAsync({
-          id: longPressTargetArticle.articleId,
-          data: { sourceArticleId: articleId } as any,
-        });
-        setLongPressSourceTitle(articleTitle);
-        invalidateArticleDetail(queryClient, longPressTargetArticle.articleId);
-        if (id) {
-          queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
-        }
-        showToast({ message: `'${articleTitle}'을(를) 답장 대상 편지로 연결했어요.`, type: "success" });
-      } catch {
-        showToast({ message: "답장 대상 편지 연결에 실패했습니다.", type: "error" });
-      }
-    },
-    [longPressTargetArticle, updateArticle, queryClient, id, showToast],
-  );
-
-  const handleSourceArticleUnlink = useCallback(async () => {
-    if (!longPressTargetArticle) return;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await updateArticle.mutateAsync({
-        id: longPressTargetArticle.articleId,
-        data: { sourceArticleId: null } as any,
-      });
-      setLongPressSourceTitle(null);
-      invalidateArticleDetail(queryClient, longPressTargetArticle.articleId);
-      if (id) {
-        queryClient.invalidateQueries({ queryKey: getListMyCollectionArticlesQueryKey(id) });
-      }
-      showToast({ message: "답장 대상 편지 연결을 해제했어요.", type: "success" });
-    } catch {
-      showToast({ message: "답장 대상 편지 연결 해제에 실패했습니다.", type: "error" });
-    }
-  }, [longPressTargetArticle, updateArticle, queryClient, id, showToast]);
-
   const handleMorePress = useCallback(() => {
     setMoreSheetVisible(true);
   }, []);
@@ -421,7 +360,6 @@ export default function PersonalCollectionDetailScreen() {
                     router.push({ pathname: "/read" as never, params: { articleId: entry.article.id, mode: "re_read" } });
                   }
                 }}
-                onLongPress={() => handleLongPress(entry)}
               />
             </CanonicalCardSlot>
           </View>
@@ -431,7 +369,7 @@ export default function PersonalCollectionDetailScreen() {
         ))}
       </View>
     ),
-    [cellWidth, cellHeight, userId, openLetterOverlay, handleLongPress, collection?.name, id, router],
+    [cellWidth, cellHeight, userId, openLetterOverlay, collection?.name, id, router],
   );
 
   const renderSelectionItem = useCallback(
@@ -526,7 +464,6 @@ export default function PersonalCollectionDetailScreen() {
               });
             }
           }}
-          onLongPress={() => handleLongPress(item)}
           delayLongPress={400}
           contentStyle={styles.articleItemContent}
         >
@@ -542,7 +479,7 @@ export default function PersonalCollectionDetailScreen() {
         </ScalePressable>
       </SwipeableRow>
     ),
-    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, handleLongPress, router, userId, id, openLetterOverlay, collection?.name],
+    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router, userId, id, openLetterOverlay, collection?.name],
   );
 
   if (!id) {
@@ -790,47 +727,6 @@ export default function PersonalCollectionDetailScreen() {
         onConfirm={handleBulkDeleteConfirm}
         onCancel={() => setShowBulkDeleteConfirm(false)}
       />
-
-      <BottomSheet
-        visible={isLongPressMenuVisible}
-        onClose={() => setIsLongPressMenuVisible(false)}
-        title={longPressTargetArticle?.article?.title ?? "편지 설정"}
-        snapPoints={[0.35]}
-      >
-        <View style={styles.actionSheetContent}>
-          {longPressTargetArticle?.article?.authorId === userId && (
-            <ScalePressable
-              style={styles.actionSheetItem}
-              contentStyle={styles.actionSheetItemContent}
-              onPress={() => {
-                setIsLongPressMenuVisible(false);
-                setIsSourcePickerVisible(true);
-              }}
-            >
-              <Text style={styles.actionSheetItemText}>답장 설정</Text>
-            </ScalePressable>
-          )}
-          <ScalePressable
-            style={[styles.actionSheetItem, styles.actionSheetCancelItem]}
-            contentStyle={styles.actionSheetItemContent}
-            onPress={() => setIsLongPressMenuVisible(false)}
-          >
-            <Text style={styles.actionSheetCancelText}>닫기</Text>
-          </ScalePressable>
-        </View>
-      </BottomSheet>
-
-      {userId ? (
-        <SourceArticlePickerSheet
-          visible={isSourcePickerVisible}
-          onClose={() => setIsSourcePickerVisible(false)}
-          userId={userId}
-          currentSourceArticleId={longPressTargetArticle?.article?.sourceArticleId ?? null}
-          currentSourceArticleTitle={longPressSourceTitle}
-          onSelect={handleSourceArticleSelect}
-          onUnlink={handleSourceArticleUnlink}
-        />
-      ) : null}
 
       {renderLetterOverlay()}
 
@@ -1202,30 +1098,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc900,
     flex: 1,
-  },
-  actionSheetContent: {
-    paddingTop: 4,
-    gap: 2,
-  },
-  actionSheetItem: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  actionSheetItemContent: {
-    paddingVertical: 16,
-    paddingHorizontal: 4,
-  },
-  actionSheetItemText: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc900,
-  },
-  actionSheetCancelItem: {
-    borderBottomWidth: 0,
-  },
-  actionSheetCancelText: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc400, // typography-ok: cancel action inactive color
   },
 });

@@ -103,7 +103,6 @@ import {
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
-import SourceArticlePickerSheet from "@/components/SourceArticlePickerSheet/SourceArticlePickerSheet";
 import WritingStateBar, {
   type WritingStageAction,
 } from "@/components/WritingStateBar/WritingStateBar";
@@ -396,21 +395,6 @@ export default function WritingScreen() {
     return `${kind}_${Date.now()}_${exportRequestSeqRef.current}`;
   }, []);
 
-  // ── 원본 글 연결 (dividing article 전용) ─────────────────────────────────
-  const [sourceArticleId, setSourceArticleId] = useState<string | null>(null);
-  const [sourceArticleTitle, setSourceArticleTitle] = useState<string | null>(null);
-  const [pickerVisible, setPickerVisible] = useState(false);
-
-  const sourceArticleQuery = useGetArticle(sourceArticleId ?? "", {
-    query: { queryKey: getGetArticleQueryKey(sourceArticleId ?? ""), enabled: !!sourceArticleId },
-  });
-
-  useEffect(() => {
-    if (sourceArticleQuery.data) {
-      setSourceArticleTitle(sourceArticleQuery.data.title || null);
-    }
-  }, [sourceArticleQuery.data]);
-
   // ── 분할 상태 (dividing) ───────────────────────────────────────────────────
   const [splitting, setSplitting] = useState(false);
   const [nativeBodyFontMode, setNativeBodyFontMode] = useState(getNativeBodyFontMode);
@@ -488,10 +472,6 @@ export default function WritingScreen() {
           shouldFocusInitialH1Ref.current = false;
           setTimeout(() => editorRef.current?.focusStart(), 0);
         }
-      }
-      // Source article linking is only available on a real article.
-      if (!isThoughtMode && article?.sourceArticleId) {
-        setSourceArticleId(article.sourceArticleId);
       }
       console.log("[on-01 init] cached?=true dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
     } else if (contentRef.current === serverContentRef.current) {
@@ -1369,34 +1349,6 @@ export default function WritingScreen() {
     if (!editorReady || !editorRef.current) return;
     editorRef.current.setOverflowProbeConfig(mode === "dividing" ? availableContentHeight : null);
   }, [mode, editorReady, availableContentHeight]);
-
-  // ── 원본 글 연결 핸들러 (dividing article 전용) ───────────────────────────
-  const handleSourceArticleSelect = useCallback(
-    async (articleId: string, articleTitle: string) => {
-      if (!id) return;
-      try {
-        await updateArticle.mutateAsync({ id, data: { sourceArticleId: articleId } });
-        setSourceArticleId(articleId);
-        setSourceArticleTitle(articleTitle);
-        invalidateArticleDetail(queryClient, id);
-      } catch {
-        showToast({ message: "답장 대상 편지 연결에 실패했습니다.", type: "error" });
-      }
-    },
-    [id, updateArticle, queryClient, showToast],
-  );
-
-  const handleSourceArticleUnlink = useCallback(async () => {
-    if (!id) return;
-    try {
-      await updateArticle.mutateAsync({ id, data: { sourceArticleId: null } });
-      setSourceArticleId(null);
-      setSourceArticleTitle(null);
-      invalidateArticleDetail(queryClient, id);
-    } catch {
-      showToast({ message: "답장 대상 편지 연결 해제에 실패했습니다.", type: "error" });
-    }
-  }, [id, updateArticle, queryClient, showToast]);
 
   const navigateAfterRemovingGuard = useCallback((
     navigate: () => void,
@@ -2794,18 +2746,6 @@ export default function WritingScreen() {
                 typography={typography}
                 hideTitle={isThoughtMode && !isDividing}
                 contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}
-                sourceArticleSlotText={
-                  isDividing
-                    ? (sourceArticleId
-                        ? `⤷ ${sourceArticleTitle ?? "로딩 중..."} 의 답장 ⚙️`
-                        : "⤷ 이 편지를 답장으로 설정 ⚙️")
-                    : ""
-                }
-                onSourceArticleSlotTap={
-                  isDividing && !!dividingArticle && !isNavigating
-                    ? () => setPickerVisible(true)
-                    : undefined
-                }
               />
             </View>
           </View>
@@ -2972,19 +2912,6 @@ export default function WritingScreen() {
           </View>
         )}
 
-        {/* Source article picker — dividing article only */}
-        {isDividing && userId && (
-          <SourceArticlePickerSheet
-            visible={pickerVisible}
-            onClose={() => setPickerVisible(false)}
-            userId={userId}
-            currentSourceArticleId={sourceArticleId}
-            currentSourceArticleTitle={sourceArticleTitle}
-            onSelect={handleSourceArticleSelect}
-            onUnlink={handleSourceArticleUnlink}
-          />
-        )}
-
       </View>
     </>
   );
@@ -3083,23 +3010,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1,
-  },
-  sourceArticleRow: {
-    paddingBottom: 8,
-  },
-  sourceArticleRowContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  sourceArticleText: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.zinc500,
-    fontFamily: "Pretendard",
-  },
-  sourceArticleGear: {
-    fontSize: 13,
   },
   editorOuter: {
     flex: 1,

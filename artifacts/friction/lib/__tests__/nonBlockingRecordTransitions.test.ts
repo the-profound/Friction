@@ -107,9 +107,40 @@ describe("non-blocking editor transitions", () => {
     expect(promoteHandler).toContain("setInlineMenuMode(null)");
     expect(promoteHandler).toContain("addMenuPendingRef.current = false");
     expect(screen).toContain("editable={!isNavigating}");
-    expect(screen).toContain("isDividing && !!dividingArticle && !isNavigating");
     expect(screen).toContain('!isNavigating && Platform.OS !== "web"');
     expect(screen).toContain('!isNavigating && inlineMenuMode === "addMenu"');
+  });
+
+  it("keeps the review editor free of reply-link actions during and after promotion", () => {
+    const screen = readScreen("app/on-01a.tsx");
+    const editorTypes = readScreen("components/WebViewMarkdownEditor/types.ts");
+    const nativeEditor = readScreen(
+      "components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx",
+    );
+    const editorSource = readScreen(
+      "components/WebViewMarkdownEditor/editorWebviewSrc/index.ts",
+    );
+    const editorBuilder = readScreen(
+      "components/WebViewMarkdownEditor/buildEditorHtml.mjs",
+    );
+    const collectionDetail = readScreen("app/of-01-detail.tsx");
+
+    expect(screen).not.toContain("이 편지를 답장으로 설정");
+    expect(screen).not.toContain("sourceArticleSlotText=");
+    expect(screen).not.toContain("onSourceArticleSlotTap=");
+    expect(screen).not.toContain("<SourceArticlePickerSheet");
+    expect(screen).not.toContain("data: { sourceArticleId:");
+    expect(screen).toContain("editable={!isNavigating}");
+    expect(screen).toContain('setModeBoth("dividing")');
+    expect(editorTypes).not.toContain("sourceArticleSlotText");
+    expect(editorTypes).not.toContain("onSourceArticleSlotTap");
+    expect(editorTypes).not.toContain("setSourceArticleSlot");
+    expect(nativeEditor).not.toContain("source-article-slot");
+    expect(editorSource).not.toContain("source-article-slot");
+    expect(editorBuilder).not.toContain("source-article-slot");
+    expect(collectionDetail).not.toContain("답장 설정");
+    expect(collectionDetail).not.toContain("SourceArticlePickerSheet");
+    expect(collectionDetail).not.toContain("data: { sourceArticleId:");
   });
 
   it("rejects programmatic editor commands during an identity handoff", () => {
@@ -123,8 +154,6 @@ describe("non-blocking editor transitions", () => {
     expect(screen).toContain(
       "if (isNavigatingRef.current) return;\n              editorRef.current?.setBlockType(blockType);",
     );
-    expect(promoteHandler).toContain("setInlineMenuMode(null)");
-    expect(promoteHandler).toContain("addMenuPendingRef.current = false");
     expect(screen).toContain(
       "!isNavigating && Platform.OS !== \"web\"",
     );

@@ -1060,7 +1060,6 @@ function spellFindRange(
 
   // 멱등 처리용 캐시 — 같은 값을 재전송한 경우 비싼 DOM/style 작업을 스킵한다.
   let lastEditable: boolean | null = null;
-  let lastSourceArticleText: string | null = null;
   let lastTextColumnWidth: number | null = null;
   let lastBodyFontSizePx: number | null = null;
   let lastBodyLineHeightPx: number | null = null;
@@ -1714,21 +1713,6 @@ function spellFindRange(
           }
           break;
         }
-        case "setSourceArticleSlot": {
-          const text = cmd.text || "";
-          if (lastSourceArticleText === text) break;
-          const s = document.getElementById("source-article-slot");
-          if (s) {
-            if (text) {
-              s.textContent = text;
-              (s as HTMLElement).style.display = "block";
-            } else {
-              (s as HTMLElement).style.display = "none";
-            }
-          }
-          lastSourceArticleText = text;
-          break;
-        }
         case "setOverflowRanges": {
           if (editor && !editor.isDestroyed) {
             const ranges = cmd.ranges || [];
@@ -2256,13 +2240,6 @@ function spellFindRange(
     window.addEventListener("resize", function () {
       scheduleViewportCorrection(editorFocused);
     });
-
-    const slotEl = document.getElementById("source-article-slot");
-    if (slotEl) {
-      slotEl.addEventListener("click", function () {
-        postToRN({ type: "onSourceArticleSlotTap" });
-      });
-    }
 
     titleInput = document.getElementById("title-input") as HTMLTextAreaElement | null;
     if (titleInput) {
