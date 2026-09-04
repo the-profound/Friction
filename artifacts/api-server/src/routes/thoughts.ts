@@ -1286,6 +1286,7 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
 
   const result = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
     );
@@ -1341,6 +1342,7 @@ router.delete("/thoughts/:id", requireAuth, async (req, res) => {
           eq(thoughtQuestionQueueTable.thoughtId, id),
         ),
       );
+    await compactQuestionQueue(tx, userId);
     return "deleted" as const;
   });
 

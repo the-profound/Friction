@@ -61,6 +61,7 @@ import {
   invalidateArticleLists,
   invalidateMyCollections,
   removeRecordFromCache,
+  removeThoughtQuestionFromQueueCache,
   restoreRecordDeletion,
   restoreRecordListCaches,
   seedRecordDetailCaches,
@@ -693,10 +694,16 @@ export default function OnScreen() {
   const confirmDelete = useCallback(() => {
     const target = deleteTarget;
     if (!target) return;
+    const isQueuedQuestion = target.kind === "thought" && queuedIds.has(target.id);
+    if (isQueuedQuestion && questionQueueMutationPendingRef.current) {
+      setDeleteTarget(null);
+      return;
+    }
     if (deletePendingIdsRef.current.has(target.id)) {
       setDeleteTarget(null);
       return;
     }
+    if (isQueuedQuestion) questionQueueMutationPendingRef.current = true;
     deletePendingIdsRef.current.add(target.id);
     setPendingDeleteIds(new Set(deletePendingIdsRef.current));
     setDeleteTarget(null);
@@ -704,18 +711,34 @@ export default function OnScreen() {
     void (async () => {
       try {
         const rollback = snapshotRecordDeletion(queryClient, target);
-        removeRecordFromCache(queryClient, target);
-        // Cancelling older reads protects the optimistic snapshot, but waiting
-        // for cancellation must not delay removing the confirmed target.
-        await Promise.allSettled([
+        const questionQueueRollback = isQueuedQuestion
+          ? queryClient.getQueryData(getGetThoughtQuestionQueueQueryKey())
+          : undefined;
+        const cancellation = Promise.allSettled([
           queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
           queryClient.cancelQueries({ queryKey: getListArticlesQueryKey() }),
+          ...(isQueuedQuestion
+            ? [queryClient.cancelQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() })]
+            : []),
         ]);
+        removeRecordFromCache(queryClient, target);
+        if (isQueuedQuestion) {
+          removeThoughtQuestionFromQueueCache(queryClient, target.id);
+        }
+        // Cancelling older reads protects the optimistic snapshot, but waiting
+        // for cancellation must not delay removing the confirmed target.
+        await cancellation;
         try {
           if (target.kind === "thought") await deleteThought.mutateAsync({ id: target.thought.id });
           else await deleteArticle.mutateAsync({ id: target.article.id });
         } catch {
           restoreRecordDeletion(queryClient, rollback, deletePendingIdsRef.current);
+          if (isQueuedQuestion) {
+            queryClient.setQueryData(
+              getGetThoughtQuestionQueueQueryKey(),
+              questionQueueRollback,
+            );
+          }
           void (target.kind === "thought"
             ? queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() })
             : invalidateArticleLists(queryClient)).catch(() => {});
@@ -724,7 +747,12 @@ export default function OnScreen() {
         }
         try {
           if (target.kind === "thought") {
-            await queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() }),
+              ...(isQueuedQuestion
+                ? [queryClient.invalidateQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() })]
+                : []),
+            ]);
           } else {
             await invalidateArticleLists(queryClient);
           }
@@ -733,11 +761,12 @@ export default function OnScreen() {
         }
         showToast({ message: "삭제했어요.", type: "success" });
       } finally {
+        if (isQueuedQuestion) questionQueueMutationPendingRef.current = false;
         deletePendingIdsRef.current.delete(target.id);
         setPendingDeleteIds(new Set(deletePendingIdsRef.current));
       }
     })();
-  }, [deleteArticle, deleteTarget, deleteThought, queryClient, showToast]);
+  }, [deleteArticle, deleteTarget, deleteThought, queryClient, queuedIds, showToast]);
 
   const archiveArticle = useCallback(async () => {
     if (!archiveArticleId || !selectedCollectionId || isArchivingRef.current) return;
@@ -852,8 +881,10 @@ export default function OnScreen() {
                 record.isQuestion ? openQuestion(record.thought) : openRecord(record);
               }
             }}
-            onLongPress={record.isQuestion ? undefined : () => {
-              if (!shouldIgnorePress()) requestRecordDeletion(record);
+            onLongPress={() => {
+              if (!shouldIgnorePress()) {
+                requestRecordDeletion(record);
+              }
             }}
           />
         ) : (
@@ -1008,7 +1039,11 @@ export default function OnScreen() {
                 isQuestion={isCurrentQuestion}
                 onPress={() => isCurrentQuestion ? openQuestion(item.thought) : openRecord(item)}
                 onLongPress={() => {
-                  if (isCurrentQuestion) return;
+                  if (scrollPressGuard.shouldIgnoreVerticalPress()) return;
+                  if (isCurrentQuestion) {
+                    requestRecordDeletion(item);
+                    return;
+                  }
                   if (item.kind === "letter") setLetterActionTarget(item);
                   else requestRecordDeletion(item);
                 }}
@@ -1118,10 +1153,15 @@ export default function OnScreen() {
       <ConfirmModal
         visible={Boolean(deleteTarget)}
         title="삭제하시겠습니까?"
-        description={deleteTarget?.kind === "thought" ? "이 단상은 영구적으로 삭제됩니다." : "이 글은 영구적으로 삭제됩니다."}
+        description={deleteTarget?.kind === "thought" && queuedIds.has(deleteTarget.id)
+          ? "이 질문이 영구적으로 삭제됩니다."
+          : deleteTarget?.kind === "thought"
+            ? "이 단상은 영구적으로 삭제됩니다."
+            : "이 글은 영구적으로 삭제됩니다."}
         confirmLabel="삭제"
         cancelLabel="취소"
         destructive
+        destructiveFilled
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />

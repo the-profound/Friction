@@ -31,6 +31,8 @@ interface ConfirmModalProps {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  /** Uses the solid Friction red treatment for destructive record deletion. */
+  destructiveFilled?: boolean;
   /** Prevents duplicate submissions while a mutation is in flight. */
   confirmDisabled?: boolean;
   /** Keeps a destructive dialog open while its mutation is in flight. */
@@ -56,6 +58,7 @@ export default function ConfirmModal({
   confirmLabel = "확인",
   cancelLabel = "취소",
   destructive = false,
+  destructiveFilled = false,
   confirmDisabled = false,
   cancelDisabled = false,
   onBackdropPress,
@@ -70,6 +73,7 @@ export default function ConfirmModal({
   const frozenConfirmLabel = useRef(confirmLabel);
   const frozenCancelLabel = useRef(cancelLabel);
   const frozenDestructive = useRef(destructive);
+  const frozenDestructiveFilled = useRef(destructiveFilled);
 
   if (visible) {
     frozenTitle.current = title;
@@ -80,6 +84,7 @@ export default function ConfirmModal({
     frozenConfirmLabel.current = confirmLabel;
     frozenCancelLabel.current = cancelLabel;
     frozenDestructive.current = destructive;
+    frozenDestructiveFilled.current = destructiveFilled;
   }
 
   const displayTitle = frozenTitle.current;
@@ -90,6 +95,7 @@ export default function ConfirmModal({
   const displayConfirmLabel = frozenConfirmLabel.current;
   const displayCancelLabel = frozenCancelLabel.current;
   const displayDestructive = frozenDestructive.current;
+  const displayDestructiveFilled = frozenDestructiveFilled.current;
 
   const isNewLayout = !!displayActionButton;
 
@@ -152,7 +158,11 @@ export default function ConfirmModal({
                     style={styles.button}
                     contentStyle={[
                       styles.buttonContent,
-                      displayDestructive ? styles.destructiveButton : styles.confirmButton,
+                      displayDestructive
+                        ? displayDestructiveFilled
+                          ? styles.destructiveFilledButton
+                          : styles.destructiveButton
+                        : styles.confirmButton,
                       confirmDisabled && styles.buttonDisabled,
                     ]}
                     onPress={onConfirm}
@@ -160,7 +170,14 @@ export default function ConfirmModal({
                     accessibilityRole="button"
                     accessibilityState={{ disabled: confirmDisabled, busy: confirmDisabled }}
                   >
-                    <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
+                    <Text style={[
+                      styles.confirmText,
+                      displayDestructive && (
+                        displayDestructiveFilled
+                          ? styles.destructiveFilledText
+                          : styles.destructiveText
+                      ),
+                    ]}>
                       {displayConfirmLabel}
                     </Text>
                   </ScalePressable>
@@ -289,6 +306,9 @@ const styles = StyleSheet.create({
   destructiveButton: {
     backgroundColor: "#FEE2E2",
   },
+  destructiveFilledButton: {
+    backgroundColor: Colors.noticeAccent,
+  },
   cancelText: {
     ...Typography.bodySemiBold,
     fontSize: 15,
@@ -301,5 +321,8 @@ const styles = StyleSheet.create({
   },
   destructiveText: {
     color: "#DC2626",
+  },
+  destructiveFilledText: {
+    color: Colors.white,
   },
 });

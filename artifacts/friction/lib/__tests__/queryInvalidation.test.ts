@@ -12,6 +12,7 @@ import {
   invalidateDirectThoughtCreation,
   getProtectedArticleDetailSnapshot,
   removeRecordFromCache,
+  removeThoughtQuestionFromQueueCache,
   restoreRecordDeletion,
   restoreRecordListCaches,
   seedRecordDetailCaches,
@@ -21,6 +22,44 @@ import {
   stageArticleTransitionSnapshot,
   upsertThoughtInRecordCaches,
 } from "../queryInvalidation";
+
+describe("question queue cache updates", () => {
+  it("removes only the selected question and advances current and next", () => {
+    const queryClient = new QueryClient();
+    const queue = ["question-a", "question-b", "question-c"].map((id) => ({ id }));
+    queryClient.setQueryData(getGetThoughtQuestionQueueQueryKey(), {
+      current: queue[0],
+      next: queue[1],
+      queue,
+    });
+
+    removeThoughtQuestionFromQueueCache(queryClient, "question-a");
+
+    expect(queryClient.getQueryData(getGetThoughtQuestionQueueQueryKey())).toEqual({
+      current: queue[1],
+      next: queue[2],
+      queue: [queue[1], queue[2]],
+    });
+  });
+
+  it("keeps an empty queue valid after deleting its final question", () => {
+    const queryClient = new QueryClient();
+    const question = { id: "last-question" };
+    queryClient.setQueryData(getGetThoughtQuestionQueueQueryKey(), {
+      current: question,
+      next: null,
+      queue: [question],
+    });
+
+    removeThoughtQuestionFromQueueCache(queryClient, question.id);
+
+    expect(queryClient.getQueryData(getGetThoughtQuestionQueueQueryKey())).toEqual({
+      current: null,
+      next: null,
+      queue: [],
+    });
+  });
+});
 
 describe("direct thought creation cache invalidation", () => {
   it("refreshes both records sources when returning from a new thought", async () => {

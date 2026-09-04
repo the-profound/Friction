@@ -12,6 +12,7 @@ const state = vi.hoisted(() => {
       content: column("thoughts.content"),
       sourceArticleId: column("thoughts.source_article_id"),
       sourceStoredSentenceId: column("thoughts.source_stored_sentence_id"),
+      migratedFromArticleId: column("thoughts.migrated_from_article_id"),
       status: column("thoughts.status"),
       createdFrom: column("thoughts.created_from"),
       deletedAt: column("thoughts.deleted_at"),
@@ -58,6 +59,12 @@ const state = vi.hoisted(() => {
     }
     return undefined;
   };
+  const collectStringParams = (condition: unknown): string[] => {
+    if (typeof condition === "string") return [condition];
+    if (!condition || typeof condition !== "object") return [];
+    return ((condition as { queryChunks?: unknown[] }).queryChunks ?? [])
+      .flatMap(collectStringParams);
+  };
 
   const db: any = {
     transaction: async (callback: (tx: any) => unknown) => callback(db),
@@ -73,6 +80,14 @@ const state = vi.hoisted(() => {
             .map((queue) => ({ id: queue.id }));
         }
         if (table === tables.thoughts) {
+          if (fields && "authorId" in fields && state.selectedThoughtId) {
+            const selected = thoughts.get(state.selectedThoughtId);
+            return selected ? [{
+              id: selected.id,
+              authorId: selected.authorId,
+              migratedFromArticleId: selected.migratedFromArticleId ?? null,
+            }] : [];
+          }
           if (!fields) {
             const thought = state.selectedThoughtId ? thoughts.get(state.selectedThoughtId) : undefined;
             return thought ? [thought] : [];
@@ -105,6 +120,9 @@ const state = vi.hoisted(() => {
           if (table === tables.thoughts && typeof value === "number") {
             state.lastCandidateLimit = value;
           }
+          return Promise.resolve(resolve());
+        },
+        for() {
           return Promise.resolve(resolve());
         },
         then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
@@ -186,10 +204,12 @@ const state = vi.hoisted(() => {
     delete: (table: unknown) => ({
       where: (condition: unknown) => {
         if (table === tables.queue) {
-          const queueId = findStringParam(condition);
+          const userQueue = queues.get(state.activeUser) ?? [];
+          const params = collectStringParams(condition);
+          const queueId = userQueue.find((queue) => params.includes(queue.id))?.id;
           queues.set(
             state.activeUser,
-            (queues.get(state.activeUser) ?? []).filter((queue) =>
+            userQueue.filter((queue) =>
               queueId
                 ? queue.id !== queueId
                 : queue.thoughtId !== state.selectedThoughtId),
@@ -338,12 +358,14 @@ async function withServer(test: (baseUrl: string) => Promise<void>) {
 }
 
 async function request(baseUrl: string, userId: string, path: string, init?: RequestInit) {
-  const activatedThoughtId = /^\/thoughts\/([^/]+)\/activate$/.exec(path)?.[1];
+  const selectedThoughtId =
+    /^\/thoughts\/([^/]+)\/activate$/.exec(path)?.[1]
+    ?? (init?.method === "DELETE" ? /^\/thoughts\/([^/]+)$/.exec(path)?.[1] : undefined);
   return fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       "x-test-user-id": userId,
-      "x-test-selected-thought-id": activatedThoughtId ?? "",
+      "x-test-selected-thought-id": selectedThoughtId ?? "",
       "content-type": "application/json",
       ...init?.headers,
     },
@@ -686,6 +708,26 @@ describe("thought question queue API", () => {
         queue: [{ id: "question-a" }, { id: "question-c" }, { id: "generated-1" }],
       });
       expect(state.generatedCount).toBe(1);
+    });
+  });
+
+  it("deletes only the selected queued question and serializes the queue mutation", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-b", {
+        method: "DELETE",
+      });
+
+      expect(response.status).toBe(204);
+      expect(state.rowsForUser("user-a").map((entry) => entry.thought.id)).toEqual([
+        "question-a",
+        "question-c",
+      ]);
+      expect(state.thoughts.get("question-b")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.db.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ queryChunks: expect.any(Array) }),
+      );
     });
   });
 

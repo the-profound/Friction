@@ -259,13 +259,41 @@ describe("record list background work", () => {
     );
 
     expect(deleteHandler.indexOf("snapshotRecordDeletion(queryClient, target)")).toBeLessThan(
-      deleteHandler.indexOf("queryClient.cancelQueries("),
+      deleteHandler.indexOf("await cancellation"),
     );
     expect(deleteHandler.indexOf("removeRecordFromCache(queryClient, target)")).toBeLessThan(
-      deleteHandler.indexOf("queryClient.cancelQueries("),
+      deleteHandler.indexOf("await cancellation"),
     );
+    expect(deleteHandler.indexOf("removeThoughtQuestionFromQueueCache(queryClient, target.id)"))
+      .toBeLessThan(deleteHandler.indexOf("await cancellation"));
     expect(deleteHandler).toContain(
       "restoreRecordDeletion(queryClient, rollback, deletePendingIdsRef.current)",
+    );
+  });
+
+  it("keeps question long-press deletion guarded and retryable in both record views", () => {
+    const screen = readScreen("app/(tabs)/on.tsx");
+    const deleteHandler = screen.slice(
+      screen.indexOf("const confirmDelete"),
+      screen.indexOf("const archiveArticle"),
+    );
+
+    expect(screen).not.toContain("questionActionTarget");
+    expect(screen).toContain("if (!shouldIgnorePress())");
+    expect(screen).toContain("if (scrollPressGuard.shouldIgnoreVerticalPress()) return;");
+    expect(screen).toContain("if (isCurrentQuestion) {\n                    requestRecordDeletion(item);");
+    expect(screen).toContain("destructiveFilled");
+    expect(deleteHandler).toContain(
+      "if (isQueuedQuestion && questionQueueMutationPendingRef.current)",
+    );
+    expect(deleteHandler).toContain(
+      "removeThoughtQuestionFromQueueCache(queryClient, target.id)",
+    );
+    expect(deleteHandler).toContain(
+      "queryClient.setQueryData(\n              getGetThoughtQuestionQueueQueryKey(),\n              questionQueueRollback",
+    );
+    expect(deleteHandler).toContain(
+      'showToast({ message: "삭제에 실패했습니다. 다시 시도해주세요.", type: "error" })',
     );
   });
 });

@@ -81,7 +81,9 @@ export default function RecordRow({
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityLabel={isQuestion ? "대기 중인 질문 열기" : `${record.kind === "thought" ? "단상" : record.kind === "editing" ? "편집 글" : "편지"} 열기`}
-      accessibilityHint={isQuestion ? "누르면 이 질문에 답하는 단상을 시작합니다." : "길게 눌러 삭제"}
+      accessibilityHint={isQuestion
+        ? "누르면 이 질문에 답하는 단상을 시작하고, 길게 누르면 삭제 메뉴를 엽니다."
+        : "길게 눌러 삭제"}
     >
       <View
         style={styles.rowTextFrame}

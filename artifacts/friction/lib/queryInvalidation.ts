@@ -330,6 +330,25 @@ export function setThoughtQuestionQueueCache(
   });
 }
 
+export function removeThoughtQuestionFromQueueCache(
+  qc: QueryClient,
+  thoughtId: string,
+) {
+  qc.setQueryData<ThoughtQuestionQueueResponse>(
+    getGetThoughtQuestionQueueQueryKey(),
+    (previous) => {
+      if (!previous) return previous;
+      const queue = previous.queue.filter((thought) => thought.id !== thoughtId);
+      if (queue.length === previous.queue.length) return previous;
+      return {
+        current: queue[0] ?? null,
+        next: queue[1] ?? null,
+        queue,
+      };
+    },
+  );
+}
+
 export function patchArticleInRecordCaches(qc: QueryClient, id: string, patch: Partial<Article>) {
   qc.setQueriesData<Article[]>({ queryKey: getListArticlesQueryKey() }, (previous) => {
     if (!previous) return previous;
