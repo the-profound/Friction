@@ -141,22 +141,24 @@ export default function ConfirmModal({
                 >
                   <Text style={styles.cancelText}>{displayCancelLabel}</Text>
                 </ScalePressable>
-                <ScalePressable
-                  style={styles.button}
-                  contentStyle={[
-                    styles.buttonContent,
-                    displayDestructive ? styles.destructiveButton : styles.confirmButton,
-                    confirmDisabled && styles.buttonDisabled,
-                  ]}
-                  onPress={onConfirm}
-                  disabled={confirmDisabled}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: confirmDisabled, busy: confirmDisabled }}
-                >
-                  <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
-                    {displayConfirmLabel}
-                  </Text>
-                </ScalePressable>
+                {onConfirm != null && (
+                  <ScalePressable
+                    style={styles.button}
+                    contentStyle={[
+                      styles.buttonContent,
+                      displayDestructive ? styles.destructiveButton : styles.confirmButton,
+                      confirmDisabled && styles.buttonDisabled,
+                    ]}
+                    onPress={onConfirm}
+                    disabled={confirmDisabled}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: confirmDisabled, busy: confirmDisabled }}
+                  >
+                    <Text style={[styles.confirmText, displayDestructive && styles.destructiveText]}>
+                      {displayConfirmLabel}
+                    </Text>
+                  </ScalePressable>
+                )}
               </View>
             )}
           </Pressable>
@@ -169,7 +171,6 @@ export default function ConfirmModal({
     </Modal>
   );
 }
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,

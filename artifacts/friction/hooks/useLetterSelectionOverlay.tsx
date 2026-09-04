@@ -3,11 +3,14 @@ import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import {
+  getListSendRecordsQueryKey,
   useListUserSpaceLetters,
+  useListSendRecords,
   useUpdateSpaceLetterVisibility,
   SpaceLetterVisibility,
   getListUserSpaceLettersQueryKey,
   type Article,
+  type SendRecordWithDetails,
   type SpaceLetter,
 } from "@workspace/api-client-react";
 import CardSelectOverlay, {
@@ -85,6 +88,15 @@ interface HookOptions {
   onBeforeRead?: () => void;
 }
 
+function hasPersonalSend(records: SendRecordWithDetails[], articleId: string): boolean {
+  return records.some(
+    (record) =>
+      record.articleId === articleId &&
+      record.targetType !== "space" &&
+      !record.spaceId,
+  );
+}
+
 /**
  * Shared "편지 선택 오버레이" hook.
  *
@@ -123,6 +135,11 @@ export function useLetterSelectionOverlay(
     newVisibility: "PUBLIC" | "RECIPIENT_ONLY";
   } | null>(null);
   const [isChangingVisibility, setIsChangingVisibility] = useState(false);
+  // Info modal shown when the user taps the visibility button on a letter that
+  // cannot have its visibility changed (anonymous space send or personal send).
+  const [visibilityInfoModal, setVisibilityInfoModal] = useState<
+    "anon" | "personal" | "unsent" | null
+  >(null);
 
   // Space letters for the current user — used to show visibility badge and toggle.
   // Guard on !authIsLoading so the request fires only after the auth token is
@@ -130,7 +147,17 @@ export function useLetterSelectionOverlay(
   // only PUBLIC letters (resolveCallerId returns 200 for anonymous callers),
   // and React Query caches the empty result — preventing a re-fetch later.
   const spaceLettersQuery = useListUserSpaceLetters(userId ?? "", {
-    query: { enabled: Boolean(userId) && !authIsLoading },
+    query: {
+      enabled: Boolean(userId) && !authIsLoading,
+      queryKey: getListUserSpaceLettersQueryKey(userId ?? ""),
+    },
+  });
+  const sendRecordsParams = { senderId: userId ?? "" };
+  const sendRecordsQuery = useListSendRecords(sendRecordsParams, {
+    query: {
+      enabled: Boolean(userId) && !authIsLoading,
+      queryKey: getListSendRecordsQueryKey(sendRecordsParams),
+    },
   });
   const updateVisibility = useUpdateSpaceLetterVisibility();
 
@@ -330,16 +357,31 @@ export function useLetterSelectionOverlay(
 
     if (isMyLetter) {
       const isAnon = sl?.displayName != null;
-      const isPub = sl ? sl.visibility === SpaceLetterVisibility.PUBLIC : true;
-      // disabled when: anonymous sender (cannot change) OR no SpaceLetter found yet
-      const disabled = isAnon || sl == null;
+      const isPub = sl ? sl.visibility === SpaceLetterVisibility.PUBLIC : false;
+      // Restricted and unsent letters show a fixed "수신자 공개" button that
+      // explains why visibility cannot be changed.
       visibilityButton = {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        icon: (disabled || !isPub ? "users" : "globe") as any,
-        label: isAnon ? "수신자 공개" : isPub ? "전체 공개" : "수신자 공개",
-        disabled,
-        onPress: () => {
-          if (selectedArticle && sl) handleVisibilityToggle(selectedArticle.id);
+        icon: (isAnon || sl == null || !isPub ? "users" : "globe") as any,
+        label: isAnon || sl == null ? "수신자 공개" : isPub ? "전체 공개" : "수신자 공개",
+        disabled: false,
+        onPress: async () => {
+          if (!selectedArticle) return;
+          if (isAnon) {
+            setVisibilityInfoModal("anon");
+          } else if (sl == null) {
+            const records =
+              sendRecordsQuery.data ??
+              (await sendRecordsQuery.refetch()).data ??
+              [];
+            setVisibilityInfoModal(
+              hasPersonalSend(records as SendRecordWithDetails[], selectedArticle.id)
+                ? "personal"
+                : "unsent",
+            );
+          } else {
+            handleVisibilityToggle(selectedArticle.id);
+          }
         },
       };
     }
@@ -384,6 +426,19 @@ export function useLetterSelectionOverlay(
           onCancel={() => {
             if (!isChangingVisibility) setVisibilityConfirmTarget(null);
           }}
+        />
+        <ConfirmModal
+          visible={visibilityInfoModal !== null}
+          title="전체 공개로 변경할 수 없어요"
+          description={
+            visibilityInfoModal === "anon"
+              ? "익명 공간에 발신된 편지는 수신자 공개로만 설정할 수 있어요"
+              : visibilityInfoModal === "personal"
+                ? "개인에게 발신된 편지는 수신자 공개로만 설정할 수 있어요"
+                : "발신하지 않은 편지는 수신자 공개로만 설정할 수 있어요"
+          }
+          cancelLabel="취소"
+          onCancel={() => setVisibilityInfoModal(null)}
         />
       </>
     );
