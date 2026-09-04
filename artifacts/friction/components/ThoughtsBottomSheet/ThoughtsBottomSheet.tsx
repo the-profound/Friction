@@ -40,9 +40,13 @@ import type { Thought } from "@workspace/api-client-react";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, ReaderTokens, Shadows, Spacing, Typography } from "@/constants/tokens";
 import {
+  createKeyedSingleFlight,
   getThoughtInlineCommitAction,
+  isCurrentEditorCommit,
   isCurrentOptimisticRequest,
   mergeReadingThoughtsById,
+  reconcileConfirmedThoughts,
+  reconcileDeletedThoughtIds,
   type OptimisticReadingThought,
 } from "@/lib/thoughtInlineEditor";
 
@@ -224,7 +228,10 @@ export default function ThoughtsBottomSheet({
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef<EditorState | null>(null);
   editorRef.current = editor;
-  const commitLockRef = useRef(false);
+  /** 같은 편집 저장을 요청한 닫기/전환은 하나의 물리 요청을 함께 기다린다. */
+  const commitSingleFlightRef = useRef(createKeyedSingleFlight<boolean>());
+  /** 연속 닫기 탭이 성공 뒤 close 애니메이션을 여러 번 시작하지 않게 한다. */
+  const closeRequestRef = useRef<Promise<void> | null>(null);
   const [optimisticThoughts, setOptimisticThoughts] = useState<OptimisticReadingThought[]>([]);
   const optimisticThoughtsRef = useRef(optimisticThoughts);
   optimisticThoughtsRef.current = optimisticThoughts;
@@ -265,6 +272,15 @@ export default function ThoughtsBottomSheet({
     ]);
   }, [queryClient, articleId]);
 
+  const cancelThoughtQueries = useCallback(() => {
+    return Promise.all([
+      queryClient.cancelQueries({
+        queryKey: getListThoughtsQueryKey({ sourceArticleId: articleId }),
+      }),
+      queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
+    ]);
+  }, [articleId, queryClient]);
+
   const upsertThoughtInCaches = useCallback((thought: Thought) => {
     const upsert = (previous: Thought[] | undefined) => {
       if (!previous) return previous;
@@ -281,19 +297,32 @@ export default function ThoughtsBottomSheet({
     );
   }, [articleId, queryClient]);
 
-  const cacheOptimisticThought = useCallback((optimistic: OptimisticReadingThought) => {
-    const cacheThought: Thought = {
-      id: optimistic.id,
-      authorId: "",
-      content: optimistic.content,
-      createdFrom: "reading",
-      sourceArticleId: optimistic.sourceArticleId,
-      status: "PRELIMINARY",
-      createdAt: optimistic.createdAt,
-      updatedAt: optimistic.createdAt,
-    };
-    upsertThoughtInCaches(cacheThought);
-  }, [upsertThoughtInCaches]);
+  const removeThoughtFromCaches = useCallback((thoughtId: string) => {
+    const remove = (previous: Thought[] | undefined) =>
+      previous?.filter((item) => item.id !== thoughtId);
+    queryClient.setQueryData<Thought[]>(getListThoughtsQueryKey(), remove);
+    queryClient.setQueryData<Thought[]>(
+      getListThoughtsQueryKey({ sourceArticleId: articleId }),
+      remove,
+    );
+  }, [articleId, queryClient]);
+
+  const refreshAndReconcileThoughtFences = useCallback(async () => {
+    try {
+      await invalidateThoughts();
+    } catch (error) {
+      console.warn("[ThoughtsBottomSheet] thought refetch failed:", error);
+      return;
+    }
+    const refreshed = queryClient.getQueryData<Thought[]>(
+      getListThoughtsQueryKey({ sourceArticleId: articleId }),
+    ) ?? [];
+    commitOptimisticThoughts(reconcileConfirmedThoughts(
+      refreshed,
+      optimisticThoughtsRef.current,
+    ));
+    setDeletedIds((current) => reconcileDeletedThoughtIds(refreshed, current));
+  }, [articleId, commitOptimisticThoughts, invalidateThoughts, queryClient]);
 
   // ── Keyboard: 패널 height + inputBar padding 동시 신축 ─────────────────────
 
@@ -412,7 +441,6 @@ export default function ThoughtsBottomSheet({
       if (closeToken !== sessionTokenRef.current) return;
       // 애니메이션 완료 후 일괄 초기화
       setEditor(null);
-      setDeletedIds(new Set());
       onClose();
     });
   }, [screenHeight, onWillClose, onClose]);
@@ -438,7 +466,6 @@ export default function ThoughtsBottomSheet({
   // 시트가 닫히거나 articleId가 바뀔 때 반드시 호출해 cross-context state leak을 방지한다.
   const resetTransientState = useCallback(() => {
     setEditor(null);
-    setDeletedIds(new Set());
   }, []);
 
   // ── Open ─────────────────────────────────────────────────────────────────
@@ -448,6 +475,7 @@ export default function ThoughtsBottomSheet({
       // 새 세션 시작 — 진행 중이던 close의 완료 콜백을 무효화한다.
       // (close 애니메이션 도중 FAB/롱프레스로 재오픈하는 경로)
       sessionTokenRef.current += 1;
+      closeRequestRef.current = null;
       // 새 시트 세션 시작 — 이전 편집·스와이프 상태를 모두 초기화
       resetTransientState();
       setEditor({
@@ -530,54 +558,98 @@ export default function ThoughtsBottomSheet({
   const commitEditor = useCallback(async (): Promise<boolean> => {
     const current = editorRef.current;
     if (!current) return true;
-    if (current.pending || commitLockRef.current) return false;
-    commitLockRef.current = true;
-    const action = getThoughtInlineCommitAction({
-      isExisting: !!current.thought,
-      text: current.text,
-      initialText: current.initialText,
-    });
-    setEditor((value) => value ? { ...value, pending: true, error: undefined } : value);
-    try {
-      if (current.thought) {
-        if (action === "delete") {
-          await deleteThought.mutateAsync({ id: current.thought.id });
-          setDeletedIds((prev) => new Set([...prev, current.thought!.id]));
-        } else if (action === "update") {
-          await updateThought.mutateAsync({
-            id: current.thought.id,
-            data: { content: current.text },
-          });
+    // 다른 편집 저장 뒤에 대기하더라도 캡처 이후 입력이 바뀌지 않게 즉시 잠근다.
+    setEditor((value) => value?.key === current.key
+      ? { ...value, pending: true, error: undefined }
+      : value);
+    return commitSingleFlightRef.current.run(current.key, async () => {
+      const action = getThoughtInlineCommitAction({
+        isExisting: !!current.thought,
+        text: current.text,
+        initialText: current.initialText,
+      });
+      try {
+        if (action === "create" || action === "update" || action === "delete") {
+          // 저장 이전에 시작된 목록 요청을 모두 retire한 뒤 캐시를 확정해야 한다.
+          await cancelThoughtQueries();
         }
-      } else if (action === "create") {
-        await createThought.mutateAsync({
-          data: {
-            clientId: current.key,
-            content: current.text,
-            createdFrom: "reading",
-            sourceArticleId: articleId,
-            status: "PRELIMINARY",
-          },
-        });
+        if (current.thought) {
+          if (action === "delete") {
+            await deleteThought.mutateAsync({ id: current.thought.id });
+            await cancelThoughtQueries();
+            removeThoughtFromCaches(current.thought.id);
+            setDeletedIds((prev) => new Set([...prev, current.thought!.id]));
+          } else if (action === "update") {
+            const saved = await updateThought.mutateAsync({
+              id: current.thought.id,
+              data: { content: current.text },
+            }) as Thought;
+            await cancelThoughtQueries();
+            upsertThoughtInCaches(saved);
+            commitOptimisticThoughts([
+              ...optimisticThoughtsRef.current.filter((item) => item.id !== saved.id),
+              {
+                id: saved.id,
+                content: saved.content ?? current.text,
+                sourceArticleId: saved.sourceArticleId ?? articleId,
+                createdAt: saved.createdAt,
+                saveState: "confirmed",
+                requestGeneration: 1,
+              },
+            ]);
+          }
+        } else if (action === "create") {
+          const saved = await createThought.mutateAsync({
+            data: {
+              clientId: current.key,
+              content: current.text,
+              createdFrom: "reading",
+              sourceArticleId: articleId,
+              status: "PRELIMINARY",
+            },
+          }) as Thought;
+          await cancelThoughtQueries();
+          upsertThoughtInCaches(saved);
+          commitOptimisticThoughts([
+            ...optimisticThoughtsRef.current.filter((item) => item.id !== saved.id),
+            {
+              id: saved.id,
+              content: saved.content ?? current.text,
+              sourceArticleId: saved.sourceArticleId ?? articleId,
+              createdAt: saved.createdAt,
+              saveState: "confirmed",
+              requestGeneration: 1,
+            },
+          ]);
+        }
+        // 확정 overlay/tombstone이 지연 목록 응답을 막는 동안 서버 목록을 재조회한다.
+        void refreshAndReconcileThoughtFences();
+        setEditor((value) => isCurrentEditorCommit(value?.key, current.key) ? null : value);
+        Keyboard.dismiss();
+        return true;
+      } catch (e) {
+        console.warn("[ThoughtsBottomSheet] inline commit failed:", e);
+        setEditor((value) => isCurrentEditorCommit(value?.key, current.key) ? {
+          ...value,
+          pending: false,
+          error: current.thought
+            ? (action === "delete" ? "삭제하지 못했어요. 다시 시도해 주세요." : "수정하지 못했어요. 다시 시도해 주세요.")
+            : "저장하지 못했어요. 다시 시도해 주세요.",
+        } : value);
+        return false;
       }
-      invalidateThoughts();
-      setEditor(null);
-      Keyboard.dismiss();
-      return true;
-    } catch (e) {
-      console.warn("[ThoughtsBottomSheet] inline commit failed:", e);
-      setEditor((value) => value ? {
-        ...value,
-        pending: false,
-        error: current.thought
-          ? (action === "delete" ? "삭제하지 못했어요. 다시 시도해 주세요." : "수정하지 못했어요. 다시 시도해 주세요.")
-          : "저장하지 못했어요. 다시 시도해 주세요.",
-      } : value);
-      return false;
-    } finally {
-      commitLockRef.current = false;
-    }
-  }, [articleId, createThought, deleteThought, invalidateThoughts, updateThought]);
+    });
+  }, [
+    articleId,
+    cancelThoughtQueries,
+    commitOptimisticThoughts,
+    createThought,
+    deleteThought,
+    removeThoughtFromCaches,
+    refreshAndReconcileThoughtFences,
+    updateThought,
+    upsertThoughtInCaches,
+  ]);
 
   const saveOptimisticThought = useCallback((
     optimistic: OptimisticReadingThought,
@@ -586,6 +658,7 @@ export default function ThoughtsBottomSheet({
     void (async () => {
       let saved: Thought;
       try {
+        await cancelThoughtQueries();
         saved = await createThought.mutateAsync({
           data: {
             clientId: optimistic.id,
@@ -595,6 +668,7 @@ export default function ThoughtsBottomSheet({
             status: "PRELIMINARY",
           },
         }) as Thought;
+        await cancelThoughtQueries();
       } catch (error) {
         console.warn("[ThoughtsBottomSheet] optimistic create failed:", error);
         commitOptimisticThoughts(optimisticThoughtsRef.current.map((item) =>
@@ -625,21 +699,19 @@ export default function ThoughtsBottomSheet({
         console.warn("[ThoughtsBottomSheet] thought refetch failed:", error);
         return;
       }
-      const latest = optimisticThoughtsRef.current.find((item) => item.id === optimistic.id);
       const refreshed = queryClient.getQueryData<Thought[]>(
         getListThoughtsQueryKey({ sourceArticleId: optimistic.sourceArticleId }),
-      );
-      if (
-        isCurrentOptimisticRequest(latest, requestGeneration)
-        && refreshed?.some((item) => item.id === optimistic.id)
-      ) {
-        commitOptimisticThoughts(
-          optimisticThoughtsRef.current.filter((item) => item.id !== optimistic.id),
-        );
-      }
+      ) ?? [];
+      const latest = optimisticThoughtsRef.current.find((item) => item.id === optimistic.id);
+      if (!isCurrentOptimisticRequest(latest, requestGeneration)) return;
+      commitOptimisticThoughts(reconcileConfirmedThoughts(
+        refreshed,
+        optimisticThoughtsRef.current,
+      ));
     })();
   }, [
     commitOptimisticThoughts,
+    cancelThoughtQueries,
     createThought,
     invalidateThoughts,
     queryClient,
@@ -686,7 +758,6 @@ export default function ThoughtsBottomSheet({
         ...optimisticThoughtsRef.current.filter((item) => item.id !== optimistic.id),
         optimistic,
       ]);
-      cacheOptimisticThought(optimistic);
       saveOptimisticThought(optimistic, optimistic.requestGeneration);
     }
 
@@ -702,10 +773,12 @@ export default function ThoughtsBottomSheet({
       scrollRef.current?.scrollToEnd({ animated: true });
       addTransitionLockRef.current = false;
     }, 0);
-  }, [articleId, cacheOptimisticThought, commitOptimisticThoughts, saveOptimisticThought]);
+  }, [articleId, commitOptimisticThoughts, saveOptimisticThought]);
 
   const openEditor = useCallback(async (thought?: Thought) => {
+    const openSession = sessionTokenRef.current;
     if (editorRef.current && !(await commitEditor())) return;
+    if (openSession !== sessionTokenRef.current) return;
     const key = thought?.id ?? createClientId();
     const text = thought?.content ?? "";
     setEditor({ key, thought, text, initialText: text, pending: false });
@@ -735,9 +808,19 @@ export default function ThoughtsBottomSheet({
   // 모든 닫기 경로(배경 탭, 핸들 드래그, 외부 ref)는 동일한 저장 수명주기를 거친다.
   // 실패하면 시트를 닫지 않아 입력과 재시도 안내가 그대로 남는다.
   doCloseRef.current = () => {
-    void commitEditor().then((committed) => {
-      if (committed) doClose();
-    });
+    if (closeRequestRef.current) return;
+    const closeSession = sessionTokenRef.current;
+    let closeRequest!: Promise<void>;
+    closeRequest = (async () => {
+      const committed = await commitEditor();
+      if (committed && closeSession === sessionTokenRef.current) {
+        // 성공 뒤에는 close 애니메이션이 끝날 때까지 잠금을 유지한다.
+        doClose();
+      } else if (closeRequestRef.current === closeRequest) {
+        closeRequestRef.current = null;
+      }
+    })();
+    closeRequestRef.current = closeRequest;
   };
 
   // ── Handle-bar pan responder ──────────────────────────────────────────────

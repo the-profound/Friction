@@ -82,3 +82,4 @@
 - [Autosave restore concurrency](autosave-restore-concurrency.md) — restoring a local edit needs an exact server-body baseline, and in-flight saves must synchronously rebase newer queued edits.
 - [Optimistic transition cache fences](optimistic-transition-cache-fences.md) — late React Query responses must be filtered by transition generation/status before updating destination screens.
 - [Native editor typography generations](native-editor-typography-generations.md) — apply width/font metrics before editable DOM creation; reject older generations after rotation or reload.
+- [Mutation-window query retirement](mutation-window-query-retirement.md) — cancel list queries both before mutation and after its response, before synchronous cache writes.

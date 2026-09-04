@@ -17,13 +17,50 @@ export interface OptimisticReadingThought {
   requestGeneration: number;
 }
 
-export function mergeReadingThoughtsById<T extends { id: string }>(
+export interface KeyedSingleFlight<TResult> {
+  run(key: string, operation: () => Promise<TResult>): Promise<TResult>;
+  pendingKey(): string | undefined;
+}
+
+/**
+ * 같은 편집 키의 중복 요청만 한 물리 요청을 공유한다. 다른 키는 앞 요청이 끝난 뒤
+ * 자신의 operation을 실행해, 오래된 저장 성공을 새 편집의 성공으로 오인하지 않는다.
+ */
+export function createKeyedSingleFlight<TResult>(): KeyedSingleFlight<TResult> {
+  let pending: { key: string; promise: Promise<TResult> } | null = null;
+  return {
+    run(key, operation) {
+      if (pending?.key === key) return pending.promise;
+      const previous = pending?.promise.catch(() => undefined);
+      let started!: Promise<TResult>;
+      started = (previous ? previous.then(operation) : operation()).finally(() => {
+        if (pending?.promise === started) pending = null;
+      });
+      pending = { key, promise: started };
+      return started;
+    },
+    pendingKey() {
+      return pending?.key;
+    },
+  };
+}
+
+export function mergeReadingThoughtsById<T extends { id: string; content?: unknown }>(
   serverThoughts: readonly T[],
   optimisticThoughts: readonly OptimisticReadingThought[],
 ): Array<T | OptimisticReadingThought> {
   const optimisticById = new Map(optimisticThoughts.map((thought) => [thought.id, thought]));
   const merged: Array<T | OptimisticReadingThought> = serverThoughts.map(
-    (thought) => optimisticById.get(thought.id) ?? thought,
+    (thought) => {
+      const optimistic = optimisticById.get(thought.id);
+      if (!optimistic) return thought;
+      // 확정된 수정 fence는 서버 카드 형태를 유지해 빠른 재열기에도 다시 편집할 수
+      // 있게 하되, 지연 목록 응답의 이전 content만 덮어쓴다.
+      if (optimistic.saveState === "confirmed") {
+        return { ...thought, content: optimistic.content };
+      }
+      return optimistic;
+    },
   );
   const serverIds = new Set(serverThoughts.map((thought) => thought.id));
   for (const thought of optimisticThoughts) {
@@ -32,11 +69,37 @@ export function mergeReadingThoughtsById<T extends { id: string }>(
   return merged;
 }
 
+export function reconcileConfirmedThoughts<T extends { id: string; content?: unknown }>(
+  serverThoughts: readonly T[],
+  optimisticThoughts: readonly OptimisticReadingThought[],
+): OptimisticReadingThought[] {
+  return optimisticThoughts.filter((optimistic) => {
+    if (optimistic.saveState !== "confirmed") return true;
+    const server = serverThoughts.find((thought) => thought.id === optimistic.id);
+    return server?.content !== optimistic.content;
+  });
+}
+
+export function reconcileDeletedThoughtIds<T extends { id: string }>(
+  serverThoughts: readonly T[],
+  deletedIds: ReadonlySet<string>,
+): Set<string> {
+  const serverIds = new Set(serverThoughts.map((thought) => thought.id));
+  return new Set([...deletedIds].filter((id) => serverIds.has(id)));
+}
+
 export function isCurrentOptimisticRequest(
   thought: OptimisticReadingThought | undefined,
   requestGeneration: number,
 ): boolean {
   return thought?.requestGeneration === requestGeneration;
+}
+
+export function isCurrentEditorCommit(
+  currentEditorKey: string | undefined,
+  committedEditorKey: string,
+): boolean {
+  return currentEditorKey === committedEditorKey;
 }
 
 export function getThoughtInlineCommitAction(input: {
