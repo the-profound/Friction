@@ -62,4 +62,19 @@ describe("editable React Native input cursor contract", () => {
     expect(source).toContain("cursorColor={Colors.cursorAccent}");
     expect(source).toContain('selectionColor="transparent"');
   });
+
+  it("keeps reading thoughts proportional and lets the outer list own long-input scrolling", () => {
+    const source = readFileSync(
+      join(appRoot, "components/ThoughtsBottomSheet/ThoughtsBottomSheet.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("const THOUGHT_FONT_RATIO = 0.04");
+    expect(source).toContain("fontSize = thoughtCardWidth * THOUGHT_FONT_RATIO");
+    expect(source).toContain("lineHeight: fontSize * THOUGHT_LINE_HEIGHT_RATIO");
+    expect(source).toContain("event.nativeEvent.contentSize.height");
+    expect(source).toContain("{ minHeight: inputMinHeight, height: inputHeight }");
+    expect(source.match(/scrollEnabled=\{false\}/g)).toHaveLength(2);
+    expect(source.match(/thoughtTypography/g)?.length).toBeGreaterThanOrEqual(5);
+  });
 });

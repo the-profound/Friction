@@ -10,7 +10,7 @@
  * • TextInput 멀티라인, 내용에 따라 자동 높이 증가, returnKey = return.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -57,6 +57,10 @@ const PANEL_MID_RATIO = 0.5;
 const SAFE_TOP_EXTRA = 8;
 /** 키보드 애니메이션보다 빠르게 — 앞서서 끝나야 반응이 빠르게 느껴짐 */
 const KB_ANIM_DURATION = 160;
+const THOUGHT_FONT_RATIO = 0.04;
+const THOUGHT_LINE_HEIGHT_RATIO = 1.7;
+const THOUGHT_INPUT_MIN_LINES = 3;
+const THOUGHT_INPUT_VERTICAL_PADDING = 8;
 
 const SWIPE_CLOSE_VEL = 0.5;
 const SWIPE_CLOSE_DY = 60;
@@ -155,7 +159,7 @@ export default function ThoughtsBottomSheet({
   closeHandleRef,
 }: ThoughtsBottomSheetProps) {
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const queryClient = useQueryClient();
 
   const defaultPanelHeight = screenHeight * PANEL_RATIO;
@@ -225,9 +229,28 @@ export default function ThoughtsBottomSheet({
   const listScrollYRef = useRef(0);
   const listViewportHeightRef = useRef(0);
   const cardLayoutRef = useRef<Record<string, { y: number; height: number }>>({});
+  const [thoughtCardWidth, setThoughtCardWidth] = useState(
+    Math.max(0, screenWidth - Spacing.screenPx * 2),
+  );
+  const [inputContentHeight, setInputContentHeight] = useState(0);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef<EditorState | null>(null);
   editorRef.current = editor;
+  const thoughtTypography = useMemo(() => {
+    const fontSize = thoughtCardWidth * THOUGHT_FONT_RATIO;
+    return {
+      fontSize,
+      lineHeight: fontSize * THOUGHT_LINE_HEIGHT_RATIO,
+    };
+  }, [thoughtCardWidth]);
+  const inputMinHeight =
+    thoughtTypography.lineHeight * THOUGHT_INPUT_MIN_LINES +
+    THOUGHT_INPUT_VERTICAL_PADDING;
+  const inputHeight = Math.max(inputMinHeight, inputContentHeight);
+
+  useEffect(() => {
+    setInputContentHeight(0);
+  }, [editor?.key]);
   /** 같은 편집 저장을 요청한 닫기/전환은 하나의 물리 요청을 함께 기다린다. */
   const commitSingleFlightRef = useRef(createKeyedSingleFlight<boolean>());
   /** 연속 닫기 탭이 성공 뒤 close 애니메이션을 여러 번 시작하지 않게 한다. */
@@ -805,6 +828,26 @@ export default function ThoughtsBottomSheet({
     }, 0);
   }, []);
 
+  const updateThoughtCardLayout = useCallback((
+    key: string,
+    layout: { width: number; y: number; height: number },
+  ) => {
+    cardLayoutRef.current[key] = { y: layout.y, height: layout.height };
+    setThoughtCardWidth((current) =>
+      Math.abs(current - layout.width) < 0.5 ? current : layout.width,
+    );
+  }, []);
+
+  const handleEditorContentSizeChange = useCallback((
+    key: string,
+    contentHeight: number,
+  ) => {
+    setInputContentHeight((current) =>
+      Math.abs(current - contentHeight) < 0.5 ? current : contentHeight,
+    );
+    scrollEditorBottomIntoView(key);
+  }, [scrollEditorBottomIntoView]);
+
   // 모든 닫기 경로(배경 탭, 핸들 드래그, 외부 ref)는 동일한 저장 수명주기를 거친다.
   // 실패하면 시트를 닫지 않아 입력과 재시도 안내가 그대로 남는다.
   doCloseRef.current = () => {
@@ -1008,14 +1051,18 @@ export default function ThoughtsBottomSheet({
                 {displayedThoughts
                   .filter((t) => !deletedIds.has(t.id))
                   .map((t) => "saveState" in t ? (
-                    <View key={t.id} style={styles.card}>
+                    <View
+                      key={t.id}
+                      style={styles.card}
+                      onLayout={(event) => updateThoughtCardLayout(t.id, event.nativeEvent.layout)}
+                    >
                       <View style={styles.optimisticMetaRow}>
                         <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
                         {t.saveState === "pending" && (
                           <ActivityIndicator size="small" color={Colors.zinc400} />
                         )}
                       </View>
-                      <Text style={styles.cardText}>{t.content}</Text>
+                      <Text style={[styles.cardText, thoughtTypography]}>{t.content}</Text>
                       {t.saveState === "failed" && (
                         <View style={styles.errorRow}>
                           <Text style={styles.errorText}>{t.error}</Text>
@@ -1035,8 +1082,7 @@ export default function ThoughtsBottomSheet({
                     <View
                       key={t.id}
                       onLayout={(event) => {
-                        const { y, height } = event.nativeEvent.layout;
-                        cardLayoutRef.current[t.id] = { y, height };
+                        updateThoughtCardLayout(t.id, event.nativeEvent.layout);
                       }}
                       style={styles.editorCard}
                     >
@@ -1046,7 +1092,11 @@ export default function ThoughtsBottomSheet({
                         value={editor.text}
                         onChangeText={(text) => setEditor((value) => value ? { ...value, text, error: undefined } : value)}
                         editable={!editor.pending}
-                        style={styles.cardInput}
+                        style={[
+                          styles.cardInput,
+                          thoughtTypography,
+                          { minHeight: inputMinHeight, height: inputHeight },
+                        ]}
                         multiline
                         underlineColorAndroid="transparent"
                         scrollEnabled={false}
@@ -1055,7 +1105,12 @@ export default function ThoughtsBottomSheet({
                         placeholderTextColor={Colors.zinc400}
                         cursorColor={Colors.cursorAccent}
                         accessibilityLabel="단상 내용"
-                        onContentSizeChange={() => scrollEditorBottomIntoView(editor.key)}
+                        onContentSizeChange={(event) =>
+                          handleEditorContentSizeChange(
+                            editor.key,
+                            event.nativeEvent.contentSize.height,
+                          )
+                        }
                       />
                       {editor.error && (
                         <View style={styles.errorRow}>
@@ -1076,18 +1131,18 @@ export default function ThoughtsBottomSheet({
                       key={t.id}
                       onPress={() => void openEditor(t)}
                       style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}
+                      onLayout={(event) => updateThoughtCardLayout(t.id, event.nativeEvent.layout)}
                       accessibilityRole="button"
                       accessibilityLabel="단상 수정"
                     >
                       <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
-                      <Text style={styles.cardText}>{t.content ?? ""}</Text>
+                      <Text style={[styles.cardText, thoughtTypography]}>{t.content ?? ""}</Text>
                     </Pressable>
                   ))}
                 {editor && !editor.thought && (
                   <View
                     onLayout={(event) => {
-                      const { y, height } = event.nativeEvent.layout;
-                      cardLayoutRef.current[editor.key] = { y, height };
+                      updateThoughtCardLayout(editor.key, event.nativeEvent.layout);
                     }}
                     style={styles.editorCard}
                   >
@@ -1096,7 +1151,11 @@ export default function ThoughtsBottomSheet({
                       value={editor.text}
                       onChangeText={(text) => setEditor((value) => value ? { ...value, text, error: undefined } : value)}
                       editable={!editor.pending}
-                      style={styles.cardInput}
+                      style={[
+                        styles.cardInput,
+                        thoughtTypography,
+                        { minHeight: inputMinHeight, height: inputHeight },
+                      ]}
                       multiline
                       underlineColorAndroid="transparent"
                       scrollEnabled={false}
@@ -1105,7 +1164,12 @@ export default function ThoughtsBottomSheet({
                       placeholderTextColor={Colors.zinc400}
                       cursorColor={Colors.cursorAccent}
                       accessibilityLabel="새 단상 내용"
-                      onContentSizeChange={() => scrollEditorBottomIntoView(editor.key)}
+                      onContentSizeChange={(event) =>
+                        handleEditorContentSizeChange(
+                          editor.key,
+                          event.nativeEvent.contentSize.height,
+                        )
+                      }
                     />
                     {editor.error && (
                       <View style={styles.errorRow}>
@@ -1255,9 +1319,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardText: {
-    fontSize: 16,
     color: Colors.zinc600,
-    lineHeight: 27.2,
     fontFamily: ReaderTokens.fontFamily.serif,
   },
   editorCard: {
@@ -1268,10 +1330,6 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   cardInput: {
-    // lineHeight 27.2 × 3줄 + 상하 padding 8
-    minHeight: 90,
-    fontSize: 16,
-    lineHeight: 27.2,
     fontFamily: ReaderTokens.fontFamily.serif,
     color: Colors.zinc600,
     paddingHorizontal: 0,
