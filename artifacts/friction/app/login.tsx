@@ -432,6 +432,7 @@ export default function LoginScreen() {
               style={styles.button}
               contentStyle={[
                 styles.buttonContent,
+                styles.signupNextButtonContent,
                 !canSubmitSignupStep1 && styles.buttonDisabledContent,
               ]}
               onPress={handleSignUpStep1}
@@ -759,6 +760,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   loginButtonContent: {
+    backgroundColor: Colors.noticeAccent,
+  },
+  signupNextButtonContent: {
     backgroundColor: Colors.noticeAccent,
   },
   buttonDisabledContent: {
