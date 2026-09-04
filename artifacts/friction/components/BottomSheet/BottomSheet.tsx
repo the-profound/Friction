@@ -34,6 +34,11 @@ interface BottomSheetProps {
   dismissable?: boolean;
   keyboardAware?: boolean;
   closeButton?: boolean;
+  /**
+   * 시트의 실제 translateY를 외부 미리보기와 직접 공유한다. 같은 native
+   * animated value에서 파생하므로 열기·드래그·닫기 프레임이 어긋나지 않는다.
+   */
+  translateYAnim?: Animated.Value;
 }
 
 interface KeyboardSyncProps {
@@ -114,11 +119,13 @@ export default function BottomSheet({
   dismissable = true,
   keyboardAware = false,
   closeButton = false,
+  translateYAnim,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: SCREEN_H } = useWindowDimensions();
   const safeH = Math.max(SCREEN_H, MIN_SCREEN_H);
-  const translateY = useRef(new Animated.Value(safeH)).current;
+  const internalTranslateY = useRef(new Animated.Value(safeH)).current;
+  const translateY = translateYAnim ?? internalTranslateY;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const currentSnap = useRef(0);
   const keyboardOffsetRef = useRef(0);

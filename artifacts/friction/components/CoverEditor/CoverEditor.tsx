@@ -1,44 +1,20 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import { ActivityIndicator, View, Text, StyleSheet, ScrollView } from "react-native";
-import ScalePressable from "@/components/shared/ScalePressable";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { Colors, ReaderTokens, Typography, Spacing } from "../../constants/tokens";
+import type { ArticleCover } from "@workspace/api-client-react";
+import ScalePressable from "@/components/shared/ScalePressable";
+import { Colors, ReaderTokens, Typography } from "@/constants/tokens";
 import BottomSheet from "../BottomSheet/BottomSheet";
-import CoverPreview from "../CoverPreview/CoverPreview";
 import ColorPicker from "../ColorPicker/ColorPicker";
-import { resolveArticleCover } from "../../utils/articleCover";
+import { resolveArticleCover } from "@/utils/articleCover";
 import {
   CoverPhotoPickerError,
   pickCoverPhoto,
   type SelectedCoverPhoto,
-} from "../../lib/coverPhotoPicker";
-import {
-  CoverPhotoUploadError,
-  uploadCoverPhoto,
-} from "../../lib/coverPhotoUpload";
-import type {
-  ArticleCover,
-  ArticleCoverFontFamily,
-  ArticleCoverType,
-} from "@workspace/api-client-react";
+} from "@/lib/coverPhotoPicker";
+import { CoverPhotoUploadError, uploadCoverPhoto } from "@/lib/coverPhotoUpload";
 
-type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
-
-const COVER_TYPES: { key: ArticleCoverType; label: string; icon: FeatherIconName }[] = [
-  { key: "default", label: "기본", icon: "layout" },
-  { key: "color", label: "단색", icon: "droplet" },
-  { key: "image", label: "사진", icon: "image" },
-];
-
-const COVER_FONTS: {
-  key: ArticleCoverFontFamily;
-  label: string;
-  sample: string;
-}[] = [
-  { key: "sans", label: "고딕", sample: "가나다" },
-  { key: "serif", label: "세리프", sample: "가나다" },
-];
+type Panel = "text" | "background" | null;
 
 interface CoverEditorProps {
   visible: boolean;
@@ -50,24 +26,25 @@ interface CoverEditorProps {
   articleId: string;
   onPhotoOperationStateChange?: (active: boolean) => void;
   onCommitPhotoCover: (cover: ArticleCover) => Promise<void>;
+  sheetTranslateYAnim?: import("react-native").Animated.Value;
 }
+
+const CONTROL_HEIGHT = 56;
 
 export default function CoverEditor({
   visible,
   onClose,
   cover,
   onChange,
-  title,
-  author,
   articleId,
   onPhotoOperationStateChange,
   onCommitPhotoCover,
+  sheetTranslateYAnim,
 }: CoverEditorProps) {
-  const insets = useSafeAreaInsets();
   const [local, setLocal] = useState<ArticleCover>(() => resolveArticleCover(cover));
   const localRef = useRef(local);
   localRef.current = local;
-  const [photoPanelVisible, setPhotoPanelVisible] = useState(false);
+  const [panel, setPanel] = useState<Panel>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [isSelectingPhoto, setIsSelectingPhoto] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -76,39 +53,18 @@ export default function CoverEditor({
   const retryUploadedImageUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (visible) {
-      const next = resolveArticleCover(cover);
-      setLocal(next);
-      localRef.current = next;
-      setPhotoPanelVisible(next.type === "image");
-      setPhotoError(null);
-      retryPhotoRef.current = null;
-      retryUploadedImageUrlRef.current = null;
-      if (
-        next.textColor !== cover.textColor ||
-        next.bgColor !== cover.bgColor
-      ) {
-        onChange(next);
-      }
-    }
-  }, [visible]);
-
-  const update = useCallback(
-    (patch: Partial<ArticleCover>) => {
-      if (photoOperationInProgressRef.current) return;
-      const next = { ...localRef.current, ...patch };
-      setLocal(next);
+    if (!visible) return;
+    const next = resolveArticleCover(cover);
+    setLocal(next);
+    localRef.current = next;
+    setPanel(null);
+    setPhotoError(null);
+    retryPhotoRef.current = null;
+    retryUploadedImageUrlRef.current = null;
+    if (next.textColor !== cover.textColor || next.bgColor !== cover.bgColor) {
       onChange(next);
-    },
-    [onChange],
-  );
-
-  const setUploading = useCallback(
-    (uploading: boolean) => {
-      setIsUploading(uploading);
-    },
-    [],
-  );
+    }
+  }, [visible]); // Each opening is a new editor session; live edits stay local.
 
   useEffect(
     () => () => {
@@ -117,16 +73,25 @@ export default function CoverEditor({
     [onPhotoOperationStateChange],
   );
 
+  const update = useCallback(
+    (patch: Partial<ArticleCover>) => {
+      if (photoOperationInProgressRef.current) return;
+      const next = { ...localRef.current, ...patch };
+      localRef.current = next;
+      setLocal(next);
+      onChange(next);
+    },
+    [onChange],
+  );
+
   const uploadSelectedPhoto = useCallback(
     async (photo: SelectedCoverPhoto) => {
       retryPhotoRef.current = photo;
-      setPhotoPanelVisible(true);
       setPhotoError(null);
-      setUploading(true);
+      setIsUploading(true);
       try {
         const imageUrl =
-          retryUploadedImageUrlRef.current ??
-          await uploadCoverPhoto(articleId, photo);
+          retryUploadedImageUrlRef.current ?? (await uploadCoverPhoto(articleId, photo));
         retryUploadedImageUrlRef.current = imageUrl;
         const next = { ...localRef.current, type: "image" as const, imageUrl };
         try {
@@ -139,18 +104,16 @@ export default function CoverEditor({
         retryPhotoRef.current = null;
         retryUploadedImageUrlRef.current = null;
       } catch (error) {
-        const message =
-          error instanceof CoverPhotoUploadError
+        setPhotoError(
+          error instanceof CoverPhotoUploadError || error instanceof Error
             ? error.message
-            : error instanceof Error
-              ? error.message
-            : "사진 업로드에 실패했어요. 다시 시도해주세요.";
-        setPhotoError(message);
+            : "사진 업로드에 실패했어요. 다시 시도해주세요.",
+        );
       } finally {
-        setUploading(false);
+        setIsUploading(false);
       }
     },
-    [articleId, onCommitPhotoCover, setUploading],
+    [articleId, onCommitPhotoCover],
   );
 
   const selectPhoto = useCallback(async () => {
@@ -158,7 +121,6 @@ export default function CoverEditor({
     photoOperationInProgressRef.current = true;
     onPhotoOperationStateChange?.(true);
     setIsSelectingPhoto(true);
-    setPhotoPanelVisible(true);
     setPhotoError(null);
     try {
       const selection = await pickCoverPhoto();
@@ -166,11 +128,11 @@ export default function CoverEditor({
       retryUploadedImageUrlRef.current = null;
       await uploadSelectedPhoto(selection);
     } catch (error) {
-      const message =
+      setPhotoError(
         error instanceof CoverPhotoPickerError
           ? error.message
-          : "사진을 선택하지 못했어요. 다시 시도해주세요.";
-      setPhotoError(message);
+          : "사진을 선택하지 못했어요. 다시 시도해주세요.",
+      );
     } finally {
       photoOperationInProgressRef.current = false;
       onPhotoOperationStateChange?.(false);
@@ -178,325 +140,211 @@ export default function CoverEditor({
     }
   }, [onPhotoOperationStateChange, uploadSelectedPhoto]);
 
-  const handleTypePress = useCallback(
-    (type: ArticleCoverType) => {
-      if (photoOperationInProgressRef.current) return;
-      if (type === "image") {
-        setPhotoPanelVisible(true);
-        if (localRef.current.imageUrl) {
-          update({ type: "image" });
-        } else {
-          // Selecting the type only reveals the in-editor action. Keep the
-          // persisted cover untouched until the user explicitly chooses a
-          // photo and the upload/commit completes.
-          const next = { ...localRef.current, type: "image" as const };
-          localRef.current = next;
-          setLocal(next);
-        }
-        return;
-      }
-      setPhotoPanelVisible(false);
-      setPhotoError(null);
-      retryPhotoRef.current = null;
-      retryUploadedImageUrlRef.current = null;
-      update({ type });
-    },
-    [selectPhoto, update],
-  );
-
   const retryUpload = useCallback(async () => {
     if (photoOperationInProgressRef.current) return;
     const photo = retryPhotoRef.current;
-    if (photo) {
-      photoOperationInProgressRef.current = true;
-      onPhotoOperationStateChange?.(true);
-      try {
-        await uploadSelectedPhoto(photo);
-      } finally {
-        photoOperationInProgressRef.current = false;
-        onPhotoOperationStateChange?.(false);
-      }
-    } else {
+    if (!photo) {
       await selectPhoto();
+      return;
+    }
+    photoOperationInProgressRef.current = true;
+    onPhotoOperationStateChange?.(true);
+    try {
+      await uploadSelectedPhoto(photo);
+    } finally {
+      photoOperationInProgressRef.current = false;
+      onPhotoOperationStateChange?.(false);
     }
   }, [onPhotoOperationStateChange, selectPhoto, uploadSelectedPhoto]);
 
   const isPhotoBusy = isSelectingPhoto || isUploading;
+  const fontFamily = local.fontFamily ?? "sans";
+  const backgroundColor = local.bgColor ?? Colors.zinc50;
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      snapPoints={[0.75, 0.9]}
+      snapPoints={[0.58]}
+      translateYAnim={sheetTranslateYAnim}
     >
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.previewWrapper}>
-          <CoverPreview cover={local} title={title} author={author} compact />
-        </View>
-
-        <Text style={styles.sectionLabel}>표지 타입</Text>
-        <View style={styles.chipRow}>
-          {COVER_TYPES.map((t) => (
-            <ScalePressable
-              key={t.key}
-              style={styles.typeChip}
-              onPress={() => handleTypePress(t.key)}
-              disabled={isPhotoBusy}
-              accessibilityRole="button"
-              accessibilityLabel={`${t.label} 표지`}
-              accessibilityState={{
-                selected: local.type === t.key,
-                disabled: isPhotoBusy,
-                busy: t.key === "image" && isPhotoBusy,
-              }}
-              contentStyle={[
-                styles.typeChipContent,
-                local.type === t.key && styles.typeChipActive,
-                isPhotoBusy && styles.controlDisabled,
-              ]}
-            >
-              <Feather
-                name={t.icon}
-                size={16}
-                color={local.type === t.key ? Colors.white : Colors.zinc600}
-              />
-              <Text
-                style={[
-                  styles.typeChipLabel,
-                  local.type === t.key && styles.typeChipLabelActive,
-                ]}
-              >
-                {t.label}
-              </Text>
-            </ScalePressable>
-          ))}
-        </View>
-
-        {(photoPanelVisible || local.type === "image") && (
-          <View style={styles.photoSection}>
-            <ScalePressable
-              style={styles.photoButton}
-              contentStyle={[
-                styles.photoButtonContent,
-                isPhotoBusy && styles.controlDisabled,
-              ]}
-              onPress={selectPhoto}
-              disabled={isPhotoBusy}
-              accessibilityRole="button"
-              accessibilityLabel={local.imageUrl ? "표지 사진 변경" : "표지 사진 선택"}
-              accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}
-            >
-              {isUploading ? (
-                <ActivityIndicator size="small" color={Colors.zinc600} />
-              ) : (
-                <Feather name="image" size={16} color={Colors.zinc700} />
-              )}
-              <Text style={styles.photoButtonLabel}>
-                {isUploading
-                  ? "업로드 중..."
-                  : isSelectingPhoto
-                    ? "사진 선택 중..."
-                  : local.imageUrl
-                    ? "이미지 변경"
-                    : "사진 선택"}
-              </Text>
-            </ScalePressable>
-            {photoError ? (
-              <View style={styles.photoErrorBox} accessibilityLiveRegion="polite">
-                <Text style={styles.photoErrorText}>{photoError}</Text>
-                <ScalePressable
-                  style={styles.retryButton}
-                  contentStyle={styles.retryButtonContent}
-                  onPress={() => void retryUpload()}
-                  disabled={isPhotoBusy}
-                  accessibilityRole="button"
-                  accessibilityLabel="사진 업로드 다시 시도"
-                  accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}
-                >
-                  <Text style={styles.retryButtonLabel}>다시 시도</Text>
-                </ScalePressable>
-              </View>
-            ) : null}
-          </View>
-        )}
-
-        <Text style={styles.sectionLabel}>서체</Text>
-        <View style={styles.chipRow}>
-          {COVER_FONTS.map((font) => {
-            const isActive = (local.fontFamily ?? "sans") === font.key;
-            return (
-              <ScalePressable
-                key={font.key}
-                style={styles.fontChip}
-                onPress={() => update({ fontFamily: font.key })}
-                disabled={isPhotoBusy}
-                accessibilityRole="button"
-                accessibilityLabel={`${font.label} 서체`}
-                accessibilityState={{ selected: isActive }}
-                contentStyle={[
-                  styles.fontChipContent,
-                  isActive && styles.typeChipActive,
-                  isPhotoBusy && styles.controlDisabled,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.fontSample,
-                    isActive && styles.typeChipLabelActive,
-                    {
-                      fontFamily:
-                        font.key === "serif"
-                          ? ReaderTokens.fontFamily.serifBold
-                          : ReaderTokens.fontFamily.sansSemiBold,
-                    },
-                  ]}
-                >
-                  {font.sample}
-                </Text>
-                <Text
-                  style={[
-                    styles.typeChipLabel,
-                    isActive && styles.typeChipLabelActive,
-                  ]}
-                >
-                  {font.label}
-                </Text>
-              </ScalePressable>
-            );
-          })}
-        </View>
-
-        <Text style={styles.sectionLabel}>텍스트 색상</Text>
-        <ColorPicker
-          value={local.textColor}
-          onChange={(textColor) => update({ textColor })}
-          label="텍스트 색상"
-          testID="cover-text-color-picker"
-          disabled={isPhotoBusy}
-        />
-
-        {local.type === "color" && (
-          <>
-            <Text style={styles.sectionLabel}>배경 색상</Text>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.panelScroll}
+          contentContainerStyle={styles.panelContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {panel === "text" ? (
             <ColorPicker
-              value={local.bgColor ?? Colors.zinc50}
-              onChange={(bgColor) => update({ bgColor })}
-              label="배경 색상"
-              testID="cover-background-color-picker"
+              value={local.textColor}
+              onChange={(textColor) => update({ textColor })}
+              label="글자 색상"
+              testID="cover-text-color-picker"
               disabled={isPhotoBusy}
             />
-          </>
-        )}
+          ) : panel === "background" ? (
+            <>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelTitle}>배경</Text>
+                <ScalePressable
+                  style={styles.photoButton}
+                  contentStyle={styles.photoButtonContent}
+                  onPress={selectPhoto}
+                  disabled={isPhotoBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel={local.imageUrl ? "표지 사진 변경" : "표지 사진 추가"}
+                  accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}
+                  testID="cover-photo-button"
+                >
+                  {isPhotoBusy ? (
+                    <ActivityIndicator size="small" color={Colors.zinc700} />
+                  ) : (
+                    <Feather name="image" size={18} color={Colors.zinc700} />
+                  )}
+                  <Text style={styles.photoButtonLabel}>
+                    {isUploading ? "업로드 중" : "사진 추가"}
+                  </Text>
+                </ScalePressable>
+              </View>
+              <ColorPicker
+                value={backgroundColor}
+                onChange={(bgColor) => update({ type: "color", bgColor })}
+                label="배경 색상"
+                testID="cover-background-color-picker"
+                disabled={isPhotoBusy}
+              />
+              {photoError ? (
+                <View style={styles.photoErrorBox} accessibilityLiveRegion="polite">
+                  <Text style={styles.photoErrorText}>{photoError}</Text>
+                  <ScalePressable
+                    style={styles.retryButton}
+                    contentStyle={styles.retryButtonContent}
+                    onPress={() => void retryUpload()}
+                    disabled={isPhotoBusy}
+                    accessibilityRole="button"
+                    accessibilityLabel="사진 업로드 다시 시도"
+                    accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}
+                  >
+                    <Text style={styles.retryButtonLabel}>다시 시도</Text>
+                  </ScalePressable>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <View style={styles.hintWrap}>
+              <Text style={styles.hint}>아래 설정을 눌러 표지를 꾸며보세요.</Text>
+            </View>
+          )}
+        </ScrollView>
 
-        <View style={{ height: insets.bottom + 120 }} />
-      </ScrollView>
+        <View style={styles.controlRow}>
+          <ScalePressable
+            style={styles.controlButton}
+            contentStyle={styles.controlButtonContent}
+            onPress={() => update({ fontFamily: fontFamily === "sans" ? "serif" : "sans" })}
+            disabled={isPhotoBusy}
+            accessibilityRole="button"
+            accessibilityLabel={`서체 ${fontFamily === "sans" ? "고딕" : "명조"}`}
+            accessibilityHint="누르면 고딕과 명조가 전환됩니다."
+            accessibilityState={{ disabled: isPhotoBusy }}
+            testID="cover-font-toggle"
+          >
+            <Text
+              style={[
+                styles.controlValue,
+                {
+                  fontFamily:
+                    fontFamily === "serif"
+                      ? ReaderTokens.fontFamily.serifBold
+                      : ReaderTokens.fontFamily.sansSemiBold,
+                },
+              ]}
+            >
+              {fontFamily === "sans" ? "고딕" : "명조"}
+            </Text>
+            <Text style={styles.controlLabel}>서체</Text>
+          </ScalePressable>
+
+          <ScalePressable
+            style={styles.controlButton}
+            contentStyle={[styles.controlButtonContent, panel === "text" && styles.controlActive]}
+            onPress={() => setPanel((current) => (current === "text" ? null : "text"))}
+            disabled={isPhotoBusy}
+            accessibilityRole="button"
+            accessibilityLabel={`글자 색상 ${local.textColor}`}
+            accessibilityState={{ selected: panel === "text", disabled: isPhotoBusy }}
+            testID="cover-text-color-button"
+          >
+            <View style={[styles.swatch, { backgroundColor: local.textColor }]} />
+            <Text style={styles.controlLabel}>글자</Text>
+          </ScalePressable>
+
+          <ScalePressable
+            style={styles.controlButton}
+            contentStyle={[
+              styles.controlButtonContent,
+              panel === "background" && styles.controlActive,
+            ]}
+            onPress={() =>
+              setPanel((current) => (current === "background" ? null : "background"))
+            }
+            disabled={isPhotoBusy}
+            accessibilityRole="button"
+            accessibilityLabel={
+              local.type === "image" ? "사진 배경 설정" : `배경 색상 ${backgroundColor}`
+            }
+            accessibilityState={{ selected: panel === "background", disabled: isPhotoBusy }}
+            testID="cover-background-button"
+          >
+            {local.type === "image" ? (
+              <Feather name="image" size={22} color={Colors.zinc800} />
+            ) : (
+              <View style={[styles.swatch, { backgroundColor }]} />
+            )}
+            <Text style={styles.controlLabel}>배경</Text>
+          </ScalePressable>
+        </View>
+      </View>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 0,
-  },
-  previewWrapper: {
-    alignItems: "center",
-    marginBottom: 20,
-    paddingHorizontal: 40,
-  },
-  sectionLabel: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  chipRow: {
+  container: { flex: 1 },
+  panelScroll: { flex: 1 },
+  panelContent: { paddingTop: 8, paddingBottom: 16 },
+  hintWrap: { minHeight: 180, alignItems: "center", justifyContent: "center" },
+  hint: { ...Typography.body, fontSize: 14, color: Colors.zinc500 },
+  panelHeader: {
+    height: 44,
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
   },
-  typeChip: {
-    height: 40,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  typeChipContent: {
-    height: 40,
+  panelTitle: { ...Typography.bodySemiBold, fontSize: 15, color: Colors.zinc900 },
+  photoButton: { height: 44, flexGrow: 0, flexShrink: 0 },
+  photoButtonContent: {
+    height: 44,
     flexGrow: 0,
     flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: Colors.zinc100,
+    paddingHorizontal: 4,
   },
-  typeChipActive: {
-    backgroundColor: Colors.zinc900,
-  },
-  typeChipLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.zinc600,
-  },
-  typeChipLabelActive: {
-    color: Colors.white,
-  },
-  controlDisabled: {
-    opacity: 0.55,
-  },
-  photoSection: {
-    marginTop: 12,
-    gap: 8,
-  },
-  photoButton: {
-    width: "100%",
-    height: 44,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  photoButtonContent: {
-    width: "100%",
-    height: 44,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: 10,
-    backgroundColor: Colors.zinc100,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  photoButtonLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 14,
-    color: Colors.zinc700,
-  },
+  photoButtonLabel: { ...Typography.bodySemiBold, fontSize: 13, color: Colors.zinc700 },
   photoErrorBox: {
+    marginTop: 12,
     borderRadius: 10,
     backgroundColor: Colors.noticeAccentSoft,
     padding: 12,
-    gap: 10,
+    gap: 8,
   },
-  photoErrorText: {
-    ...Typography.caption,
-    fontSize: 12,
-    lineHeight: 18,
-    color: Colors.noticeAccent,
-  },
-  retryButton: {
-    height: 36,
-    alignSelf: "flex-start",
-    flexGrow: 0,
-    flexShrink: 0,
-  },
+  photoErrorText: { ...Typography.caption, fontSize: 12, color: Colors.noticeAccent },
+  retryButton: { height: 36, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
   retryButtonContent: {
     height: 36,
     flexGrow: 0,
@@ -507,32 +355,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  retryButtonLabel: {
-    ...Typography.bodySemiBold,
-    fontSize: 13,
-    color: Colors.noticeAccent,
-  },
-  fontChip: {
-    height: 40,
-    alignSelf: "flex-start",
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  fontChipContent: {
-    height: 40,
-    minWidth: 86,
-    flexGrow: 0,
-    flexShrink: 0,
+  retryButtonLabel: { ...Typography.bodySemiBold, fontSize: 13, color: Colors.noticeAccent },
+  controlRow: {
+    height: CONTROL_HEIGHT,
     flexDirection: "row",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.zinc200,
+  },
+  controlButton: { flex: 1, height: CONTROL_HEIGHT, flexGrow: 1, flexShrink: 1 },
+  controlButtonContent: {
+    height: CONTROL_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: Colors.zinc100,
+    gap: 3,
   },
-  fontSample: {
-    fontSize: 13,
-    color: Colors.zinc600,
+  controlActive: { backgroundColor: Colors.zinc100 },
+  controlValue: { fontSize: 15, color: Colors.zinc900 },
+  controlLabel: { ...Typography.caption, fontSize: 11, color: Colors.zinc600 },
+  swatch: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc300,
   },
 });

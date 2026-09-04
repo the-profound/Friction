@@ -3,8 +3,9 @@ import { Colors } from "../constants/tokens";
 import { normalizeCoverColorSettings } from "../lib/articleCoverColors";
 
 const DEFAULT_COVER: ArticleCover = {
-  type: "default",
+  type: "color",
   textColor: Colors.zinc900,
+  bgColor: Colors.zinc50,
   fontFamily: "sans",
   align: "left",
 };

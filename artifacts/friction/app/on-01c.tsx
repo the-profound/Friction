@@ -7,6 +7,9 @@ import {
   ActivityIndicator,
   BackHandler,
   Platform,
+  Animated as RNAnimated,
+  useWindowDimensions,
+  type LayoutChangeEvent,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -68,6 +71,7 @@ export default function ClosingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { height: screenHeight } = useWindowDimensions();
   const { id, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
     id: string;
     spaceId?: string;
@@ -150,6 +154,8 @@ export default function ClosingScreen() {
   const [previewPage, setPreviewPage] = useState(0);
   const [cover, setCover] = useState<ArticleCover>(getDefaultCover());
   const [coverEditorVisible, setCoverEditorVisible] = useState(false);
+  const coverSheetTranslateYAnim = useRef(new RNAnimated.Value(screenHeight)).current;
+  const [coverFrame, setCoverFrame] = useState({ y: 0, height: 0 });
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isCoverUploading, setIsCoverUploading] = useState(false);
@@ -615,7 +621,10 @@ export default function ClosingScreen() {
     },
     {
       label: "표지 편집",
-      onPress: () => setCoverEditorVisible(true),
+      onPress: () => {
+        setPreviewPage(0);
+        setCoverEditorVisible(true);
+      },
       disabled: stageMenuBusy,
       busy: false,
     },
@@ -663,6 +672,50 @@ export default function ClosingScreen() {
   const contentPageIndex = hasCoverPage ? clampedPreviewPage - 1 : clampedPreviewPage;
   // 렌더마다 최신 복귀 페이지 인덱스를 ref에 반영한다.
   returnPageIdxRef.current = isCoverPage ? 0 : Math.max(0, contentPageIndex);
+
+  const handleCoverFrameLayout = (event: LayoutChangeEvent) => {
+    const { y, height } = event.nativeEvent.layout;
+    setCoverFrame((current) =>
+      current.y === y && current.height === height ? current : { y, height },
+    );
+  };
+  const coverRestCenter =
+    topInset + WRITING_HEADER_HEIGHT + coverFrame.y + coverFrame.height / 2;
+  const coverAvailableTop = topInset + WRITING_HEADER_HEIGHT + 8;
+  const midSheetTop = screenHeight * (1 - 0.58);
+  const getCoverFit = (sheetTop: number) => {
+    const availableBottom = sheetTop - 12;
+    const availableHeight = Math.max(0, availableBottom - coverAvailableTop);
+    const scale =
+      coverFrame.height > 0 ? Math.min(1, availableHeight / coverFrame.height) : 1;
+    const center =
+      availableHeight > 0
+        ? (coverAvailableTop + availableBottom) / 2
+        : coverAvailableTop;
+    return {
+      scale,
+      translateY: coverFrame.height > 0 ? center - coverRestCenter : 0,
+    };
+  };
+  const midCoverFit = getCoverFit(midSheetTop);
+  const coverPreviewAnimStyle = {
+    transform: [
+      {
+        translateY: coverSheetTranslateYAnim.interpolate({
+          inputRange: [midSheetTop, screenHeight],
+          outputRange: [midCoverFit.translateY, 0],
+          extrapolate: "clamp",
+        }),
+      },
+      {
+        scale: coverSheetTranslateYAnim.interpolate({
+          inputRange: [midSheetTop, screenHeight],
+          outputRange: [midCoverFit.scale, 1],
+          extrapolate: "clamp",
+        }),
+      },
+    ],
+  };
 
   if (!id || articleLoading) {
     return (
@@ -739,7 +792,12 @@ export default function ClosingScreen() {
       </View>
 
       <View style={styles.previewArea}>
-        <View style={styles.previewInner}>
+        <RNAnimated.View
+          style={[styles.previewInner, coverPreviewAnimStyle]}
+          onLayout={handleCoverFrameLayout}
+          renderToHardwareTextureAndroid={coverEditorVisible}
+          needsOffscreenAlphaCompositing={coverEditorVisible}
+        >
           {totalVirtualPages === 0 ? (
               <View style={styles.emptyContainer}>
                 <Feather name="eye" size={36} color={Colors.zinc300} />
@@ -816,7 +874,7 @@ export default function ClosingScreen() {
               }}
             />
           )}
-        </View>
+        </RNAnimated.View>
       </View>
 
       {totalVirtualPages > 1 && (
@@ -837,6 +895,7 @@ export default function ClosingScreen() {
         articleId={id}
         onPhotoOperationStateChange={handleCoverUploadStateChange}
         onCommitPhotoCover={handlePhotoCoverCommit}
+        sheetTranslateYAnim={coverSheetTranslateYAnim}
       />
 
       <ConfirmModal

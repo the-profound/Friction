@@ -17,30 +17,24 @@ describe("CoverEditor color picker integration", () => {
     expect(editor).not.toContain("BG_COLORS");
   });
 
-  it("keeps background controls specific to solid covers and exposes cover-only photo controls", () => {
+  it("removes cover-type selection and combines color and photo background settings", () => {
     const editor = read("CoverEditor.tsx");
 
-    expect(editor).toContain('local.type === "color"');
-    expect(editor).toContain('{ key: "image", label: "사진"');
+    expect(editor).not.toContain("COVER_TYPES");
+    expect(editor).not.toContain("표지 타입");
     expect(editor).toContain("pickCoverPhoto()");
     expect(editor).toContain("uploadCoverPhoto(articleId, photo)");
-    expect(editor).toContain('"이미지 변경"');
+    expect(editor).toContain('"사진 추가"');
     expect(editor).not.toContain("useImageUpload");
-
-    const typeSelection = editor.slice(
-      editor.indexOf('if (type === "image")'),
-      editor.indexOf("const isPhotoBusy"),
-    );
-    expect(typeSelection).toContain("setPhotoPanelVisible(true)");
-    expect(typeSelection).not.toContain("void selectPhoto()");
     expect(editor).toContain("onPress={selectPhoto}");
+    expect(editor).toContain('update({ type: "color", bgColor })');
   });
 
   it("restores and sanitizes saved colors every time the editor opens", () => {
     const editor = read("CoverEditor.tsx");
 
     expect(editor).toContain("resolveArticleCover(cover)");
-    expect(editor).toContain("if (visible)");
+    expect(editor).toContain("if (!visible) return");
     expect(editor).toContain("onChange(next)");
   });
 
@@ -70,13 +64,26 @@ describe("CoverEditor color picker integration", () => {
 
     expect(closingScreen).toContain('import CoverEditor from');
     expect(closingScreen).toContain('label: "표지 편집"');
-    expect(closingScreen).toContain("onPress: () => setCoverEditorVisible(true)");
+    expect(closingScreen).toContain("setPreviewPage(0)");
+    expect(closingScreen).toContain("setCoverEditorVisible(true)");
     expect(closingScreen).toContain("<CoverEditor");
     expect(closingScreen).toContain("persistCover");
     expect(closingScreen).toContain("coverSaveQueueRef");
     expect(closingScreen).toContain("<CoverPreview");
     expect(closingScreen).toContain("cover={cover}");
+    expect(closingScreen).toContain("sheetTranslateYAnim={coverSheetTranslateYAnim}");
+    expect(closingScreen).toContain("coverPreviewAnimStyle");
     expect(exportFlow).toContain("await persistCover(coverToSave)");
     expect(exportFlow).toContain("await finalizeExport()");
+  });
+
+  it("uses three fixed controls with accessible font, text, and background actions", () => {
+    const editor = read("CoverEditor.tsx");
+    expect(editor).toContain("const CONTROL_HEIGHT = 56");
+    expect(editor).toContain('testID="cover-font-toggle"');
+    expect(editor).toContain('testID="cover-text-color-button"');
+    expect(editor).toContain('testID="cover-background-button"');
+    expect(editor).toContain('fontFamily === "sans" ? "serif" : "sans"');
+    expect(editor).toContain('accessibilityState={{ selected: panel === "text"');
   });
 });

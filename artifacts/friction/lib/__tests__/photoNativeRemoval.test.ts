@@ -104,9 +104,9 @@ describe("native photo feature removal", () => {
 
     expect(preview).toContain('coverType === "image"');
     expect(preview).toContain("const imageUrl = cover?.imageUrl");
-    expect(editor).toContain('key: "image"');
-    expect(editor).toContain("사진 선택");
-    expect(editor).toContain("이미지 변경");
+    expect(editor).toContain('type: "image" as const');
+    expect(editor).toContain("사진 추가");
+    expect(editor).toContain("pickCoverPhoto()");
   });
 
   it("does not expose photo creation, retry, or device-save actions", () => {
