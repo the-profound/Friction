@@ -369,6 +369,12 @@ export const updateArticleBodyCoverFontFamilyDefault = `sans`;
 export const UpdateArticleBody = zod.object({
   title: zod.string().min(1).optional(),
   content: zod.string().optional(),
+  expectedContent: zod
+    .string()
+    .optional()
+    .describe(
+      "Reject the update if the article body changed after this server version was read.",
+    ),
   pages: zod.array(zod.string()).nullish(),
   layoutWidth: zod
     .number()

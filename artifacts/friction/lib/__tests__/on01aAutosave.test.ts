@@ -7,6 +7,11 @@ import {
   isStationaryBlankSurfaceTap,
   updateEditorSurfaceTouchSession,
 } from "../../components/WebViewMarkdownEditor/editorSurfaceTouch";
+import {
+  decideAutoSaveRestore,
+  hashAutoSaveContent,
+  type PendingPayload,
+} from "../useAutoSave";
 
 const appRoot = join(__dirname, "../..");
 const readScreen = () => readFileSync(join(appRoot, "app/on-01a.tsx"), "utf8");
@@ -199,6 +204,53 @@ describe("on-01a latest-snapshot autosave boundary", () => {
 });
 
 describe("useAutoSave pending-content preservation", () => {
+  const serverContext = {
+    ready: true,
+    entityId: "article-1",
+    entityMode: "dividing" as const,
+    serverUpdatedAt: "2026-09-03T01:00:00.000Z",
+    serverContent: "서버의 최신 본문",
+  };
+  const currentQueue = (overrides: Partial<PendingPayload> = {}): PendingPayload => ({
+    title: "영악한",
+    content: "사용자의 더 최신인 로컬 편집",
+    entityId: serverContext.entityId,
+    entityMode: serverContext.entityMode,
+    serverUpdatedAt: serverContext.serverUpdatedAt,
+    serverContentHash: hashAutoSaveContent(serverContext.serverContent),
+    serverContentBaseline: serverContext.serverContent,
+    localChangedAt: Date.parse("2026-09-03T01:01:00.000Z"),
+    localGeneration: 1,
+    ...overrides,
+  });
+
+  it("restores only a non-empty local edit proven to share the current server baseline", () => {
+    expect(decideAutoSaveRestore(currentQueue(), serverContext)).toBe("restore");
+    expect(decideAutoSaveRestore(currentQueue({ content: "" }), serverContext)).toBe("conflict");
+    expect(
+      decideAutoSaveRestore(
+        currentQueue({ serverContentBaseline: undefined }),
+        serverContext,
+      ),
+    ).toBe("conflict");
+    expect(decideAutoSaveRestore(currentQueue({
+      serverUpdatedAt: "2026-09-02T23:00:00.000Z",
+    }), serverContext)).toBe("conflict");
+    expect(decideAutoSaveRestore(currentQueue({
+      serverContentHash: hashAutoSaveContent("오래된 서버 본문"),
+    }), serverContext)).toBe("conflict");
+  });
+
+  it("keeps legacy, wrong-entity, and wrong-stage queues as conflicts instead of patching", () => {
+    expect(decideAutoSaveRestore({
+      title: "영악한",
+      content: "기준 없는 로컬 내용",
+    }, serverContext)).toBe("conflict");
+    expect(decideAutoSaveRestore(currentQueue({ entityId: "article-2" }), serverContext)).toBe("conflict");
+    expect(decideAutoSaveRestore(currentQueue({ entityMode: "draft" }), serverContext)).toBe("conflict");
+    expect(decideAutoSaveRestore(currentQueue(), { ...serverContext, ready: false })).toBe("defer");
+  });
+
   it("serializes queue writes and preserves the newest payload after an older request fails", () => {
     const autoSave = readAutoSave();
     const failurePath = autoSave.slice(
@@ -219,6 +271,61 @@ describe("useAutoSave pending-content preservation", () => {
     expect(screen).toContain("const handleAutosaveRestore = useCallback");
     expect(screen).toContain("editorRef.current?.setMarkdown(data.content);");
     expect(screen).toContain("onRestore: handleAutosaveRestore");
+  });
+
+  it("waits for the article snapshot and preserves ambiguous queues without saving them", () => {
+    const autoSave = readAutoSave();
+    const screen = readScreen();
+    const restorePath = autoSave.slice(
+      autoSave.indexOf("useEffect(() => {", autoSave.indexOf("const runPendingCleanup")),
+      autoSave.indexOf("const markDirty"),
+    );
+
+    expect(autoSave).toContain("serverUpdatedAt?: string;");
+    expect(autoSave).toContain("serverContentHash?: string;");
+    expect(autoSave).toContain("localGeneration?: number;");
+    expect(autoSave).toContain(
+      "expectedServerContent: latestDataRef.current.serverContentBaseline",
+    );
+    expect(restorePath).toContain("if (restoreContext && !restoreContext.ready) return;");
+    expect(restorePath).toContain('restoreDecision === "conflict"');
+    expect(restorePath).not.toContain("writeQueue(null)");
+    expect(screen).toContain("const reviewRestoreContext = useMemo");
+    expect(screen).toContain("restoreContext: reviewRestoreContext");
+    expect(screen).toContain("onRestoreConflict:");
+    expect(screen).toContain("expectedContent: data.expectedServerContent");
+    expect(screen).toContain("isRetryableError:");
+    expect(autoSave).toContain("isRetryableErrorRef.current?.(error) === false");
+    expect(autoSave).toContain("savedBaseline?.serverContent !== undefined");
+    expect(autoSave).toContain("acknowledgedServerRef.current = {");
+    expect(autoSave).toContain(
+      "const context = acknowledgedServerRef.current ?? restoreContextRef.current",
+    );
+    expect(autoSave).toContain(
+      "serverContentHash: hashAutoSaveContent(savedBaseline.serverContent)",
+    );
+    expect(autoSave).toContain("serverContentBaseline: savedBaseline.serverContent");
+  });
+
+  it("never calls the article mutation with an empty review body", () => {
+    const screen = readScreen();
+    const reviewSave = screen.slice(
+      screen.indexOf('} else if (modeRef.current === "dividing")'),
+      screen.indexOf("} else {", screen.indexOf('} else if (modeRef.current === "dividing")')),
+    );
+
+    expect(reviewSave).toContain("if (!data.content.trim())");
+    expect(reviewSave).toContain("autosaveConflict = true");
+    expect(reviewSave.indexOf("if (!data.content.trim())")).toBeLessThan(
+      reviewSave.indexOf("updateArticle.mutateAsync"),
+    );
+  });
+
+  it("fetches the article fallback for a direct on-01a route with a missing mode", () => {
+    const screen = readScreen();
+    expect(screen).toContain("const detailResolution = resolveDetailEntity");
+    expect(screen).toContain("enabled: !!id && !isLocalDirectDraft,");
+    expect(screen).toContain('detailResolution.entity === "article"');
   });
 
   it("bounds storage and network waits and exposes bridge failures as retryable", () => {

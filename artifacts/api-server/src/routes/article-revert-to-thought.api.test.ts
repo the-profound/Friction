@@ -80,6 +80,35 @@ describe("review article reverse-promotion contract", () => {
     expect(transitionHandler).toContain("Article changed before the transition completed");
   });
 
+  it("rejects empty review payloads before they can erase a titled article", () => {
+    const source = readArticlesRoute();
+    const patchHandler = source.slice(
+      source.indexOf('router.patch("/articles/:id"'),
+      source.indexOf('router.post("/articles/:id/revert-to-thought"'),
+    );
+
+    expect(patchHandler).toContain('existing.status === "DIVIDING"');
+    expect(patchHandler).toContain('parsed.data.content.trim() === ""');
+    expect(patchHandler).toContain(
+      "A titled review article cannot be updated with an empty body",
+    );
+    expect(patchHandler).not.toContain("parsed.data.pages.every");
+  });
+
+  it("uses the exact server body as a lossless optimistic concurrency condition", () => {
+    const source = readArticlesRoute();
+    const patchHandler = source.slice(
+      source.indexOf('router.patch("/articles/:id"'),
+      source.indexOf('router.post("/articles/:id/revert-to-thought"'),
+    );
+
+    expect(patchHandler).toContain("parsed.data.expectedContent !== undefined");
+    expect(patchHandler).toContain(
+      "eq(articlesTable.content, parsed.data.expectedContent)",
+    );
+    expect(patchHandler).toContain("throw new ArticleMutationConflictError()");
+  });
+
   it("keeps thought edits and deletes conditional on the reverse-promotion marker", () => {
     const source = readThoughtsRoute();
     const patchHandler = source.slice(

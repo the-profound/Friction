@@ -63,6 +63,18 @@ describe("detail entity resolution", () => {
     });
   });
 
+  it("recovers a direct on-01a article route when mode=dividing was omitted", () => {
+    expect(resolveDetailEntity({
+      requestMode: "thought",
+      thought: missing<Thought>(),
+      article: success<Article>({ id: "article-1", status: "DIVIDING", content: "서버 본문" }),
+    })).toEqual({
+      kind: "success",
+      entity: "article",
+      article: { id: "article-1", status: "DIVIDING", content: "서버 본문" },
+    });
+  });
+
   it("uses article-only loading and failure states for a requested dividing route", () => {
     expect(resolveDetailEntity({
       requestMode: "dividing",

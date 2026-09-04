@@ -3,7 +3,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 
-interface PendingPayload {
+export type AutoSaveEntityMode = "draft" | "dividing";
+
+export interface PendingPayload {
   title: string;
   content: string;
   operation?: "save" | "delete";
@@ -11,6 +13,65 @@ interface PendingPayload {
   entityId?: string;
   creationId?: string;
   aliasQueueKeys?: string[];
+  entityMode?: AutoSaveEntityMode;
+  serverUpdatedAt?: string;
+  serverContentHash?: string;
+  serverContentBaseline?: string;
+  localChangedAt?: number;
+  localGeneration?: number;
+}
+
+export interface AutoSaveRestoreContext {
+  ready: boolean;
+  entityId: string;
+  entityMode: AutoSaveEntityMode;
+  serverUpdatedAt: string;
+  serverContent: string;
+}
+
+export type AutoSaveRestoreDecision = "restore" | "defer" | "conflict";
+
+export function hashAutoSaveContent(content: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < content.length; index += 1) {
+    hash ^= content.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+export function decideAutoSaveRestore(
+  queued: PendingPayload,
+  context?: AutoSaveRestoreContext,
+): AutoSaveRestoreDecision {
+  if (!context) return "restore";
+  if (!context.ready) return "defer";
+  if (
+    queued.entityId !== context.entityId
+    || queued.entityMode !== context.entityMode
+    || !queued.serverUpdatedAt
+    || !queued.serverContentHash
+    || !queued.localChangedAt
+    || !queued.localGeneration
+  ) {
+    return "conflict";
+  }
+  if (
+    queued.serverUpdatedAt !== context.serverUpdatedAt
+    || queued.serverContentHash !== hashAutoSaveContent(context.serverContent)
+  ) {
+    return "conflict";
+  }
+  if (
+    context.entityMode === "dividing"
+    && queued.serverContentBaseline !== context.serverContent
+  ) {
+    return "conflict";
+  }
+  if (queued.content.trim() === "") {
+    return "conflict";
+  }
+  return "restore";
 }
 
 interface UseAutoSaveOptions {
@@ -20,7 +81,21 @@ interface UseAutoSaveOptions {
   storageTimeoutMs?: number;
   storageKey?: string;
   creationId?: string;
-  onSave: (data: { title: string; content: string }) => Promise<void>;
+  entityId?: string;
+  entityMode?: AutoSaveEntityMode;
+  restoreContext?: AutoSaveRestoreContext;
+  onSave: (data: {
+    title: string;
+    content: string;
+    expectedServerContent?: string;
+  }) => Promise<
+    | {
+        serverUpdatedAt?: string;
+        serverContent?: string;
+      }
+    | void
+  >;
+  isRetryableError?: (error: unknown) => boolean;
   onCleanup?: (entityId: string) => Promise<void>;
   onRestore?: (data: {
     title: string;
@@ -28,6 +103,7 @@ interface UseAutoSaveOptions {
     entityId?: string;
     creationId?: string;
   }) => void;
+  onRestoreConflict?: () => void;
 }
 
 async function persistQueue(key: string, data: PendingPayload | null): Promise<void> {
@@ -71,17 +147,30 @@ export function useAutoSave({
   storageTimeoutMs = 3_000,
   storageKey,
   creationId,
+  entityId,
+  entityMode,
+  restoreContext,
   onSave,
+  isRetryableError,
   onCleanup,
   onRestore,
+  onRestoreConflict,
 }: UseAutoSaveOptions) {
   const [status, setStatus] = useState<AutoSaveStatus>("idle");
   const [isDirty, setIsDirty] = useState(false);
 
-  const latestDataRef = useRef<PendingPayload>({ title: "", content: "", creationId });
+  const latestDataRef = useRef<PendingPayload>({
+    title: "",
+    content: "",
+    creationId,
+    entityId,
+    entityMode,
+  });
   if (creationId && !latestDataRef.current.creationId) {
     latestDataRef.current.creationId = creationId;
   }
+  if (entityId) latestDataRef.current.entityId = entityId;
+  if (entityMode) latestDataRef.current.entityMode = entityMode;
   const requestIdRef = useRef(0);
   const latestCompletedRef = useRef(0);
   // Incremented by markDirty/markTitleDirty on every new dirty call.
@@ -101,19 +190,57 @@ export function useAutoSave({
   const isDirtyRef = useRef(false);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  const isRetryableErrorRef = useRef(isRetryableError);
+  isRetryableErrorRef.current = isRetryableError;
   const onCleanupRef = useRef(onCleanup);
   onCleanupRef.current = onCleanup;
   const onRestoreRef = useRef(onRestore);
   onRestoreRef.current = onRestore;
+  const onRestoreConflictRef = useRef(onRestoreConflict);
+  onRestoreConflictRef.current = onRestoreConflict;
+  const restoreContextRef = useRef(restoreContext);
+  restoreContextRef.current = restoreContext;
+  const acknowledgedServerRef = useRef<AutoSaveRestoreContext | undefined>(
+    restoreContext?.ready ? restoreContext : undefined,
+  );
+  if (
+    restoreContext?.ready
+    && (
+      acknowledgedServerRef.current?.entityId !== restoreContext.entityId
+      || (!isDirtyRef.current && !savingRef.current)
+    )
+  ) {
+    acknowledgedServerRef.current = restoreContext;
+  }
+  const localGenerationRef = useRef(0);
   const queueKey = storageKey ? `autosave_queue_${storageKey}` : null;
   const queueKeysRef = useRef<Set<string>>(new Set());
   if (queueKey) queueKeysRef.current.add(queueKey);
   const queueWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const restoreAttemptedQueueKeyRef = useRef<string | null>(null);
 
   // Tracks the currently in-flight save promise so flush() can await it
   // instead of starting a concurrent save that races with the existing one.
   const activeSaveRef = useRef<Promise<void> | null>(null);
   const activeCleanupRef = useRef<Promise<{ ok: boolean }> | null>(null);
+
+  const nextRecoveryMetadata = useCallback((): Partial<PendingPayload> => {
+    const context = acknowledgedServerRef.current ?? restoreContextRef.current;
+    localGenerationRef.current += 1;
+    return {
+      ...(context
+        ? {
+            entityId: context.entityId,
+            entityMode: context.entityMode,
+            serverUpdatedAt: context.serverUpdatedAt,
+            serverContentHash: hashAutoSaveContent(context.serverContent),
+            serverContentBaseline: context.serverContent,
+          }
+        : {}),
+      localChangedAt: Date.now(),
+      localGeneration: localGenerationRef.current,
+    };
+  }, []);
 
   const clearRetryTimer = useCallback(() => {
     if (!retryTimerRef.current) return;
@@ -154,6 +281,7 @@ export function useAutoSave({
     const data = {
       title: latestDataRef.current.title,
       content: latestDataRef.current.content,
+      expectedServerContent: latestDataRef.current.serverContentBaseline,
     };
     const id = ++requestIdRef.current;
     // Snapshot the dirty epoch so we can detect if markDirty was called
@@ -177,6 +305,12 @@ export function useAutoSave({
 
     const run = async () => {
       let saved = false;
+      let savedBaseline:
+        | {
+            serverUpdatedAt?: string;
+            serverContent?: string;
+          }
+        | void;
       let watchdog: ReturnType<typeof setTimeout> | null = null;
       try {
         // A create idempotency key is useful only if it survives a process
@@ -192,7 +326,22 @@ export function useAutoSave({
             setStatus("error");
           }
         }, saveTimeoutMs);
-        await networkSave;
+        savedBaseline = await networkSave;
+        if (savedBaseline?.serverContent !== undefined) {
+          acknowledgedServerRef.current = {
+            ready: true,
+            entityId: latestDataRef.current.entityId ?? restoreContextRef.current?.entityId ?? "",
+            entityMode:
+              latestDataRef.current.entityMode
+              ?? restoreContextRef.current?.entityMode
+              ?? "draft",
+            serverUpdatedAt:
+              savedBaseline.serverUpdatedAt
+              ?? restoreContextRef.current?.serverUpdatedAt
+              ?? "",
+            serverContent: savedBaseline.serverContent,
+          };
+        }
         saved = true;
         if (id >= latestCompletedRef.current) {
           latestCompletedRef.current = id;
@@ -207,6 +356,15 @@ export function useAutoSave({
             console.log("[useAutoSave doSave] id=%d epoch matched → dirty cleared ✓", id);
           } else {
             // A new markDirty was called during this save — dirty data still pending.
+            if (savedBaseline?.serverContent !== undefined) {
+              latestDataRef.current = {
+                ...latestDataRef.current,
+                serverUpdatedAt: savedBaseline.serverUpdatedAt,
+                serverContentHash: hashAutoSaveContent(savedBaseline.serverContent),
+                serverContentBaseline: savedBaseline.serverContent,
+              };
+              await writeQueue({ ...latestDataRef.current });
+            }
             console.log(
               "[useAutoSave doSave] id=%d epoch drifted (%d→%d) → dirty kept",
               id,
@@ -217,7 +375,7 @@ export function useAutoSave({
             // placed the newest snapshot in storage, so do not clear it here.
           }
         }
-      } catch {
+      } catch (error) {
         if (id >= latestCompletedRef.current) {
           // discard() may have intentionally cancelled this payload while the
           // request was in flight (for example, a formatting-only local
@@ -227,6 +385,10 @@ export function useAutoSave({
           // New input can arrive while this request is failing. Persist and
           // retry the newest payload, never the stale save-start snapshot.
           void writeQueue({ ...latestDataRef.current }).catch(() => undefined);
+          if (isRetryableErrorRef.current?.(error) === false) {
+            setStatus("error");
+            return;
+          }
           retryCountRef.current++;
           if (retryCountRef.current <= maxRetries) {
             const delay = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 10000);
@@ -319,6 +481,9 @@ export function useAutoSave({
 
   useEffect(() => {
     if (!queueKey) return;
+    if (restoreContext && !restoreContext.ready) return;
+    if (restoreAttemptedQueueKeyRef.current === queueKey) return;
+    restoreAttemptedQueueKeyRef.current = queueKey;
     let cancelled = false;
     const restoreStartEpoch = dirtyEpochRef.current;
     loadQueue(queueKey).then((queued) => {
@@ -327,6 +492,13 @@ export function useAutoSave({
       // queued snapshot. Never replace visible text or latestData with the
       // delayed restore; markDirty has already queued the fresh snapshot.
       if (dirtyEpochRef.current !== restoreStartEpoch || isDirtyRef.current) return;
+      const restoreDecision = decideAutoSaveRestore(queued, restoreContextRef.current);
+      if (restoreDecision === "defer") return;
+      if (restoreDecision === "conflict") {
+        setStatus("error");
+        onRestoreConflictRef.current?.();
+        return;
+      }
       for (const alias of queued.aliasQueueKeys ?? []) {
         if (alias.startsWith("autosave_queue_")) queueKeysRef.current.add(alias);
       }
@@ -338,6 +510,10 @@ export function useAutoSave({
         creationId:
           queued.creationId ?? queued.entityId ?? latestDataRef.current.creationId,
       };
+      localGenerationRef.current = Math.max(
+        localGenerationRef.current,
+        restored.localGeneration ?? 0,
+      );
       latestDataRef.current = restored;
       if (restored.operation === "delete") {
         void runPendingCleanup(restored.entityId);
@@ -356,7 +532,16 @@ export function useAutoSave({
       doSave();
     });
     return () => { cancelled = true; };
-  }, [queueKey, doSave, runPendingCleanup]);
+  }, [
+    queueKey,
+    doSave,
+    restoreContext?.ready,
+    restoreContext?.entityId,
+    restoreContext?.entityMode,
+    restoreContext?.serverUpdatedAt,
+    restoreContext?.serverContent,
+    runPendingCleanup,
+  ]);
 
   const markDirty = useCallback(
     (title: string, content: string) => {
@@ -366,6 +551,7 @@ export function useAutoSave({
         content,
         operation: "save",
         cleanupId: undefined,
+        ...nextRecoveryMetadata(),
       };
       // Bump epoch BEFORE setting isDirtyRef so any in-flight doSave that
       // checks (dirtyEpochRef.current === epochSnapshot) sees the mismatch
@@ -382,7 +568,7 @@ export function useAutoSave({
         doSave();
       }, debounceMs);
     },
-    [debounceMs, doSave, writeQueue],
+    [debounceMs, doSave, nextRecoveryMetadata, writeQueue],
   );
 
   // Title-only dirty path: avoids re-passing the full body string on each
@@ -400,6 +586,7 @@ export function useAutoSave({
         content,
         operation: "save",
         cleanupId: undefined,
+        ...nextRecoveryMetadata(),
       };
       // Bump epoch so any in-flight doSave does not clear isDirtyRef
       // if this title keystroke arrives during a concurrent save.
@@ -415,7 +602,7 @@ export function useAutoSave({
         doSave();
       }, debounceMs);
     },
-    [debounceMs, doSave, writeQueue],
+    [debounceMs, doSave, nextRecoveryMetadata, writeQueue],
   );
 
   const persistLatest = useCallback(async () => {

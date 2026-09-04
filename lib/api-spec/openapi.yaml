@@ -3418,6 +3418,9 @@ components:
           minLength: 1
         content:
           type: string
+        expectedContent:
+          type: string
+          description: Reject the update if the article body changed after this server version was read.
         pages:
           type: array
           items:

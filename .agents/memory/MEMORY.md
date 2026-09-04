@@ -78,3 +78,4 @@
 - [Idempotent transition retries](idempotent-transition-retries.md) — after an ambiguous POST result, unchanged retries must bypass prerequisite writes that the committed transition invalidated.
 - [Guarded native removal ownership](friction-guarded-native-removal.md) — after async save, replay the exact prevented removal action; a fresh back action can double-pop after iOS edge swipe.
 - [Send target and delivery contract](send-target-delivery-contract.md) — preserve historical collection records while new sends use person/reply/space and canonical KST 06:00 delivery.
+- [Autosave restore concurrency](autosave-restore-concurrency.md) — restoring a local edit needs an exact server-body baseline, and in-flight saves must synchronously rebase newer queued edits.

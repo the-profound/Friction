@@ -185,6 +185,18 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
     return;
   }
 
+  const nextTitle = parsed.data.title ?? existing.title;
+  if (
+    existing.status === "DIVIDING"
+    && parsed.data.content !== undefined
+    && nextTitle.trim() !== ""
+    && parsed.data.content.trim() === ""
+  ) {
+    res.status(400).json({
+      error: "A titled review article cannot be updated with an empty body",
+    });
+    return;
+  }
   const updates: Record<string, unknown> = {};
   if (parsed.data.title !== undefined) updates.title = parsed.data.title;
   if (parsed.data.content !== undefined) {
@@ -224,6 +236,9 @@ router.patch("/articles/:id", requireAuth, async (req, res) => {
           and(
             eq(articlesTable.id, req.params.id),
             eq(articlesTable.status, existing.status),
+            ...(parsed.data.expectedContent !== undefined
+              ? [eq(articlesTable.content, parsed.data.expectedContent)]
+              : []),
             isNull(articlesTable.deletedAt),
           ),
         )

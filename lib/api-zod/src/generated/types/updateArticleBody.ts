@@ -12,6 +12,8 @@ export interface UpdateArticleBody {
   /** @minLength 1 */
   title?: string;
   content?: string;
+  /** Reject the update if the article body changed after this server version was read. */
+  expectedContent?: string;
   pages?: string[] | null;
   /** Container width used when splitting pages (px). */
   layoutWidth?: number | null;

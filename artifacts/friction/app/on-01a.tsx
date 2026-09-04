@@ -19,7 +19,8 @@ import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import type { NavigationAction } from "expo-router/build/react-navigation/routers";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Shadows } from "@/constants/tokens";
-import { useAutoSave } from "@/lib/useAutoSave";
+import { useAutoSave, type AutoSaveRestoreContext } from "@/lib/useAutoSave";
+import { resolveDetailEntity } from "@/lib/detailEntityResolution";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
 import {
@@ -205,7 +206,7 @@ export default function WritingScreen() {
   const articleQuery = useGetArticle(id ?? "", {
     query: {
       queryKey: getGetArticleQueryKey(id ?? ""),
-      enabled: !!id && !isLocalDirectDraft && modeParam === "dividing",
+      enabled: !!id && !isLocalDirectDraft,
       retry: false,
     },
   });
@@ -215,12 +216,20 @@ export default function WritingScreen() {
   // An article is active when its query succeeds after a promotion.
   const thought = thoughtQuery.data;
   const article = articleQuery.data;
+  const detailResolution = resolveDetailEntity({
+    requestMode: modeParam === "dividing" ? "dividing" : "thought",
+    thought: thoughtQuery,
+    article: articleQuery,
+  });
 
   // isThoughtMode: the id refers to a thought (draft writing stage).
   // A non-dividing writing route is always a thought route. Decide this from
   // the URL before data arrives so a restored persisted thought can never
   // briefly autosave against the article endpoint during its first render.
-  const isThoughtMode = isLocalDirectDraft || (!!id && modeParam !== "dividing");
+  const isThoughtMode = isLocalDirectDraft || !(
+    detailResolution.kind === "success"
+    && detailResolution.entity === "article"
+  );
 
   // Active article for dividing mode.
   const dividingArticle = article && article.status === "DIVIDING" ? article : undefined;
@@ -228,10 +237,7 @@ export default function WritingScreen() {
   const isThoughtModeRef = useRef(false);
   isThoughtModeRef.current = isThoughtMode;
 
-  const dataLoading = !!id && !isLocalDirectDraft &&
-    (modeParam === "dividing"
-      ? articleQuery.isLoading && !article
-      : thoughtQuery.isLoading && !thought);
+  const dataLoading = !!id && !isLocalDirectDraft && detailResolution.kind === "loading";
 
   // Mutations
   const updateArticle = useUpdateArticle();
@@ -441,7 +447,7 @@ export default function WritingScreen() {
       : article?.content ?? "";
     const activeTitle = isThoughtMode ? "" : article?.title ?? "";
 
-    if (!activeContent && !activeTitle && !isThoughtMode) return;
+    if (!isThoughtMode && !article) return;
     if (!activeContent && isThoughtMode && !thought && !isLocalDirectDraft) return;
 
     if (!initializedRef.current) {
@@ -683,7 +689,11 @@ export default function WritingScreen() {
   }, [acceptEditorSnapshot]);
 
   const handleSave = useCallback(
-    async (data: { title: string; content: string }) => {
+    async (data: {
+      title: string;
+      content: string;
+      expectedServerContent?: string;
+    }) => {
       if (isThoughtModeRef.current && modeRef.current === "draft") {
         if (!isMeaningfulThoughtMarkdown(data.content)) return;
         let thoughtId = thoughtIdRef.current;
@@ -780,17 +790,35 @@ export default function WritingScreen() {
       } else if (modeRef.current === "dividing") {
         if (!id) return;
         if (!data.title.trim()) return;
+        if (!data.content.trim()) {
+          const error = new Error("A review article cannot be saved with an empty body");
+          (error as Error & { autosaveConflict?: boolean }).autosaveConflict = true;
+          throw error;
+        }
         const pgs = splitContentToPages(data.content).map((p) => p.content);
-        await updateArticle.mutateAsync({
+        const savedArticle = await updateArticle.mutateAsync({
           id,
-          data: { title: data.title, content: data.content, pages: pgs },
+          data: {
+            title: data.title,
+            content: data.content,
+            pages: pgs,
+            expectedContent: data.expectedServerContent,
+          },
         });
+        queryClient.setQueryData(getGetArticleQueryKey(id), savedArticle, {
+          updatedAt: Date.now(),
+        });
+        serverContentRef.current = savedArticle.content ?? data.content;
         patchArticleInRecordCaches(queryClient, id, {
           title: data.title,
           content: data.content,
           pages: pgs,
         });
         void invalidateArticleLists(queryClient);
+        return {
+          serverUpdatedAt: savedArticle.updatedAt,
+          serverContent: savedArticle.content ?? data.content,
+        };
       } else {
         if (!id) return;
         await updateArticle.mutateAsync({
@@ -832,6 +860,29 @@ export default function WritingScreen() {
     }
   }, [isLocalDirectDraft, router]);
 
+  const reviewRestoreContext = useMemo<AutoSaveRestoreContext | undefined>(() => {
+    if (isLocalDirectDraft || !id) return undefined;
+    if (detailResolution.kind !== "success") {
+      return {
+        ready: false,
+        entityId: id,
+        entityMode: "dividing",
+        serverUpdatedAt: "",
+        serverContent: "",
+      };
+    }
+    if (detailResolution.entity === "thought") return undefined;
+    return {
+      ready: !!dividingArticle,
+      entityId: id,
+      entityMode: "dividing",
+      serverUpdatedAt: dividingArticle?.updatedAt
+        ? new Date(dividingArticle.updatedAt).toISOString()
+        : "",
+      serverContent: dividingArticle?.content ?? "",
+    };
+  }, [detailResolution, dividingArticle, id, isLocalDirectDraft]);
+
   const {
     markDirty,
     markTitleDirty,
@@ -850,7 +901,22 @@ export default function WritingScreen() {
       void queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
     },
     onRestore: handleAutosaveRestore,
+    onRestoreConflict: () => {
+      showToast({
+        message: "기기에 남은 편집 내용과 서버 글의 기준이 달라 자동 복원을 멈췄습니다.",
+        type: "error",
+      });
+    },
+    isRetryableError: (error) => {
+      if ((error as { autosaveConflict?: unknown })?.autosaveConflict === true) {
+        return false;
+      }
+      return (error as { status?: unknown })?.status !== 409;
+    },
     creationId: thoughtCreationIdRef.current,
+    entityId: !isLocalDirectDraft ? id : undefined,
+    entityMode: isThoughtMode ? "draft" : "dividing",
+    restoreContext: reviewRestoreContext,
     storageKey: isLocalDirectDraft ? "direct_thought_local_draft" : id ? `draft_${id}` : undefined,
   });
   bindAutosaveEntityRef.current = bindAutosaveEntity;
