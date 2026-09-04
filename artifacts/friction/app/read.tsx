@@ -90,6 +90,7 @@ import {
   isCurrentReadingPagerTransition,
 } from "@/lib/readingPersistence";
 import { useToast } from "@/contexts/ToastContext";
+import { formatReadingThoughtQuote } from "@/lib/thoughtInlineEditor";
 
 // Horizontal padding on each side of the reader card so the drop-shadow is
 // visible left and right. Must match pageListContainer.paddingHorizontal below.
@@ -817,8 +818,12 @@ export default function ReadScreen() {
   }, [reading.session.state, clearActiveSession]);
 
   useEffect(() => {
-    if (mode !== "basic") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (isThoughtsOpenRef.current) {
+        thoughtsCloseHandleRef.current?.();
+        return true;
+      }
+      if (mode !== "basic") return false;
       if (!reading.canExit) {
         setExitConfirmVisible(true);
         return true;
@@ -834,6 +839,10 @@ export default function ReadScreen() {
   }, [router]);
 
   const handleBack = useCallback(async () => {
+    if (isThoughtsOpenRef.current) {
+      thoughtsCloseHandleRef.current?.();
+      return;
+    }
     if (mode === "basic" && !reading.canExit) {
       setExitConfirmVisible(true);
       return;
@@ -1592,9 +1601,10 @@ export default function ReadScreen() {
     // Route quote text into the thoughts sheet's compose field via pendingQuote.
     // The user can edit/augment the quote before saving — no immediate creation.
     const meta = [author, title].filter(Boolean).join(", ");
-    const quoteText = meta
-      ? `${text.trim()}\n\n${meta}, ${pageNum}면`
-      : text.trim();
+    const quoteText = formatReadingThoughtQuote(
+      text,
+      meta ? `${meta}, ${pageNum}면` : undefined,
+    );
     handleOpenThoughts(quoteText);
   }, [currentPage, authorName, article?.title, handleOpenThoughts, articleId]);
 

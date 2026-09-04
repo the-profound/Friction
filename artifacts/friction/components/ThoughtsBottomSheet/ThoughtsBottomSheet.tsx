@@ -3,8 +3,9 @@
  *
  * 읽기 화면 하단에서 슬라이드 업하는 단상 패널.
  * • 배경 딤 없음 — 편지는 그대로 보이고, 불투명 흰 패널이 하단을 덮는다.
- * • 키보드 오픈 시: bottom:0 유지, 패널 height 확장 + inputBar paddingBottom 동시 증가.
- *   → 인풋이 키보드 바로 위에 위치. 패널은 "슬라이드"가 아닌 "늘어남".
+ * • 기존/신규 단상은 같은 목록형 카드 안에서 편집한다.
+ * • 키보드 오픈 시: bottom:0 유지, 패널 height 확장 + 하단 여백 동시 증가.
+ *   → 활성 카드가 키보드 위 목록 안에 남고, 패널은 "슬라이드"가 아닌 "늘어남".
  * • 최대 높이 = screenHeight - safeTop (노치 침범 방지).
  * • TextInput 멀티라인, 내용에 따라 자동 높이 증가, returnKey = return.
  */
@@ -26,7 +27,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,9 +34,12 @@ import {
   useCreateThought,
   useDeleteThought,
   useListThoughts,
+  useUpdateThought,
 } from "@workspace/api-client-react";
 import type { Thought } from "@workspace/api-client-react";
-import { Colors, Spacing } from "@/constants/tokens";
+import ScalePressable from "@/components/shared/ScalePressable";
+import { Colors, ReaderTokens, Shadows, Spacing, Typography } from "@/constants/tokens";
+import { getThoughtInlineCommitAction } from "@/lib/thoughtInlineEditor";
 
 const PANEL_RATIO = 0.5;
 /** 스와이프 1단계 중간 스냅 높이 비율 */
@@ -78,136 +81,20 @@ function formatRelativeDate(dateStr: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** 좌 스와이프 시 노출되는 액션 버튼(편집/삭제) 전체 너비 */
-const ACTION_WIDTH = 104;
+type EditorState = {
+  key: string;
+  thought?: Thought;
+  text: string;
+  initialText: string;
+  error?: string;
+  pending: boolean;
+};
 
-interface SwipeableThoughtCardProps {
-  thought: Thought;
-  openId: string | null;
-  setOpenId: (id: string | null) => void;
-  onEdit: (thought: Thought) => void;
-  onDelete: (id: string) => void;
-}
-
-function SwipeableThoughtCard({
-  thought,
-  openId,
-  setOpenId,
-  onEdit,
-  onDelete,
-}: SwipeableThoughtCardProps) {
-  const [expanded, setExpanded] = useState(false);
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = openId === thought.id;
-  const isOpenRef = useRef(false);
-  isOpenRef.current = isOpen;
-
-  // 외부에서 다른 카드가 열리면 이 카드를 닫는다
-  useEffect(() => {
-    if (!isOpen) {
-      Animated.spring(translateX, {
-        toValue: 0,
-        damping: 35,
-        stiffness: 260,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [isOpen, translateX]);
-
-  const snapTo = (open: boolean) => {
-    const target = open ? -ACTION_WIDTH : 0;
-    setOpenId(open ? thought.id : null);
-    Animated.spring(translateX, {
-      toValue: target,
-      damping: 35,
-      stiffness: 260,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const startXRef = useRef(0);
-  const startOpenRef = useRef(false);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dx) > Math.abs(gs.dy) && Math.abs(gs.dx) > 6,
-      onPanResponderGrant: () => {
-        startXRef.current = isOpenRef.current ? -ACTION_WIDTH : 0;
-        startOpenRef.current = isOpenRef.current;
-        translateX.stopAnimation();
-      },
-      onPanResponderMove: (_, gs) => {
-        const raw = startXRef.current + gs.dx;
-        // 오른쪽 스와이프는 0까지만, 왼쪽은 ACTION_WIDTH까지만
-        const clamped = Math.max(-ACTION_WIDTH, Math.min(0, raw));
-        translateX.setValue(clamped);
-      },
-      onPanResponderRelease: (_, gs) => {
-        const currentOffset = startXRef.current + gs.dx;
-        // 1/3.5 이상 열렸거나 충분한 속도면 열림으로 스냅, 아니면 닫힘
-        const shouldOpen = currentOffset < -(ACTION_WIDTH / 3.5) || gs.vx < -0.3;
-        snapTo(shouldOpen);
-      },
-      onPanResponderTerminate: () => {
-        snapTo(startOpenRef.current);
-      },
-    }),
-  ).current;
-
-  const content = thought.content ?? "";
-  const isLong = content.length > 100;
-
-  const handleCardPress = () => {
-    if (isOpen) {
-      snapTo(false);
-      return;
-    }
-    if (isLong) setExpanded((v) => !v);
-  };
-
-  return (
-    <View style={styles.cardContainer}>
-      {/* 액션 버튼: 카드 우측에 절대 배치, 클리핑 뒤에 숨겨진다 */}
-      <View style={styles.actionBtns}>
-        <Pressable
-          style={[styles.actionBtn, styles.editBtn]}
-          onPress={() => {
-            snapTo(false);
-            onEdit(thought);
-          }}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-        >
-          <Feather name="edit-2" size={17} color="#fff" />
-        </Pressable>
-        <Pressable
-          style={[styles.actionBtn, styles.deleteBtn]}
-          onPress={() => {
-            snapTo(false);
-            onDelete(thought.id);
-          }}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-        >
-          <Feather name="trash-2" size={17} color="#fff" />
-        </Pressable>
-      </View>
-
-      {/* 카드 텍스트 박스 — translateX로 밀림 */}
-      <Animated.View
-        style={[styles.cardSlide, { transform: [{ translateX }] }]}
-        {...panResponder.panHandlers}
-      >
-        <Pressable onPress={handleCardPress} style={styles.card}>
-          <Text style={styles.cardDate}>{formatRelativeDate(thought.createdAt)}</Text>
-          <Text style={styles.cardText} numberOfLines={expanded ? undefined : 3}>
-            {content}
-          </Text>
-          {isLong && !expanded && <Text style={styles.moreLink}>...더보기</Text>}
-        </Pressable>
-      </Animated.View>
-    </View>
-  );
+function createClientId(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+    const value = Math.floor(Math.random() * 16);
+    return (token === "x" ? value : (value & 0x3) | 0x8).toString(16);
+  });
 }
 
 export interface ThoughtsBottomSheetProps {
@@ -258,7 +145,6 @@ export default function ThoughtsBottomSheet({
   cardSheetHAnim,
   closeHandleRef,
 }: ThoughtsBottomSheetProps) {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const queryClient = useQueryClient();
@@ -325,15 +211,15 @@ export default function ThoughtsBottomSheet({
   keyboardVisibleRef.current = keyboardVisible;
   /** 마지막으로 받은 키보드 높이 — 롱프레스 경로처럼 이미 열린 키보드로 진입 시 사용 */
   const lastKbHeightRef = useRef(0);
-  const [inputText, setInputText] = useState("");
-  const [isSending, setIsSending] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const listScrollYRef = useRef(0);
-
-  /** 현재 열린 스와이프 카드 ID (하나만 열림) */
-  const [openCardId, setOpenCardId] = useState<string | null>(null);
-  /** 편집 중인 단상 (null이면 새 단상 작성 모드) */
-  const [editingThought, setEditingThought] = useState<Thought | null>(null);
+  const listViewportHeightRef = useRef(0);
+  const cardLayoutRef = useRef<Record<string, { y: number; height: number }>>({});
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const editorRef = useRef<EditorState | null>(null);
+  editorRef.current = editor;
+  const commitLockRef = useRef(false);
   /** optimistic 삭제: 화면에서 즉시 숨길 ID 집합 */
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
@@ -350,6 +236,7 @@ export default function ThoughtsBottomSheet({
   );
   const thoughts = (thoughtsQuery.data ?? []) as Thought[];
   const createThought = useCreateThought();
+  const updateThought = useUpdateThought();
   const deleteThought = useDeleteThought();
 
   const invalidateThoughts = useCallback(() => {
@@ -475,10 +362,8 @@ export default function ThoughtsBottomSheet({
       // 정상 close라면 반드시 정리가 실행되어야 하기 때문.
       if (closeToken !== sessionTokenRef.current) return;
       // 애니메이션 완료 후 일괄 초기화
-      setEditingThought(null);
-      setOpenCardId(null);
+      setEditor(null);
       setDeletedIds(new Set());
-      setInputText("");
       onClose();
     });
   }, [screenHeight, onWillClose, onClose]);
@@ -503,8 +388,7 @@ export default function ThoughtsBottomSheet({
   // ── 스와이프·편집 상태 초기화 헬퍼 ─────────────────────────────────────────
   // 시트가 닫히거나 articleId가 바뀔 때 반드시 호출해 cross-context state leak을 방지한다.
   const resetTransientState = useCallback(() => {
-    setEditingThought(null);
-    setOpenCardId(null);
+    setEditor(null);
     setDeletedIds(new Set());
   }, []);
 
@@ -517,7 +401,12 @@ export default function ThoughtsBottomSheet({
       sessionTokenRef.current += 1;
       // 새 시트 세션 시작 — 이전 편집·스와이프 상태를 모두 초기화
       resetTransientState();
-      setInputText(pendingQuote ?? "");
+      setEditor({
+        key: createClientId(),
+        text: pendingQuote ?? "",
+        initialText: "",
+        pending: false,
+      });
       // 시트는 defaultPanelHeight(50% = mid) 높이로 열린다 → snapStage = "mid"
       // "full"로 설정하면 키보드 열릴 때 65% 분기가 동작하지 않음
       snapStageRef.current = "mid";
@@ -573,9 +462,10 @@ export default function ThoughtsBottomSheet({
       slideAnim.setValue(defaultPanelHeight);
       Animated.spring(slideAnim, { toValue: 0, damping: 28, stiffness: 220, useNativeDriver: true }).start();
 
-      if (pendingQuote) {
-        setTimeout(() => inputRef.current?.focus(), 300);
-      }
+      setTimeout(() => {
+        inputRef.current?.focus();
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 300);
     }
     // openNonce도 dep에 포함: close 애니메이션 중 재오픈 시 visible이 계속 true라
     // false→true 전이가 없으므로, nonce 변화로 open 시퀀스를 다시 구동한다.
@@ -586,76 +476,95 @@ export default function ThoughtsBottomSheet({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (visible) resetTransientState(); }, [articleId]);
 
-  useEffect(() => {
-    if (visible && pendingQuote) {
-      setInputText(pendingQuote);
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingQuote]);
-
   // ── Save ─────────────────────────────────────────────────────────────────
 
-  const handleSend = useCallback(async () => {
-    const text = inputText.trim();
-    if (!text || isSending) return;
-    setIsSending(true);
+  const commitEditor = useCallback(async (): Promise<boolean> => {
+    const current = editorRef.current;
+    if (!current) return true;
+    if (current.pending || commitLockRef.current) return false;
+    commitLockRef.current = true;
+    const action = getThoughtInlineCommitAction({
+      isExisting: !!current.thought,
+      text: current.text,
+      initialText: current.initialText,
+    });
+    setEditor((value) => value ? { ...value, pending: true, error: undefined } : value);
     try {
-      if (editingThought) {
-        doClose();
-        router.push({ pathname: "/on-01a", params: { id: editingThought.id } });
+      if (current.thought) {
+        if (action === "delete") {
+          await deleteThought.mutateAsync({ id: current.thought.id });
+          setDeletedIds((prev) => new Set([...prev, current.thought!.id]));
+        } else if (action === "update") {
+          await updateThought.mutateAsync({
+            id: current.thought.id,
+            data: { content: current.text },
+          });
+        }
+      } else if (action === "create") {
+        await createThought.mutateAsync({
+          data: {
+            clientId: current.key,
+            content: current.text,
+            createdFrom: "reading",
+            sourceArticleId: articleId,
+            status: "PRELIMINARY",
+          },
+        });
+      }
+      invalidateThoughts();
+      setEditor(null);
+      Keyboard.dismiss();
+      return true;
+    } catch (e) {
+      console.warn("[ThoughtsBottomSheet] inline commit failed:", e);
+      setEditor((value) => value ? {
+        ...value,
+        pending: false,
+        error: current.thought
+          ? (action === "delete" ? "삭제하지 못했어요. 다시 시도해 주세요." : "수정하지 못했어요. 다시 시도해 주세요.")
+          : "저장하지 못했어요. 다시 시도해 주세요.",
+      } : value);
+      return false;
+    } finally {
+      commitLockRef.current = false;
+    }
+  }, [articleId, createThought, deleteThought, invalidateThoughts, updateThought]);
+
+  const openEditor = useCallback(async (thought?: Thought) => {
+    if (editorRef.current && !(await commitEditor())) return;
+    const key = thought?.id ?? createClientId();
+    const text = thought?.content ?? "";
+    setEditor({ key, thought, text, initialText: text, pending: false });
+    setTimeout(() => {
+      inputRef.current?.focus();
+      const layout = cardLayoutRef.current[key];
+      if (layout) {
+        const target = layout.y + layout.height - listViewportHeightRef.current + 16;
+        scrollRef.current?.scrollTo({ y: Math.max(0, target), animated: true });
+      }
+      else scrollRef.current?.scrollToEnd({ animated: true });
+    }, 80);
+  }, [commitEditor]);
+
+  const scrollEditorBottomIntoView = useCallback((key: string) => {
+    setTimeout(() => {
+      const layout = cardLayoutRef.current[key];
+      if (!layout) {
+        scrollRef.current?.scrollToEnd({ animated: true });
         return;
       }
-      const thought = await createThought.mutateAsync({
-        data: {
-          // The common editor owns the complete Markdown document.  Keep the
-          // selection as a quote block below an empty H1 ready for typing.
-          content: `# \n\n${articleId ? `> ${text}` : text}`,
-          createdFrom: articleId ? "reading" : "direct",
-          sourceArticleId: articleId ?? undefined,
-          status: "PRELIMINARY",
-        },
-      });
-      invalidateThoughts();
-      setInputText("");
-      doClose();
-      router.push({ pathname: "/on-01a", params: { id: thought.id } });
-    } catch (e) {
-      console.warn("[ThoughtsBottomSheet] save failed:", e);
-    } finally {
-      setIsSending(false);
-    }
-  }, [inputText, isSending, editingThought, createThought, articleId, invalidateThoughts, doClose, router]);
-
-  // ── Edit / Delete handlers ────────────────────────────────────────────────
-
-  const handleEdit = useCallback((thought: Thought) => {
-    doClose();
-    router.push({ pathname: "/on-01a", params: { id: thought.id } });
-  }, [doClose, router]);
-
-  const handleDelete = useCallback(async (id: string) => {
-    // Optimistic: 즉시 목록에서 숨기기
-    setDeletedIds((prev) => new Set([...prev, id]));
-    try {
-      await deleteThought.mutateAsync({ id });
-      invalidateThoughts();
-    } catch (e) {
-      // 실패 시 복원
-      setDeletedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      console.warn("[ThoughtsBottomSheet] delete failed:", e);
-    }
-  }, [deleteThought, invalidateThoughts]);
-
-  const cancelEdit = useCallback(() => {
-    setEditingThought(null);
-    setInputText("");
-    Keyboard.dismiss();
+      const target = layout.y + layout.height - listViewportHeightRef.current + 16;
+      scrollRef.current?.scrollTo({ y: Math.max(0, target), animated: true });
+    }, 0);
   }, []);
+
+  // 모든 닫기 경로(배경 탭, 핸들 드래그, 외부 ref)는 동일한 저장 수명주기를 거친다.
+  // 실패하면 시트를 닫지 않아 입력과 재시도 안내가 그대로 남는다.
+  doCloseRef.current = () => {
+    void commitEditor().then((committed) => {
+      if (committed) doClose();
+    });
+  };
 
   // ── Handle-bar pan responder ──────────────────────────────────────────────
 
@@ -810,16 +719,21 @@ export default function ThoughtsBottomSheet({
       <Animated.View
         style={[styles.panel, { transform: [{ translateY: slideAnim }] }]}
       >
-        {/* ── Drag handle + title ─────────────────────────────────────── */}
-        <View style={styles.header} {...handlePan.panHandlers}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>단상</Text>
+        {/* ── Drag handle ─────────────────────────────────────────────── */}
+          <View style={styles.header}>
+            <View style={styles.dragZone} {...handlePan.panHandlers}>
+              <View style={styles.handle} />
+            </View>
         </View>
 
         {/* ── Thought list ─────────────────────────────────────────────── */}
         <View style={styles.listWrap} {...listPan.panHandlers}>
           <ScrollView
+            ref={scrollRef}
             style={styles.scroll}
+            onLayout={(event) => {
+              listViewportHeightRef.current = event.nativeEvent.layout.height;
+            }}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -832,74 +746,133 @@ export default function ThoughtsBottomSheet({
               <View style={styles.emptyWrap}>
                 <ActivityIndicator size="small" color={Colors.zinc300} />
               </View>
-            ) : thoughts.filter((t) => !deletedIds.has(t.id)).length === 0 ? (
-              <View style={styles.emptyWrap}>
-                <Text style={styles.emptyText}>아직 단상이 없어요</Text>
-              </View>
             ) : (
-              thoughts
-                .filter((t) => !deletedIds.has(t.id))
-                .map((t) => (
-                  <SwipeableThoughtCard
-                    key={t.id}
-                    thought={t}
-                    openId={openCardId}
-                    setOpenId={setOpenCardId}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
-                ))
+              <>
+                {thoughts
+                  .filter((t) => !deletedIds.has(t.id))
+                  .map((t) => editor?.thought?.id === t.id ? (
+                    <View
+                      key={t.id}
+                      onLayout={(event) => {
+                        const { y, height } = event.nativeEvent.layout;
+                        cardLayoutRef.current[t.id] = { y, height };
+                      }}
+                      style={styles.editorCard}
+                    >
+                      <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
+                      <TextInput
+                        ref={inputRef}
+                        value={editor.text}
+                        onChangeText={(text) => setEditor((value) => value ? { ...value, text, error: undefined } : value)}
+                        editable={!editor.pending}
+                        style={styles.cardInput}
+                        multiline
+                        underlineColorAndroid="transparent"
+                        scrollEnabled={false}
+                        textAlignVertical="top"
+                        placeholder="단상을 적어보세요"
+                        placeholderTextColor={Colors.zinc400}
+                        accessibilityLabel="단상 내용"
+                        onContentSizeChange={() => scrollEditorBottomIntoView(editor.key)}
+                      />
+                      {editor.error && (
+                        <View style={styles.errorRow}>
+                          <Text style={styles.errorText}>{editor.error}</Text>
+                          <Pressable
+                            onPress={() => void commitEditor()}
+                            style={({ pressed }) => [styles.retryButton, pressed && styles.buttonPressed]}
+                            accessibilityRole="button"
+                            accessibilityLabel="단상 저장 다시 시도"
+                          >
+                            <Text style={styles.retryText}>다시 시도</Text>
+                          </Pressable>
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => void openEditor(t)}
+                      style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}
+                      accessibilityRole="button"
+                      accessibilityLabel="단상 수정"
+                    >
+                      <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
+                      <Text style={styles.cardText}>{t.content ?? ""}</Text>
+                    </Pressable>
+                  ))}
+                {editor && !editor.thought && (
+                  <View
+                    onLayout={(event) => {
+                      const { y, height } = event.nativeEvent.layout;
+                      cardLayoutRef.current[editor.key] = { y, height };
+                    }}
+                    style={styles.editorCard}
+                  >
+                    <TextInput
+                      ref={inputRef}
+                      value={editor.text}
+                      onChangeText={(text) => setEditor((value) => value ? { ...value, text, error: undefined } : value)}
+                      editable={!editor.pending}
+                      style={styles.cardInput}
+                      multiline
+                      underlineColorAndroid="transparent"
+                      scrollEnabled={false}
+                      textAlignVertical="top"
+                      placeholder="단상을 적어보세요"
+                      placeholderTextColor={Colors.zinc400}
+                      accessibilityLabel="새 단상 내용"
+                      onContentSizeChange={() => scrollEditorBottomIntoView(editor.key)}
+                    />
+                    {editor.error && (
+                      <View style={styles.errorRow}>
+                        <Text style={styles.errorText}>{editor.error}</Text>
+                        <Pressable
+                          onPress={() => void commitEditor()}
+                          style={({ pressed }) => [styles.retryButton, pressed && styles.buttonPressed]}
+                          accessibilityRole="button"
+                          accessibilityLabel="단상 저장 다시 시도"
+                        >
+                          <Text style={styles.retryText}>다시 시도</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                )}
+                <Pressable
+                  onPress={() => void openEditor()}
+                  disabled={!!editor?.pending}
+                  style={({ pressed }) => [
+                    styles.addCardButton,
+                    pressed && styles.buttonPressed,
+                    editor?.pending && styles.buttonDisabled,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="새 단상 추가"
+                  accessibilityState={{ disabled: !!editor?.pending }}
+                >
+                  <Feather name="plus" size={22} color={Colors.zinc500} />
+                </Pressable>
+              </>
             )}
           </ScrollView>
         </View>
-
-        {/* ── Persistent input bar ─────────────────────────────────────── */}
-        {/* paddingBottom 애니메이션: 키보드 높이만큼 인풋을 키보드 위로 밀어 올림 */}
-        <Animated.View
-          style={[
-            styles.inputBar,
-            { paddingBottom: inputPadAnim },
-          ]}
-        >
-          {/* 편집 모드 인디케이터 */}
-          {editingThought && (
-            <View style={styles.editingBanner}>
-              <Text style={styles.editingLabel}>편집 중</Text>
-              <Pressable
-                onPress={cancelEdit}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Feather name="x" size={15} color={Colors.zinc500} />
-              </Pressable>
-            </View>
-          )}
-          <View style={styles.inputRow}>
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder={editingThought ? "단상 수정하기..." : "새 단상 작성하기..."}
-              placeholderTextColor={Colors.zinc400}
-              multiline
-              returnKeyType="default"
-            />
-            {inputText.trim().length > 0 && (
-              <Pressable
-                onPress={handleSend}
-                disabled={isSending}
-                style={({ pressed }) => [styles.sendBtn, pressed && { opacity: 0.6 }]}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                {isSending ? (
-                  <ActivityIndicator size="small" color={Colors.zinc500} />
-                ) : (
-                  <Feather name="arrow-up-circle" size={28} color={Colors.zinc800} />
-                )}
-              </Pressable>
-            )}
-          </View>
-        </Animated.View>
+        <Animated.View style={{ height: inputPadAnim }} pointerEvents="none" />
+        {!keyboardVisible && (
+          <ScalePressable
+            onPress={() => doCloseRef.current()}
+            disabled={!!editor?.pending}
+            hitSlop={8}
+            scaleTo={0.9}
+            style={[styles.closeButtonWrap, { bottom: insets.bottom + 24 }]}
+            contentStyle={styles.closeButtonContent}
+            accessibilityLabel="단상 창 닫기"
+          >
+            {editor?.pending
+              ? <ActivityIndicator size="small" color={Colors.zinc600} />
+              : <Feather name="x" size={22} color={Colors.zinc600} />}
+          </ScalePressable>
+        )}
       </Animated.View>
     </Animated.View>
   );
@@ -920,6 +893,9 @@ const styles = StyleSheet.create({
         shadowRadius: 16,
       },
       android: { elevation: 12 },
+      web: {
+        boxShadow: "0 -6px 20px rgba(0,0,0,0.10)",
+      } as object,
       default: {},
     }),
   },
@@ -931,9 +907,13 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   header: {
-    alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
-    paddingBottom: 8,
+    paddingBottom: 4,
+  },
+  dragZone: {
+    height: 26,
+    alignItems: "center",
+    justifyContent: "flex-start",
   },
   handle: {
     width: 36,
@@ -941,15 +921,12 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Colors.zinc200,
     marginTop: 10,
-    marginBottom: 12,
   },
-  title: {
-    fontSize: 17,
-    fontFamily: "Pretendard-SemiBold",
-    fontWeight: "600",
-    color: Colors.zinc900,
-    letterSpacing: -0.3,
-    textAlign: "center",
+  buttonPressed: {
+    opacity: 0.6,
+  },
+  buttonDisabled: {
+    opacity: 0.4,
   },
   listWrap: {
     flex: 1,
@@ -960,7 +937,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.screenPx,
     paddingTop: 4,
-    paddingBottom: 12,
+    paddingBottom: 84,
     gap: 10,
   },
   emptyWrap: {
@@ -972,110 +949,113 @@ const styles = StyleSheet.create({
     color: Colors.zinc500,
     fontFamily: "Pretendard-Regular",
   },
-  cardContainer: {
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: 12,
-  },
-  cardSlide: {
-    // 카드 텍스트 박스 — translateX 로 밀려남
-    // flex:1로 cardContainer 전체 너비를 채우고, 배경색을 여기에 두어
-    // borderRadius 없는 직사각형으로 버튼 영역을 완전히 덮/가린다.
-    // (borderRadius는 cardContainer의 overflow:hidden이 처리)
-    flex: 1,
-    backgroundColor: Colors.zinc50,
-  },
-  actionBtns: {
-    position: "absolute",
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: ACTION_WIDTH,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  actionBtn: {
-    width: ACTION_WIDTH / 2 - 4,
-    height: ACTION_WIDTH / 2 - 4,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  editBtn: {
-    backgroundColor: Colors.zinc600,
-  },
-  deleteBtn: {
-    backgroundColor: "#ef4444",
-  },
   card: {
-    borderRadius: 12,
-    padding: 14,
-    gap: 5,
+    borderRadius: 16,
+    padding: 16,
+    gap: 7,
+    backgroundColor: Colors.white,
+    ...Shadows.card,
   },
   cardDate: {
-    fontSize: 12,
+    ...Typography.caption,
     color: Colors.zinc500,
-    fontFamily: "Pretendard-Regular",
+    alignSelf: "flex-end",
   },
   cardText: {
-    fontSize: 14,
-    color: Colors.zinc700,
-    lineHeight: 21,
-    fontFamily: "Pretendard-Regular",
+    fontSize: 16,
+    color: Colors.zinc600,
+    lineHeight: 27.2,
+    fontFamily: ReaderTokens.fontFamily.serif,
   },
-  moreLink: {
-    fontSize: 13,
-    color: Colors.zinc500,
-    fontFamily: "Pretendard-Regular",
-  },
-  inputBar: {
-    flexDirection: "column",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.zinc100,
-    paddingHorizontal: Spacing.screenPx,
-    paddingTop: 8,
-    gap: 4,
+  editorCard: {
+    borderRadius: 16,
+    padding: 16,
+    gap: 7,
     backgroundColor: Colors.white,
+    ...Shadows.card,
   },
-  editingBanner: {
+  cardInput: {
+    // lineHeight 27.2 × 3줄 + 상하 padding 8
+    minHeight: 90,
+    fontSize: 16,
+    lineHeight: 27.2,
+    fontFamily: ReaderTokens.fontFamily.serif,
+    color: Colors.zinc600,
+    paddingHorizontal: 0,
+    paddingTop: 4,
+    paddingBottom: 4,
+    textAlignVertical: "top",
+    ...Platform.select({
+      web: { outlineStyle: "none" } as object,
+      default: {},
+    }),
+  },
+  addCardButton: {
+    width: "100%",
+    height: 72,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: Colors.zinc300,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeButtonWrap: {
+    position: "absolute",
+    right: 20,
+    width: 48,
+    height: 48,
+    zIndex: 5,
+  },
+  closeButtonContent: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.10,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+      web: { boxShadow: "0 2px 8px rgba(0,0,0,0.10)" } as object,
+      default: {},
+    }),
+  },
+  errorRow: {
+    minHeight: 32,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 2,
-    paddingBottom: 2,
+    gap: 8,
+    marginTop: 6,
   },
-  editingLabel: {
+  errorText: {
+    flex: 1,
     fontSize: 12,
-    color: Colors.zinc600,
+    lineHeight: 17,
+    color: "#dc2626",
+    fontFamily: "Pretendard-Regular",
+  },
+  retryButton: {
+    height: 32,
+    flexGrow: 0,
+    flexShrink: 0,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  retryText: {
+    fontSize: 12,
+    color: Colors.zinc700,
+    textDecorationLine: "underline",
     fontFamily: "Pretendard-SemiBold",
     fontWeight: "600",
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: "Pretendard-Regular",
-    color: Colors.zinc800,
-    paddingTop: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.zinc100,
-    borderRadius: 16,
-    minHeight: 40,
-    maxHeight: 160,
-    textAlignVertical: "top",
-  },
-  sendBtn: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 2,
   },
 });
