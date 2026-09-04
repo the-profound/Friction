@@ -41,8 +41,8 @@ const escapedJs = bundleJs
 
 const css = `
 *{margin:0;padding:0;box-sizing:border-box}
-html{min-height:100%;background:#fff;container-type:inline-size}
-body{min-height:100%;background:#fff;container-type:inline-size}
+html{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-size-adjust:none;text-size-adjust:none}
+body{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-size-adjust:none;text-size-adjust:none}
 #title-input{
   display:block;
   width:100%;
@@ -62,7 +62,8 @@ body{min-height:100%;background:#fff;container-type:inline-size}
    color-scheme:light;
   padding:8px 0;
   margin-bottom:12px;
-  -webkit-text-size-adjust:100%;
+  -webkit-text-size-adjust:none;
+  text-size-adjust:none;
   -webkit-appearance:none;
 }
 #title-input::placeholder{color:#a1a1aa;font-family:var(--body-semibold-font-family,'Eulyoo1945-SemiBold','NotoSerifKR_600SemiBold',serif)}
@@ -72,6 +73,8 @@ body{min-height:100%;background:#fff;container-type:inline-size}
   min-height:200px;
   padding:0 0 var(--editor-content-bottom-padding,120px);
   outline:none;
+  -webkit-text-size-adjust:none;
+  text-size-adjust:none;
 }
 .ProseMirror{
   box-sizing:border-box;
@@ -97,7 +100,7 @@ body{min-height:100%;background:#fff;container-type:inline-size}
 body{padding:16px 0 0;overflow-x:hidden;overflow-y:visible;position:relative;background:#fff}
 `.trim();
 
-const VERSION = "3.25.0";
+const VERSION = "3.26.0";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";
@@ -153,5 +156,15 @@ ${escapedJs}
 }
 `;
 
-fs.writeFileSync(outputFile, tsContent, "utf-8");
-console.log(`Generated editorHtml.ts (bundle: ${Math.round(bundleJs.length / 1024)}KB, version: ${VERSION})`);
+if (process.argv.includes("--check")) {
+  const current = fs.readFileSync(outputFile, "utf-8");
+  if (current !== tsContent) {
+    console.error("editorHtml.ts is stale. Run pnpm run build:editor.");
+    process.exitCode = 1;
+  } else {
+    console.log(`editorHtml.ts is synchronized (bundle: ${Math.round(bundleJs.length / 1024)}KB, version: ${VERSION})`);
+  }
+} else {
+  fs.writeFileSync(outputFile, tsContent, "utf-8");
+  console.log(`Generated editorHtml.ts (bundle: ${Math.round(bundleJs.length / 1024)}KB, version: ${VERSION})`);
+}

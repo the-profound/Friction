@@ -5,6 +5,8 @@ export interface EditorInitPayload {
   initialMarkdown: string;
   editorConfigVersion: string;
   editorSessionId: string;
+  typography: BodyTypographyMetrics;
+  layoutGeneration: number;
   placeholder?: string;
   titleValue?: string;
   /**
@@ -29,7 +31,7 @@ export type RNToWebViewCommand =
   | { type: "setEditable"; isEditable: boolean }
   | { type: "setOverflowRanges"; ranges: OverflowRange[] | null }
   | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null; autoSplit?: boolean }
-  | { type: "setBodyMetrics"; metrics: BodyTypographyMetrics }
+  | { type: "setBodyMetrics"; metrics: BodyTypographyMetrics; layoutGeneration: number }
   | { type: "setBodyFontMode"; mode: "fallback" }
   | { type: "setContentBottomPadding"; paddingPx: number }
   | { type: "setBlockType"; blockType: string }

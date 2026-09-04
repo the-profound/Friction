@@ -5,6 +5,13 @@ declare const __DEV__: boolean | undefined;
 
 export type BodyTypographyRenderer = "reader" | "editor" | "measure";
 
+export function shouldApplyBodyTypographyGeneration(
+  incomingGeneration: number,
+  appliedGeneration: number,
+): boolean {
+  return incomingGeneration >= appliedGeneration;
+}
+
 export interface BodyFontLoadStatus {
   eulyooRegular: boolean;
   eulyooSemiBold: boolean;
@@ -13,6 +20,7 @@ export interface BodyFontLoadStatus {
 }
 
 export interface BodyTypographyDiagnostic {
+  layoutGeneration?: number;
   domWidthPx: number;
   fontSizePx: number;
   lineHeightPx: number;
@@ -23,6 +31,7 @@ export interface BodyTypographyDiagnostic {
   effectiveFontScaleRatio: number;
   fontFamily: string;
   fonts: BodyFontLoadStatus;
+  lineBreakOffsets?: number[];
 }
 
 const FONT_PROBES = [

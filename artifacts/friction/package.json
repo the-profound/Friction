@@ -8,6 +8,7 @@
     "dev:tunnel": "node scripts/dev-tunnel.js",
     "build": "node scripts/build.js",
     "build:editor": "node components/WebViewMarkdownEditor/buildEditorHtml.mjs",
+    "check:editor-html": "node components/WebViewMarkdownEditor/buildEditorHtml.mjs --check",
     "build:webview-fonts": "fontforge -lang=py -script scripts/build-webview-eulyoo-fonts.py",
     "serve": "node server/serve.js",
     "test": "vitest run",

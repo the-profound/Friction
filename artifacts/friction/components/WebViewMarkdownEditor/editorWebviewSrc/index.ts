@@ -18,6 +18,8 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
+import type { BodyTypographyMetrics } from "../../../lib/bodyLayout";
+import { shouldApplyBodyTypographyGeneration } from "../../../lib/bodyTypographyDiagnostics";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 import { handleTitleEnter, insertTitleSoftBreak } from "../titleKeyboardContract";
@@ -876,6 +878,8 @@ interface InitPayload {
   editorConfigVersion?: string;
   editorSessionId?: string;
   ensureTrailingParagraph?: boolean;
+  typography?: BodyTypographyMetrics;
+  layoutGeneration?: number;
 }
 
 interface Command {
@@ -892,15 +896,8 @@ interface Command {
   mode?: "fallback";
   paddingPx?: number;
   text?: string;
-  metrics?: {
-    textColumnWidth: number;
-    fontSizePx: number;
-    lineHeightPx: number;
-    paragraphGapPx: number;
-    letterSpacingPx: number;
-    titleFontSizePx: number;
-    textScalePercent: 100;
-  };
+  metrics?: BodyTypographyMetrics;
+  layoutGeneration?: number;
   blockType?: string;
   mark?: string;
   pageIndex?: number;
@@ -1066,6 +1063,7 @@ function spellFindRange(
   let lastBodyParagraphGapPx: number | null = null;
   let lastBodyLetterSpacingPx: number | null = null;
   let lastTitleFontSizePx: number | null = null;
+  let lastLayoutGeneration = -1;
 
   // 오버플로 강조 측정 — RN 이 setOverflowProbeConfig 로 안전 영역 높이를
   // 알려주면 에디터가 자기 DOM 을 walk 해서 각 페이지(HR 분할)에서 안전 영역을
@@ -1571,11 +1569,68 @@ function spellFindRange(
     });
   }
 
+  function readLineBreakOffsets(element: HTMLElement): number[] {
+    const MAX_DIAGNOSTIC_CHARACTERS = 1200;
+    const offsets: number[] = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let absoluteOffset = 0;
+    let previousTop: number | null = null;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent || "";
+      for (let index = 0; index < text.length; index += 1) {
+        if (absoluteOffset + index >= MAX_DIAGNOSTIC_CHARACTERS) return offsets;
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + 1);
+        const rect = range.getBoundingClientRect();
+        if (rect.width > 0 && previousTop != null && Math.abs(rect.top - previousTop) > 0.5) {
+          offsets.push(absoluteOffset + index);
+        }
+        if (rect.width > 0) previousTop = rect.top;
+      }
+      absoluteOffset += text.length;
+    }
+    return offsets;
+  }
+
+  function applyBodyMetrics(metrics: BodyTypographyMetrics, layoutGeneration: number): boolean {
+    if (
+      !metrics ||
+      !shouldApplyBodyTypographyGeneration(layoutGeneration, lastLayoutGeneration)
+    ) return false;
+    const root = document.documentElement;
+    let changed = layoutGeneration !== lastLayoutGeneration;
+    lastLayoutGeneration = layoutGeneration;
+    const values: Array<[keyof BodyTypographyMetrics, string, number | null, (value: number) => void]> = [
+      ["textColumnWidth", "--text-column-width", lastTextColumnWidth, (value) => { lastTextColumnWidth = value; }],
+      ["fontSizePx", "--body-font-size", lastBodyFontSizePx, (value) => { lastBodyFontSizePx = value; }],
+      ["lineHeightPx", "--body-line-height", lastBodyLineHeightPx, (value) => { lastBodyLineHeightPx = value; }],
+      ["paragraphGapPx", "--body-paragraph-gap", lastBodyParagraphGapPx, (value) => { lastBodyParagraphGapPx = value; }],
+      ["letterSpacingPx", "--body-letter-spacing", lastBodyLetterSpacingPx, (value) => { lastBodyLetterSpacingPx = value; }],
+      ["titleFontSizePx", "--title-font-size", lastTitleFontSizePx, (value) => { lastTitleFontSizePx = value; }],
+    ];
+    for (const [key, variable, previous, commit] of values) {
+      const value = metrics[key];
+      if (value !== previous) {
+        root.style.setProperty(variable, value + "px");
+        commit(value);
+        changed = true;
+      }
+    }
+    if (titleInput) autoResizeTitle();
+    return changed;
+  }
+
   (window as unknown as { handleCommand: (cmd: Command) => void }).handleCommand = function (cmd: Command) {
     try {
       switch (cmd.type) {
         case "init": {
           const payload = cmd.payload || {};
+          if (!payload.typography) {
+            postToRN({ type: "onError", payload: { code: "EDITOR_METRICS_MISSING", message: "Editor typography was not provided before initialization" } });
+            break;
+          }
+          applyBodyMetrics(payload.typography, payload.layoutGeneration ?? 0);
           const initialMarkdown = payload.initialMarkdown || "";
           const placeholder = payload.placeholder || "여기에 메모를 작성하세요...";
           const titleValue = payload.titleValue || "";
@@ -1741,42 +1796,11 @@ function spellFindRange(
           break;
         }
         case "setBodyMetrics": {
-          const root = document.documentElement;
           const metrics = cmd.metrics;
           if (!metrics) break;
-          // 같은 값을 재전송한 경우 CSS 변수/리프로브 작업을 생략한다.
-          let changed = false;
-          if (metrics.textColumnWidth !== lastTextColumnWidth) {
-            root.style.setProperty("--text-column-width", metrics.textColumnWidth + "px");
-            lastTextColumnWidth = metrics.textColumnWidth;
-            changed = true;
-          }
-          if (metrics.fontSizePx !== lastBodyFontSizePx) {
-            root.style.setProperty("--body-font-size", metrics.fontSizePx + "px");
-            lastBodyFontSizePx = metrics.fontSizePx;
-            changed = true;
-          }
-          if (metrics.lineHeightPx !== lastBodyLineHeightPx) {
-            root.style.setProperty("--body-line-height", metrics.lineHeightPx + "px");
-            lastBodyLineHeightPx = metrics.lineHeightPx;
-            changed = true;
-          }
-          if (metrics.paragraphGapPx !== lastBodyParagraphGapPx) {
-            root.style.setProperty("--body-paragraph-gap", metrics.paragraphGapPx + "px");
-            lastBodyParagraphGapPx = metrics.paragraphGapPx;
-            changed = true;
-          }
-          if (metrics.letterSpacingPx !== lastBodyLetterSpacingPx) {
-            root.style.setProperty("--body-letter-spacing", metrics.letterSpacingPx + "px");
-            lastBodyLetterSpacingPx = metrics.letterSpacingPx;
-            changed = true;
-          }
-          if (metrics.titleFontSizePx !== lastTitleFontSizePx) {
-            root.style.setProperty("--title-font-size", metrics.titleFontSizePx + "px");
-            lastTitleFontSizePx = metrics.titleFontSizePx;
-            if (titleInput) autoResizeTitle();
-            changed = true;
-          }
+          const layoutGeneration = cmd.layoutGeneration ?? 0;
+          if (!shouldApplyBodyTypographyGeneration(layoutGeneration, lastLayoutGeneration)) break;
+          const changed = applyBodyMetrics(metrics, layoutGeneration);
           // 폭/폰트/행간/자간이 바뀐 경우에만 강조 재측정.
           if (changed) scheduleOverflowProbe(150);
           requestAnimationFrame(() => {
@@ -1787,6 +1811,7 @@ function spellFindRange(
             postToRN({
               type: "onBodyTypographyDiagnostic",
               payload: {
+                layoutGeneration,
                 domWidthPx: probe.getBoundingClientRect().width,
                 fontSizePx: Number.parseFloat(computed.fontSize),
                 lineHeightPx: Number.parseFloat(computed.lineHeight),
@@ -1806,6 +1831,7 @@ function spellFindRange(
                   notoRegular: !!fonts?.check("400 16px 'NotoSerifKR_400Regular'", "가잓"),
                   notoSemiBold: !!fonts?.check("600 16px 'NotoSerifKR_600SemiBold'", "가잓"),
                 },
+                lineBreakOffsets: readLineBreakOffsets(probe),
               },
             });
           });

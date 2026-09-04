@@ -66,6 +66,29 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     const bodyFontsReadyRef = useRef(false);
     const loadSequenceRef = useRef(0);
     const editorSessionIdRef = useRef("editor_native_0");
+    const typographySignature = [
+      typography.textColumnWidth,
+      typography.fontSizePx,
+      typography.lineHeightPx,
+      typography.paragraphGapPx,
+      typography.letterSpacingPx,
+      typography.titleFontSizePx,
+      typography.textScalePercent,
+    ].join(":");
+    const typographyStateRef = useRef({
+      signature: typographySignature,
+      generation: 1,
+      metrics: typography,
+    });
+    if (typographyStateRef.current.signature !== typographySignature) {
+      typographyStateRef.current = {
+        signature: typographySignature,
+        generation: typographyStateRef.current.generation + 1,
+        metrics: typography,
+      };
+    } else {
+      typographyStateRef.current.metrics = typography;
+    }
 
     const bridgeRef = useRef<WebViewBridge | null>(null);
     if (bridgeRef.current == null) {
@@ -174,9 +197,18 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                   placeholder,
                   titleValue,
                   ensureTrailingParagraph,
+                   typography: typographyStateRef.current.metrics,
+                   layoutGeneration: typographyStateRef.current.generation,
                 },
               });
-              sendCommand({ type: "setBodyMetrics", metrics: typography });
+              // init applies this generation before creating ProseMirror. The
+              // idempotent follow-up emits the post-layout diagnostic once DOM
+              // line boxes exist.
+              sendCommand({
+                type: "setBodyMetrics",
+                metrics: typographyStateRef.current.metrics,
+                layoutGeneration: typographyStateRef.current.generation,
+              });
               break;
             case "onReady":
               // markReady is called by onBodyFontsReady before init is sent.
@@ -256,8 +288,14 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     }, [bridge, editable, sendCommand]);
 
     useEffect(() => {
-      if (bridge.isReady()) sendCommand({ type: "setBodyMetrics", metrics: typography });
-    }, [bridge, typography, sendCommand]);
+      if (bridge.isReady()) {
+        sendCommand({
+          type: "setBodyMetrics",
+          metrics: typographyStateRef.current.metrics,
+          layoutGeneration: typographyStateRef.current.generation,
+        });
+      }
+    }, [bridge, typographySignature, sendCommand]);
 
     useEffect(() => {
       sendCommand({
