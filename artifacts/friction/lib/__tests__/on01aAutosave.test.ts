@@ -469,11 +469,13 @@ describe("on-01a guarded return navigation", () => {
     expect(removalGuard).toContain(
       "usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);",
     );
-    expect(removalGuard).toContain("if (isNavigatingRef.current) return;");
     expect(removalGuard).toContain("handleHeaderBack(data.action);");
     const backHandler = screen.slice(
       screen.indexOf("const handleDraftBack"),
       screen.indexOf("// Native lifecycle events"),
+    );
+    expect(backHandler).toContain(
+      "if (isNavigatingRef.current || !returnSessionRef.current.begin()) return;",
     );
     expect(backHandler).toContain("await persistLatestAutosave();");
     expect(backHandler).toContain("void flush().then");
@@ -612,7 +614,7 @@ describe("on-01a guarded return navigation", () => {
     expect(exit).not.toContain("setIsNavigating(false)");
   });
 
-  it("replays a completed native removal exactly once instead of scheduling a second back", () => {
+  it("keeps intercepted and explicit removals in separate single-owner paths", () => {
     const screen = readScreen();
     const exit = screen.slice(
       screen.indexOf("const exitToPreviousList"),
@@ -623,12 +625,10 @@ describe("on-01a guarded return navigation", () => {
       screen.indexOf("const handleDismissKeyboard"),
     );
 
-    expect(screen).toContain("const navigationCommittedRef = useRef(false);");
-    expect(exit).toContain("if (navigationCommittedRef.current) return;");
     expect(exit).toContain("if (canPopToList && removalAction) {");
-    expect(exit).toContain("navigationCommittedRef.current = true;");
-    expect(exit).toContain("navigation.dispatch(removalAction);");
-    expect(exit.indexOf("navigation.dispatch(removalAction);")).toBeLessThan(
+    expect(exit).toContain("returnSessionRef.current.commitIntercepted(removalAction");
+    expect(exit).toContain("navigation.dispatch(action);");
+    expect(exit.indexOf("commitIntercepted(removalAction")).toBeLessThan(
       exit.indexOf("navigateAfterRemovingGuard("),
     );
     expect(removalGuard).toContain(
@@ -645,11 +645,11 @@ describe("on-01a guarded return navigation", () => {
       screen.indexOf("const handleDismissKeyboard"),
     );
 
-    expect(screen).toContain("navigationSessionRef.current += 1;");
     expect(deferredDispatch).toContain(
-      "if (navigationSessionRef.current !== pending.sessionId) return;",
+      "returnSessionRef.current.consumeExplicit(pending.generation);",
     );
-    expect(deferredDispatch).toContain("pendingNavigationRef.current = null;");
+    expect(deferredDispatch).toContain("returnSessionRef.current.dispose();");
+    expect(deferredDispatch).toContain("pendingExplicitRef.current = null;");
   });
 
   it("uses the same explicit editor bottom padding on web and native", () => {

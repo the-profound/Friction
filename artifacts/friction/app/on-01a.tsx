@@ -21,6 +21,7 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Shadows } from "@/constants/tokens";
 import { useAutoSave, type AutoSaveRestoreContext } from "@/lib/useAutoSave";
 import { resolveDetailEntity } from "@/lib/detailEntityResolution";
+import { GuardedReturnSession } from "@/lib/guardedReturnSession";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
 import {
@@ -355,15 +356,14 @@ export default function WritingScreen() {
   } | null>(null);
   const pendingPromotionSnapshotRef = useRef<PendingStageTransition | null>(null);
   // Native Stack requires usePreventRemove instead of a bare beforeRemove
-  // listener for reliable interactive iOS swipe cancellation. Intentional
-  // navigation waits until this guard has been disabled before dispatching.
+  // listener for reliable interactive iOS swipe cancellation. One session owns
+  // either the exact intercepted action or one explicit app navigation.
   const [shouldPreventRemoval, setShouldPreventRemoval] = useState(true);
-  const navigationCommittedRef = useRef(false);
-  const pendingNavigationRef = useRef<{
-    sessionId: number;
-    navigate: () => void;
+  const returnSessionRef = useRef(new GuardedReturnSession<NavigationAction>());
+  const pendingExplicitRef = useRef<{
+    generation: number;
+    resumeGuardAfterRouteChange: boolean;
   } | null>(null);
-  const navigationSessionRef = useRef(0);
   const thoughtIdRef = useRef<string | undefined>(id);
   const thoughtCreationIdRef = useRef<string | undefined>(
     isLocalDirectDraft ? createThoughtClientId() : undefined,
@@ -1397,13 +1397,15 @@ export default function WritingScreen() {
     }
   }, [id, updateArticle, queryClient, showToast]);
 
-  const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
-    if (navigationCommittedRef.current) return;
-    navigationCommittedRef.current = true;
-    navigationSessionRef.current += 1;
-    pendingNavigationRef.current = {
-      sessionId: navigationSessionRef.current,
-      navigate,
+  const navigateAfterRemovingGuard = useCallback((
+    navigate: () => void,
+    options?: { resumeGuardAfterRouteChange?: boolean },
+  ) => {
+    const generation = returnSessionRef.current.prepareExplicit(navigate);
+    if (generation === null) return;
+    pendingExplicitRef.current = {
+      generation,
+      resumeGuardAfterRouteChange: options?.resumeGuardAfterRouteChange === true,
     };
     setShouldPreventRemoval(false);
   }, []);
@@ -1625,7 +1627,7 @@ export default function WritingScreen() {
           ...(spaceId ? { spaceId, ...(spaceRoundId ? { spaceRoundId } : {}), ...(letterType ? { letterType } : {}) } : {}),
         },
       });
-    });
+    }, { resumeGuardAfterRouteChange: true });
   }, [abortAutosaveTransition, commitAutosaveTransition, flush, getEditorContent, markDirty, prepareAutosaveTransition, promoteThought, queryClient, releaseDirectThoughtDraft, reportAutosaveFailure, router, setModeBoth, showToast, spaceId, spaceRoundId, thought, letterType, navigateAfterRemovingGuard]);
 
   // ── 검토(article) → 단상(thought) 역승격 ──────────────────────────────────
@@ -1802,7 +1804,7 @@ export default function WritingScreen() {
           ...(spaceId ? { spaceId, ...(spaceRoundId ? { spaceRoundId } : {}), ...(letterType ? { letterType } : {}) } : {}),
         },
       });
-    });
+    }, { resumeGuardAfterRouteChange: true });
   }, [
     abortAutosaveTransition,
     commitAutosaveTransition,
@@ -2000,7 +2002,6 @@ export default function WritingScreen() {
   // There is no "exit dividing back to draft" transition — once promoted to
   // DIVIDING the article stays there.
   const exitToPreviousList = useCallback((removalAction?: NavigationAction) => {
-    if (navigationCommittedRef.current) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
     // Only pop if this screen was pushed from the tab navigator. A restored
@@ -2016,8 +2017,9 @@ export default function WritingScreen() {
       // usePreventRemove annotates the prevented action with the route it has
       // already visited. Replaying that exact action admits the completed iOS
       // gesture once without disabling the guard or scheduling a second pop.
-      navigationCommittedRef.current = true;
-      navigation.dispatch(removalAction);
+      returnSessionRef.current.commitIntercepted(removalAction, (action) => {
+        navigation.dispatch(action);
+      });
       return;
     }
 
@@ -2032,7 +2034,7 @@ export default function WritingScreen() {
   }, [navigation, releaseDirectThoughtDraft, router, source, navigateAfterRemovingGuard]);
 
   const handleDraftBack = useCallback(async (removalAction?: NavigationAction) => {
-    if (isNavigatingRef.current) return;
+    if (isNavigatingRef.current || !returnSessionRef.current.begin()) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
@@ -2048,6 +2050,7 @@ export default function WritingScreen() {
     try {
       cur = await getEditorContent();
     } catch {
+      returnSessionRef.current.retry();
       isNavigatingRef.current = false;
       setIsNavigating(false);
       showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
@@ -2068,6 +2071,7 @@ export default function WritingScreen() {
         // an unrecoverable orphan after the screen unmounts.
         await stageCleanup(thoughtIdRef.current ?? id);
       } catch {
+        returnSessionRef.current.retry();
         isNavigatingRef.current = false;
         setIsNavigating(false);
         showToast({ message: "빈 단상 정리 상태를 보관하지 못했습니다. 다시 시도해주세요.", type: "error" });
@@ -2094,6 +2098,7 @@ export default function WritingScreen() {
     try {
       await persistLatestAutosave();
     } catch {
+      returnSessionRef.current.retry();
       isNavigatingRef.current = false;
       setIsNavigating(false);
       showToast({ message: "최신 내용을 안전하게 보관하지 못했습니다. 다시 시도해주세요.", type: "error" });
@@ -2177,8 +2182,8 @@ export default function WritingScreen() {
   // Native Stack: a bare beforeRemove listener is not reliable for iOS edge
   // gestures. A repeat removal while save/delete is in progress stays blocked.
   const handlePreventedRemoval = useCallback(({ data }: { data: { action: NavigationAction } }) => {
-    if (isNavigatingRef.current) return;
     if (!initializedRef.current) {
+      if (!returnSessionRef.current.begin()) return;
       exitToPreviousList(data.action);
       return;
     }
@@ -2191,20 +2196,28 @@ export default function WritingScreen() {
   // Dispatch intentional route changes on the following turn so stage
   // replaces and completed exits are admitted exactly once.
   useEffect(() => {
-    if (shouldPreventRemoval || !pendingNavigationRef.current) return;
-    const pending = pendingNavigationRef.current;
-    pendingNavigationRef.current = null;
+    const pending = pendingExplicitRef.current;
+    if (shouldPreventRemoval || !pending) return;
+    pendingExplicitRef.current = null;
     const timer = setTimeout(() => {
-      if (navigationSessionRef.current !== pending.sessionId) return;
-      pending.navigate();
+      const consumed = returnSessionRef.current.consumeExplicit(pending.generation);
+      if (
+        consumed
+        && pending.resumeGuardAfterRouteChange
+        && returnSessionRef.current.resetAfterRouteChange()
+      ) {
+        isNavigatingRef.current = false;
+        setIsNavigating(false);
+        setShouldPreventRemoval(true);
+      }
     }, 0);
     return () => clearTimeout(timer);
   }, [shouldPreventRemoval]);
 
   useEffect(() => {
     return () => {
-      navigationSessionRef.current += 1;
-      pendingNavigationRef.current = null;
+      returnSessionRef.current.dispose();
+      pendingExplicitRef.current = null;
     };
   }, []);
 
@@ -2666,7 +2679,10 @@ export default function WritingScreen() {
               <ScalePressable
                 style={styles.loadBackButton}
                 contentStyle={styles.loadBackButtonContent}
-                onPress={() => exitToPreviousList()}
+                onPress={() => {
+                  if (!returnSessionRef.current.begin()) return;
+                  exitToPreviousList();
+                }}
               >
                 <Text style={styles.loadBackButtonText}>이전 화면</Text>
               </ScalePressable>
