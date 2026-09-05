@@ -112,8 +112,8 @@ export default function StoredSentenceCreateScreen() {
             multiline
             autoFocus
             accessibilityLabel="문장 본문"
-            cursorColor={Colors.noticeAccent}
-            selectionColor={Colors.noticeAccent + "40"}
+            cursorColor={Colors.cursorAccent}
+            selectionColor={Colors.cursorAccent}
             textAlignVertical="top"
           />
           <TextInput
@@ -125,8 +125,8 @@ export default function StoredSentenceCreateScreen() {
             onChangeText={setSourceText}
             placeholder="저자, <제목>, 면 수"
             placeholderTextColor={Colors.noticeAccent + "60"}
-            cursorColor={Colors.noticeAccent}
-            selectionColor={Colors.noticeAccent + "40"}
+            cursorColor={Colors.cursorAccent}
+            selectionColor={Colors.cursorAccent}
             multiline
             textAlignVertical="top"
             accessibilityLabel="문장 출처"

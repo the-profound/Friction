@@ -14,6 +14,7 @@ const editableInputFiles = [
   "app/space-create.tsx",
   "app/space-join.tsx",
   "app/(tabs)/archive.tsx",
+  "app/stored-sentence-create.tsx",
   "components/AnimatedSearchBar/AnimatedSearchBar.tsx",
   "components/MemoBottomSheet/MemoBottomSheet.tsx",
   "components/MemoPageView/MemoPageView.tsx",
@@ -42,7 +43,22 @@ describe("editable React Native input cursor contract", () => {
       }
     }
 
-    expect(editableInputCount).toBe(35);
+    expect(editableInputCount).toBe(37);
+  });
+
+  it("keeps stored sentence selection feedback opaque with the cursor token", () => {
+    const source = readFileSync(
+      join(appRoot, "app/stored-sentence-create.tsx"),
+      "utf8",
+    );
+    const inputTags = source.match(/^\s*<TextInput\b[\s\S]*?\/>/gm) ?? [];
+
+    expect(inputTags).toHaveLength(2);
+    for (const inputTag of inputTags) {
+      expect(inputTag).toContain("cursorColor={Colors.cursorAccent}");
+      expect(inputTag).toContain("selectionColor={Colors.cursorAccent}");
+      expect(inputTag).not.toContain('selectionColor={Colors.noticeAccent + "40"}');
+    }
   });
 
   it("applies the same cursor token to React Native Web inputs", () => {
