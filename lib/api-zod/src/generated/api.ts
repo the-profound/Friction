@@ -157,6 +157,10 @@ export const ListUserSpaceLettersResponseItem = zod.object({
     .describe(
       "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
     ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe("The display name of the space this letter belongs to."),
   isRead: zod
     .boolean()
     .describe(
@@ -3100,6 +3104,10 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
         .describe(
           "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
         ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe("The display name of the space this letter belongs to."),
       isRead: zod
         .boolean()
         .describe(
@@ -3506,6 +3514,10 @@ export const ListSpaceLettersResponseItem = zod.object({
     .describe(
       "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
     ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe("The display name of the space this letter belongs to."),
   isRead: zod
     .boolean()
     .describe(
@@ -3620,6 +3632,10 @@ export const UpdateSpaceLetterVisibilityResponse = zod.object({
     .describe(
       "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null.",
     ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe("The display name of the space this letter belongs to."),
   isRead: zod
     .boolean()
     .describe(

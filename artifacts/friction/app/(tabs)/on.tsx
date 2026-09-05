@@ -56,6 +56,7 @@ import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
 import { useNavigation } from "@/contexts/NavigationContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import {
   invalidateArticleLists,
@@ -182,6 +183,7 @@ function RecordSourceCard({
   width,
   height: suppliedHeight,
   letterVisibility,
+  spaceNameFallback,
   onPress,
   onLongPress,
 }: {
@@ -191,6 +193,8 @@ function RecordSourceCard({
   width: number;
   height?: number;
   letterVisibility?: string | null;
+  /** Shown as the cover label when the article has no collectionName (e.g. space-only sends). */
+  spaceNameFallback?: string | null;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
@@ -229,7 +233,7 @@ function RecordSourceCard({
         <ArticleCardItem
           title={record.article.title || "제목 없음"}
           authorName={record.article.authorNickname ?? undefined}
-          collectionName={record.article.collectionName}
+          collectionName={record.article.collectionName ?? spaceNameFallback ?? null}
           cover={record.article.cover}
           cardWidth={width}
           carouselShadow={true}
@@ -326,6 +330,7 @@ export default function OnScreen() {
   const queryClient = useQueryClient();
   const { startFadeToBlack } = useReaderTransition();
   const { userId } = useUser();
+  const { isLoading: authIsLoading } = useAuth();
   const { showToast } = useToast();
   const { createDirectThought, isCreatingThought } = useThoughtComposer();
   const navBottom = useNavBarBottomSafeArea();
@@ -415,7 +420,7 @@ export default function OnScreen() {
   const refreshQuestion = useRefreshThoughtQuestionQueue();
   const addToCollection = useAddArticleToMyCollection();
   const spaceLettersQuery = useListUserSpaceLetters(userId ?? "", {
-    query: { enabled: Boolean(userId) },
+    query: { enabled: Boolean(userId) && !authIsLoading },
   });
   const updateVisibility = useUpdateSpaceLetterVisibility();
 
@@ -472,7 +477,13 @@ export default function OnScreen() {
   const spaceLetterByArticleId = useMemo<Map<string, SpaceLetter>>(() => {
     const map = new Map<string, SpaceLetter>();
     for (const sl of (spaceLettersQuery.data ?? []) as SpaceLetter[]) {
-      if (sl.sourceArticleId) map.set(sl.sourceArticleId, sl);
+      if (!sl.sourceArticleId) continue;
+      const existing = map.get(sl.sourceArticleId);
+      // PUBLIC wins: prefer the PUBLIC entry so the badge and toggle button
+      // reflect the most-visible state when one article has multiple space_letters.
+      if (!existing || sl.visibility === SpaceLetterVisibility.PUBLIC) {
+        map.set(sl.sourceArticleId, sl);
+      }
     }
     return map;
   }, [spaceLettersQuery.data]);
@@ -893,6 +904,7 @@ export default function OnScreen() {
             width={cardWidth}
             height={cardHeight}
             letterVisibility={letterVisibility}
+            spaceNameFallback={letterSpaceLetter?.spaceName ?? null}
             onPress={() => {
               if (!shouldIgnorePress()) {
                 if (record.kind === "letter") {

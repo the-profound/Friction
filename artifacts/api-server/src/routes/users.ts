@@ -414,10 +414,10 @@ router.get("/users/:id/space-letters", async (req, res) => {
       : Promise.resolve([] as { id: string; title: string | null; content: string | null; cover: string | null }[]),
     uniqueSpaceIds.length > 0
       ? db
-          .select({ id: spacesTable.id, isAnonymous: spacesTable.isAnonymous })
+          .select({ id: spacesTable.id, name: spacesTable.name, isAnonymous: spacesTable.isAnonymous })
           .from(spacesTable)
           .where(inArray(spacesTable.id, uniqueSpaceIds))
-      : Promise.resolve([] as { id: string; isAnonymous: boolean }[]),
+      : Promise.resolve([] as { id: string; name: string; isAnonymous: boolean }[]),
   ]);
 
   const articleMap = new Map(articles.map((a) => [a.id, a]));
@@ -471,6 +471,7 @@ router.get("/users/:id/space-letters", async (req, res) => {
       articleCover: article?.cover ?? null,
       authorNickname: null,
       displayName,
+      spaceName: spaceMap.get(letter.spaceId)?.name ?? null,
       isRead: false,
     };
   });

@@ -27,6 +27,8 @@ export interface SpaceLetter {
   authorNickname?: string | null;
   /** 익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null. */
   displayName?: string | null;
+  /** The display name of the space this letter belongs to. */
+  spaceName?: string | null;
   /** Whether the calling user has already read the source article. Always false when there is no sourceArticleId. */
   isRead: boolean;
   reservation?: SpaceReservationMetadata | null;

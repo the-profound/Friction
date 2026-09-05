@@ -5268,6 +5268,10 @@ components:
           type: string
           nullable: true
           description: "익명 공간의 안전한 표시명. 모집 중에는 '참여자', 시작 후 선택한 공간 닉네임. 비익명 공간에서는 null."
+        spaceName:
+          type: string
+          nullable: true
+          description: The display name of the space this letter belongs to.
         isRead:
           type: boolean
           description: Whether the calling user has already read the source article. Always false when there is no sourceArticleId.
