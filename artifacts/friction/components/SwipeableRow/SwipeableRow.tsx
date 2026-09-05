@@ -1,16 +1,20 @@
-import React, { useRef, useImperativeHandle, forwardRef } from "react";
+import React, { useRef, useImperativeHandle, forwardRef, useState } from "react";
 import {
   Animated,
   Easing,
   Platform,
   PanResponder,
+  Pressable,
   View,
   StyleSheet,
   Text,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import { Colors, Shadows } from "@/constants/tokens";
 
 const BUTTON_WIDTH = 80;
+const ACTION_GAP = 8;
+const ACTION_RADIUS = 16;
 const SWIPE_THRESHOLD = 40;
 const VELOCITY_THRESHOLD = 0.3;
 const SNAP_DURATION = 220;
@@ -25,6 +29,8 @@ export interface SwipeAction {
   label: string;
   color: string;
   onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
 }
 
 interface SwipeableRowProps {
@@ -34,20 +40,34 @@ interface SwipeableRowProps {
   onSwipeOpen?: () => void;
   onScrollLock?: (locked: boolean) => void;
   overflowTop?: number;
+  actionRightInset?: number;
+  actionBottomInset?: number;
 }
 
 const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
-  ({ children, onDeletePress, actions, onSwipeOpen, onScrollLock, overflowTop = 0 }, ref) => {
+  ({
+    children,
+    onDeletePress,
+    actions,
+    onSwipeOpen,
+    onScrollLock,
+    overflowTop = 0,
+    actionRightInset = 0,
+    actionBottomInset = 0,
+  }, ref) => {
     const resolvedActions: SwipeAction[] = actions
       ? actions
       : onDeletePress
-        ? [{ label: "삭제", color: "#EF4444", onPress: onDeletePress }]
+        ? [{ label: "삭제", color: Colors.primaryAction, onPress: onDeletePress }]
         : [];
 
-    const totalWidth = BUTTON_WIDTH * resolvedActions.length;
+    const totalWidth = BUTTON_WIDTH * resolvedActions.length
+      + ACTION_GAP * Math.max(0, resolvedActions.length - 1);
+    const revealWidth = totalWidth + actionRightInset;
 
     const translateX = useRef(new Animated.Value(0)).current;
     const isOpen = useRef(false);
+    const [open, setOpen] = useState(false);
     const currentAnim = useRef<Animated.CompositeAnimation | null>(null);
     const onScrollLockRef = useRef(onScrollLock);
     onScrollLockRef.current = onScrollLock;
@@ -58,6 +78,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
       close: () => {
         animateTo(0);
         isOpen.current = false;
+        setOpen(false);
       },
     }));
 
@@ -79,7 +100,9 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => isOpen.current,
+        // Never claim on touch-down: an open row must still allow a vertical
+        // drag to reach its FlatList. Horizontal intent is claimed on move.
+        onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
           const { dx, dy } = gestureState;
           return Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 6;
@@ -93,31 +116,33 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
         },
         onPanResponderMove: (_, gestureState) => {
           const { dx } = gestureState;
-          const base = isOpen.current ? -totalWidth : 0;
+          const base = isOpen.current ? -revealWidth : 0;
           const raw = base + dx;
-          const clamped = Math.min(0, Math.max(-totalWidth, raw));
+          const clamped = Math.min(0, Math.max(-revealWidth, raw));
           translateX.setValue(clamped);
         },
         onPanResponderRelease: (_, gestureState) => {
           const { dx, dy, vx } = gestureState;
-          const base = isOpen.current ? -totalWidth : 0;
-          const newPos = Math.min(0, Math.max(-totalWidth, base + dx));
+          const base = isOpen.current ? -revealWidth : 0;
+          const newPos = Math.min(0, Math.max(-revealWidth, base + dx));
           onScrollLockRef.current?.(false);
 
           if (isOpen.current) {
             const isTap = Math.abs(dx) < 5 && Math.abs(dy) < 5;
-            const shouldClose = isTap || newPos > -totalWidth + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
+            const shouldClose = isTap || newPos > -revealWidth + SWIPE_THRESHOLD || vx > VELOCITY_THRESHOLD;
             if (shouldClose) {
               animateTo(0);
               isOpen.current = false;
+              setOpen(false);
             } else {
-              animateTo(-totalWidth);
+              animateTo(-revealWidth);
             }
           } else {
             const shouldOpen = newPos < -SWIPE_THRESHOLD || vx < -VELOCITY_THRESHOLD;
             if (shouldOpen) {
-              animateTo(-totalWidth);
+              animateTo(-revealWidth);
               isOpen.current = true;
+              setOpen(true);
               onSwipeOpenRef.current?.();
             } else {
               animateTo(0);
@@ -126,7 +151,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
         },
         onPanResponderTerminate: () => {
           onScrollLockRef.current?.(false);
-          animateTo(isOpen.current ? -totalWidth : 0);
+          animateTo(isOpen.current ? -revealWidth : 0);
         },
       })
     ).current;
@@ -142,25 +167,70 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
           overflowTop > 0 && { paddingTop: overflowTop, marginTop: -overflowTop },
         ]}
       >
-        <View style={[styles.actionsContainer, { width: totalWidth, top: overflowTop }]}>
+        <View
+          style={[
+            styles.actionsContainer,
+            {
+              width: totalWidth,
+              top: overflowTop,
+              right: actionRightInset,
+              bottom: actionBottomInset,
+            },
+          ]}
+        >
           {resolvedActions.map((action, index) => (
             <ScalePressable
               key={index}
               style={[styles.actionButton, { width: BUTTON_WIDTH }]}
               onPress={action.onPress}
+              disabled={action.disabled || action.busy}
               contentStyle={styles.actionButtonContent}
+              accessibilityRole="button"
+              accessibilityLabel={action.label}
+              accessibilityState={{
+                disabled: Boolean(action.disabled || action.busy),
+                busy: Boolean(action.busy),
+              }}
             >
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: action.color }]} />
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  styles.actionButtonSurface,
+                  { backgroundColor: action.color },
+                ]}
+              />
               <Text style={styles.actionButtonText}>{action.label}</Text>
             </ScalePressable>
           ))}
         </View>
-        <Animated.View
-          style={[styles.rowContent, { transform: [{ translateX }] }]}
-          {...panResponder.panHandlers}
+        <View
+          style={[
+            styles.contentClip,
+            overflowTop > 0 && {
+              marginTop: -overflowTop,
+              paddingTop: overflowTop,
+            },
+          ]}
         >
-          {children}
-        </Animated.View>
+          <Animated.View
+            style={[styles.rowContent, { transform: [{ translateX }] }]}
+            {...panResponder.panHandlers}
+          >
+            {children}
+            {open ? (
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => {
+                  animateTo(0);
+                  isOpen.current = false;
+                  setOpen(false);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="스와이프 메뉴 닫기"
+              />
+            ) : null}
+          </Animated.View>
+        </View>
       </View>
     );
   }
@@ -172,25 +242,37 @@ export default SwipeableRow;
 
 const styles = StyleSheet.create({
   container: {
-    overflow: "hidden",
+    overflow: "visible",
     position: "relative",
     flex: 1,
   },
+  contentClip: {
+    overflow: "hidden",
+  },
   actionsContainer: {
     position: "absolute",
-    right: 0,
-    top: 0,
-    bottom: 0,
     flexDirection: "row",
     alignItems: "stretch",
+    gap: ACTION_GAP,
   },
   actionButton: {
-    flex: 1,
-    alignSelf: "stretch",
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
   },
   actionButtonContent: {
+    width: BUTTON_WIDTH,
+    height: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
     justifyContent: "center",
-    alignItems: "center",},
+    alignItems: "center",
+    borderRadius: ACTION_RADIUS,
+    ...Shadows.card,
+  },
+  actionButtonSurface: {
+    borderRadius: ACTION_RADIUS,
+  },
   actionButtonText: {
     color: "#FFFFFF",
     fontSize: 15,

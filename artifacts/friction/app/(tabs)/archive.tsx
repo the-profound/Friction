@@ -122,14 +122,16 @@ export default function ArchiveScreen() {
   }, []);
 
   const enterSelectionMode = useCallback(() => {
+    closeSentenceOpenRow();
     setSelectedIds(new Set());
     setSelectionMode(true);
-  }, []);
+  }, [closeSentenceOpenRow]);
 
   const exitSelectionMode = useCallback(() => {
+    closeSentenceOpenRow();
     setSelectionMode(false);
     setSelectedIds(new Set());
-  }, []);
+  }, [closeSentenceOpenRow]);
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -299,6 +301,8 @@ export default function ArchiveScreen() {
       onSwipeOpen={() => handleSentenceSwipeOpen(item.id)}
       onScrollLock={(locked) => setSentenceScrollEnabled(!locked)}
       overflowTop={SENTENCE_BADGE_OVERFLOW}
+      actionRightInset={Spacing.screenPx}
+      actionBottomInset={Spacing.cardGap}
     >
       <ScalePressable
         style={styles.sentenceItem}
@@ -475,6 +479,7 @@ export default function ArchiveScreen() {
           ) : undefined
         }
         scrollEnabled={selectionMode || sentenceScrollEnabled}
+        onScrollBeginDrag={closeSentenceOpenRow}
         showsVerticalScrollIndicator={false}
       />
     );
@@ -510,6 +515,7 @@ export default function ArchiveScreen() {
               activeSubTab === "personal" && styles.filterButtonContentActive,
             ]}
             onPress={() => {
+              closeSentenceOpenRow();
               setActiveSubTab("personal");
               exitSelectionMode();
             }}
@@ -530,7 +536,10 @@ export default function ArchiveScreen() {
               styles.filterButtonContent,
               activeSubTab === "sentence" && styles.filterButtonContentActive,
             ]}
-            onPress={() => setActiveSubTab("sentence")}
+            onPress={() => {
+              closeSentenceOpenRow();
+              setActiveSubTab("sentence");
+            }}
             accessibilityRole="button"
             accessibilityLabel="문장 보기"
             accessibilityState={{ selected: activeSubTab === "sentence" }}

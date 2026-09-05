@@ -40,6 +40,7 @@ import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOver
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { recordArticleToViewModel } from "@/hooks/useRecordLetterCards";
 import RecordRow from "@/components/RecordRow/RecordRow";
+import SwipeableRow, { type SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -377,6 +378,9 @@ export default function OnScreen() {
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<ReadonlySet<string>>(() => new Set());
   const deletePendingIdsRef = useRef(new Set<string>());
+  const [recordListScrollEnabled, setRecordListScrollEnabled] = useState(true);
+  const openRecordRowRef = useRef<SwipeableRowHandle | null>(null);
+  const recordRowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
   const [letterActionTarget, setLetterActionTarget] = useState<UnifiedRecord | null>(null);
   const [archiveArticleId, setArchiveArticleId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
@@ -404,6 +408,20 @@ export default function OnScreen() {
   const searchActiveRef = useRef(false);
 
   searchActiveRef.current = searchActive;
+
+  const closeOpenRecordRow = useCallback(() => {
+    openRecordRowRef.current?.close();
+    openRecordRowRef.current = null;
+    setRecordListScrollEnabled(true);
+  }, []);
+
+  const handleRecordSwipeOpen = useCallback((recordKey: string) => {
+    const next = recordRowRefs.current.get(recordKey) ?? null;
+    if (openRecordRowRef.current && openRecordRowRef.current !== next) {
+      openRecordRowRef.current.close();
+    }
+    openRecordRowRef.current = next;
+  }, []);
 
   const clearControlsTimer = useCallback(() => {
     controlsTimerRef.current = clearRecordControlsTimer(controlsTimerRef.current);
@@ -443,18 +461,20 @@ export default function OnScreen() {
   }, [applyControlsVisibility, restartControlsInactivityTimer]);
 
   const closeSearch = useCallback(() => {
+    closeOpenRecordRow();
     searchActiveRef.current = false;
     setSearchActive(false);
     setSearchQuery("");
     requestAnimationFrame(showControlsForActivity);
-  }, [showControlsForActivity]);
+  }, [closeOpenRecordRow, showControlsForActivity]);
 
   const openSearch = useCallback(() => {
+    closeOpenRecordRow();
     clearControlsTimer();
     applyControlsVisibility("hide");
     searchActiveRef.current = true;
     setSearchActive(true);
-  }, [applyControlsVisibility, clearControlsTimer]);
+  }, [applyControlsVisibility, clearControlsTimer, closeOpenRecordRow]);
 
   const tryOpenListSearch = useCallback((
     startOffset: number,
@@ -473,10 +493,15 @@ export default function OnScreen() {
   }, [openSearch]);
 
   useEffect(() => {
+    closeOpenRecordRow();
     closeOverlay();
     lastScrollOffsetRef.current = 0;
     showControlsForActivity();
-  }, [kind, view, closeOverlay, showControlsForActivity]);
+  }, [kind, view, closeOpenRecordRow, closeOverlay, showControlsForActivity]);
+
+  useEffect(() => {
+    closeOpenRecordRow();
+  }, [searchQuery, closeOpenRecordRow]);
 
   useEffect(() => {
     showControlsForActivity();
@@ -833,8 +858,9 @@ export default function OnScreen() {
   }, [router, startFadeToBlack]);
 
   const requestRecordDeletion = useCallback((record: UnifiedRecord) => {
+    closeOpenRecordRow();
     if (!deletePendingIdsRef.current.has(record.id)) setDeleteTarget(record);
-  }, []);
+  }, [closeOpenRecordRow]);
 
   const openQuestion = useCallback(async (thought: Thought) => {
     if (activateQuestion.isPending || questionQueueMutationPendingRef.current) return;
@@ -1202,7 +1228,7 @@ export default function OnScreen() {
             keyExtractor={(record) => `${record.kind}-${record.id}`}
             renderItem={({ item }) => {
               const isCurrentQuestion = item.kind === "thought" && item.isQuestion;
-              return (
+              const row = (
                 <RecordRow
                   record={item}
                   isQuestion={isCurrentQuestion}
@@ -1218,10 +1244,35 @@ export default function OnScreen() {
                   }}
                 />
               );
+              if (isCurrentQuestion) return row;
+              const recordKey = `${item.kind}-${item.id}`;
+              const deletePending = deletePendingIdsRef.current.has(item.id);
+              return (
+                <SwipeableRow
+                  ref={(handle) => {
+                    if (handle) recordRowRefs.current.set(recordKey, handle);
+                    else recordRowRefs.current.delete(recordKey);
+                  }}
+                  actions={[{
+                    label: deletePending ? "삭제 중" : "삭제",
+                    color: Colors.primaryAction,
+                    disabled: deletePending,
+                    busy: deletePending,
+                    onPress: () => requestRecordDeletion(item),
+                  }]}
+                  onSwipeOpen={() => handleRecordSwipeOpen(recordKey)}
+                  onScrollLock={(locked) => setRecordListScrollEnabled(!locked)}
+                  actionRightInset={Spacing.screenPx}
+                  actionBottomInset={Spacing.cardGap}
+                >
+                  {row}
+                </SwipeableRow>
+              );
             }}
             refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
             onScroll={handleRecordScroll}
             onScrollBeginDrag={(event) => {
+              closeOpenRecordRow();
               listDragStartOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
               registerControlsActivity();
             }}
@@ -1235,6 +1286,7 @@ export default function OnScreen() {
               );
             }}
             scrollEventThrottle={16}
+            scrollEnabled={recordListScrollEnabled}
             contentContainerStyle={{ paddingBottom: navBottom + 16 }}
           />
         </View>
