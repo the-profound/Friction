@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Platform, StyleSheet, TextInput, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -16,6 +16,9 @@ type Props = {
   onChangeText: (s: string) => void;
   placeholder: string;
   onClear?: () => void;
+  onDismiss?: () => void;
+  backgroundColor?: string;
+  removeFocusOutline?: boolean;
   /**
    * When true, the bar reserves an extra 8px of top spacing (used by the
    * archive tab where the search bar sits below a sub-tab bar).
@@ -29,10 +32,14 @@ export default function AnimatedSearchBar({
   onChangeText,
   placeholder,
   onClear,
+  onDismiss,
+  backgroundColor,
+  removeFocusOutline = false,
   extraTopSpacing = false,
 }: Props) {
   const progress = useSharedValue(active ? 1 : 0);
   const inputRef = useRef<TextInput>(null);
+  const [focused, setFocused] = useState(false);
 
   const expandedHeight = Sizing.searchBarHeight + 8 + (extraTopSpacing ? 8 : 0);
 
@@ -61,20 +68,35 @@ export default function AnimatedSearchBar({
 
   return (
     <Animated.View style={[styles.container, containerStyle]}>
-      <View style={[styles.searchBar, extraTopSpacing && styles.searchBarTopSpacing]}>
-        <Feather name="search" size={Sizing.searchBarIconSize} color={Colors.searchIcon} />
+      <View style={[styles.searchBar, backgroundColor ? { backgroundColor } : null, extraTopSpacing && styles.searchBarTopSpacing]}>
+        <Feather name="search" size={Sizing.searchBarIconSize} color={focused ? Colors.noticeAccent : Colors.searchIcon} />
         <TextInput
           ref={inputRef}
-          style={styles.searchInput}
+          style={[
+            styles.searchInput,
+            removeFocusOutline && Platform.OS === "web"
+              ? ({ outlineStyle: "none", borderWidth: 0 } as object)
+              : null,
+          ]}
           placeholder={placeholder}
           placeholderTextColor={Colors.searchPlaceholder}
           cursorColor={Colors.cursorAccent}
           value={value}
           onChangeText={onChangeText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           returnKeyType="search"
+          accessibilityLabel={placeholder}
         />
-        {value.length > 0 && (
-          <ScalePressable onPress={handleClear} hitSlop={8}>
+        {(value.length > 0 || onDismiss) && (
+          <ScalePressable
+            style={styles.clearButton}
+            contentStyle={styles.clearButtonContent}
+            onPress={onDismiss ?? handleClear}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={onDismiss ? "검색 닫기" : "검색어 지우기"}
+          >
             <Feather name="x" size={16} color={Colors.zinc400} />
           </ScalePressable>
         )}
@@ -107,4 +129,6 @@ const styles = StyleSheet.create({
     color: Colors.searchText,
     padding: 0,
   },
+  clearButton: { width: 32, height: 32, flexGrow: 0, flexShrink: 0 },
+  clearButtonContent: { width: 32, height: 32, flexGrow: 0, flexShrink: 0, alignItems: "center", justifyContent: "center" },
 });

@@ -36,4 +36,24 @@ describe("record filter UI regression", () => {
     expect(recordRow).not.toContain("onArchive");
   });
 
+  it("opens search from the date boundary without a header search button", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+    const searchBar = readFileSync(
+      join(__dirname, "../../components/AnimatedSearchBar/AnimatedSearchBar.tsx"),
+      "utf8",
+    );
+
+    expect(recordsScreen).not.toContain("showSearch");
+    expect(recordsScreen).toContain("onSearchBoundaryGesture: openSearch");
+    expect(recordsScreen).toContain("onPointerUp:");
+    expect(recordsScreen).toContain("event.nativeEvent.velocity?.y");
+    expect(recordsScreen).toContain("restartRecordControlsTimer");
+    expect(recordsScreen).toContain('pointerEvents={controlsVisible && !searchActive ? "box-none" : "none"}');
+    expect(recordsScreen).toContain("removeFocusOutline");
+    expect(searchBar).toContain('outlineStyle: "none"');
+  });
+
 });

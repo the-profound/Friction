@@ -36,6 +36,7 @@ export const Colors = {
   searchBgActive: "#d4d4d8",
   searchBgInactive: "#f4f4f5",
   searchBarBg: "#f4f4f5",
+  recordSearchBarBg: "rgba(146,50,61,0.10)",
   searchIcon: "#a1a1aa",
   searchText: "#18181b",
   searchPlaceholder: "#a1a1aa",

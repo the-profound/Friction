@@ -10,6 +10,41 @@ export interface DateGroupPageDecision {
   targetOffset: number | null;
 }
 
+export const DATE_GROUP_SEARCH_GESTURE_THRESHOLD = 18;
+
+export function isDateGroupSearchBoundaryGesture(
+  currentKey: string | null,
+  groupKeys: readonly string[],
+  distanceY: number,
+  pageThreshold: number,
+  searchThreshold = DATE_GROUP_SEARCH_GESTURE_THRESHOLD,
+  velocityY = 0,
+  flingVelocity = Number.POSITIVE_INFINITY,
+): boolean {
+  if (!currentKey || groupKeys[0] !== currentKey) return false;
+  if (Math.abs(velocityY) > flingVelocity) return false;
+  const distance = -distanceY;
+  return distance >= searchThreshold && distance < pageThreshold;
+}
+
+export function isListSearchBoundaryGesture(
+  startOffset: number,
+  distanceY: number,
+  pageThreshold: number,
+  velocityY = 0,
+  flingVelocity = Number.POSITIVE_INFINITY,
+): boolean {
+  return startOffset <= 1 && isDateGroupSearchBoundaryGesture(
+    "top",
+    ["top"],
+    distanceY,
+    pageThreshold,
+    undefined,
+    velocityY,
+    flingVelocity,
+  );
+}
+
 export function shouldApplyDateGroupMeasurement(
   measurementGeneration: number,
   currentGeneration: number,
