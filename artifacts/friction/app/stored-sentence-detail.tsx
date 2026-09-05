@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import { useQueryClient } from "@tanstack/react-query";
+import { AntDesign } from "@expo/vector-icons";
 import {
   getGetStoredSentenceQueryKey,
   getListStoredSentencesQueryKey,
@@ -28,6 +29,13 @@ import { Colors, ReaderTokens, Shadows, Spacing, Typography, readerFontSize } fr
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
+import {
+  applyStoredSentenceFavoriteResponse,
+  optimisticallySetStoredSentenceFavorite,
+  rollbackStoredSentenceFavorite,
+} from "@/lib/storedSentenceFavoriteCache";
+
+const FAVORITE_STAR_COLOR = "#F59E0B";
 
 function getPage(position: unknown): number | undefined {
   if (!position || typeof position !== "object" || !("page" in position)) return undefined;
@@ -62,7 +70,10 @@ export default function StoredSentenceDetailScreen() {
   const sourceSize = readerFontSize(ReaderTokens.typeScale.captionCqi, cardWidth);
   const page = getPage(sentence?.position);
   const source = sentence
-    ? [sentence.articleTitle?.trim() || "제목 없는 원문", page === undefined ? "저장 위치 없음" : `${page + 1}면`].join(" · ")
+    ? [
+        `${sentence.articleAuthorName?.trim() || "저자 미상"}, <${sentence.articleTitle?.trim() || "제목 없는 원문"}>`,
+        page === undefined ? "저장 위치 없음" : `${page + 1}면`,
+      ].join(" · ")
     : "";
   const busy = actionLock.current || toggleFavorite.isPending || deleteSentence.isPending || createThought.isPending;
 
@@ -92,17 +103,25 @@ export default function StoredSentenceDetailScreen() {
   }, [runAction, sentence, showToast]);
 
   const handleFavorite = useCallback(() => {
-    if (!sentence) return;
+    if (!sentence || actionLock.current || toggleFavorite.isPending) return;
     void runAction(async () => {
+      const nextFavorite = !sentence.isFavorite;
+      const { snapshot } = await optimisticallySetStoredSentenceFavorite(
+        queryClient,
+        userId,
+        sentence,
+        nextFavorite,
+      );
       try {
         const updated = await toggleFavorite.mutateAsync({
           id: sentence.id,
-          data: { isFavorite: !sentence.isFavorite },
+          data: { isFavorite: nextFavorite },
         });
-        queryClient.setQueryData(getGetStoredSentenceQueryKey(sentence.id), updated);
+        applyStoredSentenceFavoriteResponse(queryClient, userId, updated);
         await queryClient.invalidateQueries({ queryKey: getListStoredSentencesQueryKey({ userId }) });
         showToast({ message: updated.isFavorite ? "즐겨찾기에 추가했어요." : "즐겨찾기에서 해제했어요.", type: "success" });
       } catch {
+        rollbackStoredSentenceFavorite(queryClient, snapshot);
         setActionError("즐겨찾기 변경에 실패했어요. 다시 시도해주세요.");
         showToast({ message: "즐겨찾기 변경에 실패했어요.", type: "error" });
       }
@@ -186,8 +205,18 @@ export default function StoredSentenceDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.card, { width: cardWidth }]}>
+          {sentence.isFavorite ? (
+            <View
+              style={styles.favoriteBadge}
+              pointerEvents="none"
+              accessible
+              accessibilityLabel="즐겨찾기한 문장"
+            >
+              <AntDesign name="star" size={16} color={FAVORITE_STAR_COLOR} />
+            </View>
+          ) : null}
           <Text style={[styles.body, { fontSize: bodySize, lineHeight: bodySize * ReaderTokens.lineHeight.relaxed }]}>
-            &ldquo;{sentence.text}&rdquo;
+            {sentence.text}
           </Text>
           <Text style={[styles.source, { fontSize: sourceSize, lineHeight: sourceSize * 1.5 }]}>{source}</Text>
         </View>
@@ -234,6 +263,7 @@ const styles = StyleSheet.create({
   headerTitle: { ...Typography.bodySemiBold, fontSize: 17, color: Colors.zinc900 },
   scrollContent: { alignItems: "center", paddingTop: 16, paddingHorizontal: Spacing.screenPx },
   card: {
+    position: "relative",
     minHeight: 280,
     borderRadius: 16,
     backgroundColor: Colors.white,
@@ -242,6 +272,12 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     justifyContent: "space-between",
     ...Shadows.card,
+  },
+  favoriteBadge: {
+    position: "absolute",
+    top: -8,
+    left: 10,
+    zIndex: 1,
   },
   body: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc900 },
   source: {

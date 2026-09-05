@@ -58,11 +58,20 @@ describe("archive collected sentence list", () => {
     expect(selectionRenderer).toContain("numberOfLines={3}");
   });
 
-  it("does not render favorite indicators or actions in either list renderer", () => {
-    expect(regularRenderer).not.toContain('name="star"');
+  it("renders non-interactive favorite badges without adding favorite actions", () => {
+    expect(regularRenderer).toContain("<FavoriteBadge />");
     expect(regularRenderer).not.toContain("handleSentenceToggleFavorite");
-    expect(selectionRenderer).not.toContain('name="star"');
-    expect(selectionRenderer).not.toContain("isFavorite");
+    expect(selectionRenderer).toContain("<FavoriteBadge />");
+    expect(archiveScreen).toContain('pointerEvents="none"');
+    expect(archiveScreen).toContain("즐겨찾기됨");
+    expect(archiveScreen).toContain("overflowTop={8}");
+  });
+
+  it("renders stored text without decorative quotation marks", () => {
+    expect(regularRenderer).toContain("{item.text}");
+    expect(selectionRenderer).toContain("{item.text}");
+    expect(regularRenderer).not.toContain("&ldquo;");
+    expect(selectionRenderer).not.toContain("&rdquo;");
   });
 
   it("preserves detail, swipe delete, and accessible multi-selection interactions", () => {
@@ -94,8 +103,25 @@ describe("stored sentence detail route", () => {
     expect(detailScreen).toContain('fontFamily: ReaderTokens.fontFamily.serifBold');
     expect(detailScreen).toContain('"제목 없는 원문"');
     expect(detailScreen).toContain('"저장 위치 없음"');
+    expect(detailScreen).toContain('"저자 미상"');
+    expect(detailScreen).toContain("sentence.articleAuthorName");
+    expect(detailScreen).toContain("}, <${sentence.articleTitle");
     expect(detailScreen).toContain("<ScrollView");
     expect(detailScreen).toContain("invalidateQueries({ queryKey: getListStoredSentencesQueryKey");
     expect(detailScreen).toContain("router.back()");
+  });
+
+  it("shows a passive favorite badge and optimistically updates every sentence cache", () => {
+    expect(detailScreen).toContain("<AntDesign");
+    expect(detailScreen).toContain('pointerEvents="none"');
+    expect(detailScreen).toContain("optimisticallySetStoredSentenceFavorite");
+    expect(detailScreen).toContain("applyStoredSentenceFavoriteResponse");
+    expect(detailScreen).toContain("rollbackStoredSentenceFavorite");
+  });
+
+  it("renders sentence text without decorative quotation marks", () => {
+    expect(detailScreen).toContain("{sentence.text}");
+    expect(detailScreen).not.toContain("&ldquo;");
+    expect(detailScreen).not.toContain("&rdquo;");
   });
 });

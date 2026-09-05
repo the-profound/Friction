@@ -3851,6 +3851,10 @@ components:
           type: string
           nullable: true
           description: Title of the source article (joined from articles table). May be null if the article is missing.
+        articleAuthorName:
+          type: string
+          nullable: true
+          description: Display name of the source article author. May be null if the article or author is missing.
       required:
         [
           id,
@@ -3861,6 +3865,7 @@ components:
           favoritedAt,
           createdAt,
           articleTitle,
+          articleAuthorName,
         ]
 
     CreateStoredSentenceBody:

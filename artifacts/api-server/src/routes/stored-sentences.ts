@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { db, storedSentencesTable, articlesTable, thoughtQuestionSourcesTable, thoughtsTable } from "@workspace/db";
+import { db, storedSentencesTable, articlesTable, usersTable, thoughtQuestionSourcesTable, thoughtsTable } from "@workspace/db";
 import { CreateStoredSentenceBody, ToggleStoredSentenceFavoriteBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -15,7 +15,16 @@ const sentenceSelect = {
   favoritedAt: storedSentencesTable.favoritedAt,
   createdAt: storedSentencesTable.createdAt,
   articleTitle: articlesTable.title,
+  articleAuthorName: usersTable.nickname,
 };
+
+function selectSentences() {
+  return db
+    .select(sentenceSelect)
+    .from(storedSentencesTable)
+    .leftJoin(articlesTable, eq(storedSentencesTable.articleId, articlesTable.id))
+    .leftJoin(usersTable, eq(articlesTable.authorId, usersTable.id));
+}
 
 router.get("/stored-sentences", async (req, res) => {
   const { userId, favorite } = req.query;
@@ -29,10 +38,7 @@ router.get("/stored-sentences", async (req, res) => {
     conditions.push(eq(storedSentencesTable.isFavorite, true));
   }
 
-  const sentences = await db
-    .select(sentenceSelect)
-    .from(storedSentencesTable)
-    .leftJoin(articlesTable, eq(storedSentencesTable.articleId, articlesTable.id))
+  const sentences = await selectSentences()
     .where(and(...conditions))
     .orderBy(
       desc(storedSentencesTable.isFavorite),
@@ -63,20 +69,14 @@ router.post("/stored-sentences", async (req, res) => {
     return;
   }
 
-  const [sentence] = await db
-    .select(sentenceSelect)
-    .from(storedSentencesTable)
-    .leftJoin(articlesTable, eq(storedSentencesTable.articleId, articlesTable.id))
+  const [sentence] = await selectSentences()
     .where(eq(storedSentencesTable.id, inserted.id));
 
   res.status(201).json(sentence);
 });
 
 router.get("/stored-sentences/:id", async (req, res) => {
-  const [sentence] = await db
-    .select(sentenceSelect)
-    .from(storedSentencesTable)
-    .leftJoin(articlesTable, eq(storedSentencesTable.articleId, articlesTable.id))
+  const [sentence] = await selectSentences()
     .where(eq(storedSentencesTable.id, req.params.id));
 
   if (!sentence) {
@@ -136,10 +136,7 @@ router.patch("/stored-sentences/:id/favorite", async (req, res) => {
     return;
   }
 
-  const [sentence] = await db
-    .select(sentenceSelect)
-    .from(storedSentencesTable)
-    .leftJoin(articlesTable, eq(storedSentencesTable.articleId, articlesTable.id))
+  const [sentence] = await selectSentences()
     .where(eq(storedSentencesTable.id, updated.id));
 
   res.json(sentence);

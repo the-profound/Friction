@@ -33,10 +33,11 @@ interface SwipeableRowProps {
   actions?: SwipeAction[];
   onSwipeOpen?: () => void;
   onScrollLock?: (locked: boolean) => void;
+  overflowTop?: number;
 }
 
 const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
-  ({ children, onDeletePress, actions, onSwipeOpen, onScrollLock }, ref) => {
+  ({ children, onDeletePress, actions, onSwipeOpen, onScrollLock, overflowTop = 0 }, ref) => {
     const resolvedActions: SwipeAction[] = actions
       ? actions
       : onDeletePress
@@ -135,8 +136,13 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
     }
 
     return (
-      <View style={styles.container}>
-        <View style={[styles.actionsContainer, { width: totalWidth }]}>
+      <View
+        style={[
+          styles.container,
+          overflowTop > 0 && { paddingTop: overflowTop, marginTop: -overflowTop },
+        ]}
+      >
+        <View style={[styles.actionsContainer, { width: totalWidth, top: overflowTop }]}>
           {resolvedActions.map((action, index) => (
             <ScalePressable
               key={index}

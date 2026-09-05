@@ -329,6 +329,8 @@ export interface StoredSentence {
   createdAt: string;
   /** Title of the source article (joined from articles table). May be null if the article is missing. */
   articleTitle: string | null;
+  /** Display name of the source article author. May be null if the article or author is missing. */
+  articleAuthorName: string | null;
 }
 
 export type CreateStoredSentenceBodyPosition = {

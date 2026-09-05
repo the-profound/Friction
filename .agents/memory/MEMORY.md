@@ -90,3 +90,4 @@
 - [FlatList async row data](flatlist-async-row-data.md) — external async maps need renderItem deps plus extraData, or visible rows can keep the first empty snapshot.
 - [Scroll boundary gesture origin](scroll-boundary-gesture-origin.md) — boundary gestures must use the captured start offset; live scroll state changes before release.
 - [401 retry fresh signal](friction-401-retry-signal.md) — customFetch 401 auto-retry must build a fresh timeout signal; the original effectiveSignal is exhausted by a slow first request and aborts the retry immediately.
+- [Swipeable card edge ornaments](friction-swipeable-edge-ornaments.md) — reserve ornament overflow inside the swipe clip; never rely on negative offsets beyond an overflow-hidden row.

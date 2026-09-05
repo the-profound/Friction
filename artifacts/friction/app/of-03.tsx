@@ -225,7 +225,7 @@ export default function SentenceCollectionScreen() {
         >
           <View style={styles.sentenceContent}>
             <Text style={styles.sentenceText} numberOfLines={3}>
-              &ldquo;{item.text}&rdquo;
+              {item.text}
             </Text>
             <View style={styles.sentenceMeta}>
               <Text style={styles.sentenceDate}>
@@ -279,7 +279,7 @@ export default function SentenceCollectionScreen() {
           </View>
           <View style={styles.sentenceContent}>
             <Text style={styles.sentenceText} numberOfLines={3}>
-              &ldquo;{item.text}&rdquo;
+              {item.text}
             </Text>
             <View style={styles.sentenceMeta}>
               <Text style={styles.sentenceDate}>
@@ -514,7 +514,7 @@ function SentenceDetailSheet({
 
   return (
     <View style={sheet.container}>
-      <Text style={sheet.quoteText}>&ldquo;{sentence.text}&rdquo;</Text>
+      <Text style={sheet.quoteText}>{sentence.text}</Text>
 
       <View style={sheet.metaRow}>
         <Text style={sheet.metaDate}>

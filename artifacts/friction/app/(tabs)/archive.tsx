@@ -13,6 +13,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { AntDesign } from "@expo/vector-icons";
 import {
   Colors,
   ReaderTokens,
@@ -46,6 +47,19 @@ import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
 type ArchiveSubTab = "personal" | "sentence";
 const FILTER_BUTTON_HEIGHT = 36;
+const FAVORITE_STAR_COLOR = "#F59E0B";
+
+function FavoriteBadge() {
+  return (
+    <View
+      style={styles.favoriteBadge}
+      pointerEvents="none"
+      accessible={false}
+    >
+      <AntDesign name="star" size={16} color={FAVORITE_STAR_COLOR} />
+    </View>
+  );
+}
 
 export default function ArchiveScreen() {
   const { width: windowWidth } = useWindowDimensions();
@@ -296,6 +310,7 @@ export default function ArchiveScreen() {
       }}
       onSwipeOpen={() => handleSentenceSwipeOpen(item.id)}
       onScrollLock={(locked) => setSentenceScrollEnabled(!locked)}
+      overflowTop={8}
     >
       <ScalePressable
         style={styles.sentenceItem}
@@ -305,8 +320,9 @@ export default function ArchiveScreen() {
         }}
         contentStyle={styles.sentenceItemRow}
         accessibilityRole="button"
-        accessibilityLabel="문장 상세 열기"
+        accessibilityLabel={`문장 상세 열기${item.isFavorite ? ", 즐겨찾기됨" : ""}`}
       >
+        {item.isFavorite ? <FavoriteBadge /> : null}
         <View style={styles.sentenceItemContent}>
           <View style={styles.sentenceMeta}>
             <Text style={styles.sentenceSource} numberOfLines={1}>
@@ -321,7 +337,7 @@ export default function ArchiveScreen() {
             numberOfLines={3}
             ellipsizeMode="tail"
           >
-            &ldquo;{item.text}&rdquo;
+            {item.text}
           </Text>
         </View>
       </ScalePressable>
@@ -336,9 +352,10 @@ export default function ArchiveScreen() {
         onPress={() => toggleSelect(item.id)}
         contentStyle={styles.selectionRowContent}
         accessibilityRole="checkbox"
-        accessibilityLabel="문장 선택"
+        accessibilityLabel={`문장 선택${item.isFavorite ? ", 즐겨찾기됨" : ""}`}
         accessibilityState={{ checked: isSelected }}
       >
+        {item.isFavorite ? <FavoriteBadge /> : null}
         <View style={styles.checkboxTouchTarget}>
           <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
             {isSelected && <Feather name="check" size={14} color={Colors.white} />}
@@ -358,7 +375,7 @@ export default function ArchiveScreen() {
             numberOfLines={3}
             ellipsizeMode="tail"
           >
-            &ldquo;{item.text}&rdquo;
+            {item.text}
           </Text>
         </View>
       </ScalePressable>
@@ -855,6 +872,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.cardGap,
   },
   sentenceItemRow: {
+    position: "relative",
     padding: 16,
     borderRadius: 16,
     backgroundColor: Colors.white,
@@ -891,6 +909,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.cardGap,
   },
   selectionRowContent: {
+    position: "relative",
     flexDirection: "row",
     alignItems: "flex-start",
     padding: 16,
@@ -898,6 +917,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Colors.white,
     ...Shadows.card,
+  },
+  favoriteBadge: {
+    position: "absolute",
+    top: -8,
+    left: 10,
+    zIndex: 1,
   },
   checkboxTouchTarget: {
     width: 44,

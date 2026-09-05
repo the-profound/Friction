@@ -1592,6 +1592,12 @@ export const ListStoredSentencesResponseItem = zod.object({
     .describe(
       "Title of the source article (joined from articles table). May be null if the article is missing.",
     ),
+  articleAuthorName: zod
+    .string()
+    .nullable()
+    .describe(
+      "Display name of the source article author. May be null if the article or author is missing.",
+    ),
 });
 export const ListStoredSentencesResponse = zod.array(
   ListStoredSentencesResponseItem,
@@ -1635,6 +1641,12 @@ export const GetStoredSentenceResponse = zod.object({
     .describe(
       "Title of the source article (joined from articles table). May be null if the article is missing.",
     ),
+  articleAuthorName: zod
+    .string()
+    .nullable()
+    .describe(
+      "Display name of the source article author. May be null if the article or author is missing.",
+    ),
 });
 
 /**
@@ -1674,6 +1686,12 @@ export const ToggleStoredSentenceFavoriteResponse = zod.object({
     .nullable()
     .describe(
       "Title of the source article (joined from articles table). May be null if the article is missing.",
+    ),
+  articleAuthorName: zod
+    .string()
+    .nullable()
+    .describe(
+      "Display name of the source article author. May be null if the article or author is missing.",
     ),
 });
 
