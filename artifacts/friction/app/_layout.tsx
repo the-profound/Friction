@@ -160,6 +160,7 @@ function ProtectedRouteStack({ userId }: { userId: string }) {
           <Stack.Screen name="of-02" />
           <Stack.Screen name="of-02-detail" />
           <Stack.Screen name="of-03" />
+          <Stack.Screen name="stored-sentence-detail" />
           <Stack.Screen name="of-space-rounds" />
           <Stack.Screen name="of-space-basic-settings" />
           <Stack.Screen name="of-space-start" />

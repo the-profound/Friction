@@ -12,9 +12,7 @@ import {
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
-import { Feather, AntDesign } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
+import { Feather } from "@expo/vector-icons";
 import {
   Colors,
   ReaderTokens,
@@ -35,8 +33,6 @@ import {
   useListStoredSentences,
   useCreateMyCollection,
   useDeleteStoredSentence,
-  useToggleStoredSentenceFavorite,
-  useCreateThought,
   getListMyCollectionsQueryKey,
   getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
@@ -52,7 +48,6 @@ type ArchiveSubTab = "personal" | "sentence";
 const FILTER_BUTTON_HEIGHT = 36;
 
 export default function ArchiveScreen() {
-  const { startFadeToBlack } = useReaderTransition();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const navBottom = useNavBarBottomSafeArea();
@@ -66,7 +61,6 @@ export default function ArchiveScreen() {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
 
-  const [selectedSentence, setSelectedSentence] = useState<StoredSentence | null>(null);
   const [sentenceDeleteTarget, setSentenceDeleteTarget] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -81,8 +75,6 @@ export default function ArchiveScreen() {
 
   const createMyCollection = useCreateMyCollection();
   const deleteSentence = useDeleteStoredSentence();
-  const toggleFavorite = useToggleStoredSentenceFavorite();
-  const createThought = useCreateThought();
 
   const myCollections = (myCollectionsQuery.data ?? []) as MyCollection[];
   const sentences = (sentencesQuery.data ?? []) as StoredSentence[];
@@ -209,60 +201,6 @@ export default function ArchiveScreen() {
     }
   }, [newName, newDescription, userId, isCreating, createMyCollection, myCollectionsQuery, router, showToast]);
 
-  const handleSentenceCopy = useCallback(async (text: string) => {
-    try {
-      if (Platform.OS === "web") {
-        await navigator.clipboard.writeText(text);
-      } else {
-        await Clipboard.setStringAsync(text);
-      }
-      showToast({ message: "문장을 복사했어요.", type: "success" });
-      setSelectedSentence(null);
-    } catch {
-      showToast({ message: "복사에 실패했어요.", type: "error" });
-    }
-  }, [showToast]);
-
-  const handleSentenceToggleFavorite = useCallback(async (id: string, currentFav: boolean) => {
-    if (toggleFavorite.isPending) return;
-    const newFav = !currentFav;
-    if (selectedSentence?.id === id) {
-      setSelectedSentence((prev) => prev ? { ...prev, isFavorite: newFav } : null);
-    }
-    try {
-      await toggleFavorite.mutateAsync({ id, data: { isFavorite: newFav } });
-    } catch {
-      if (selectedSentence?.id === id) {
-        setSelectedSentence((prev) => prev ? { ...prev, isFavorite: currentFav } : null);
-      }
-      showToast({ message: "즐겨찾기 변경에 실패했어요.", type: "error" });
-      return;
-    }
-    await sentencesQuery.refetch();
-  }, [toggleFavorite, sentencesQuery, selectedSentence, showToast]);
-
-  const handleSentenceQuoteAsMemo = useCallback(async (sentence: StoredSentence) => {
-    const position = sentence.position as { page?: number } | null;
-    const page = position && typeof position.page === "number" ? position.page : undefined;
-    const quoteBlock = sentence.articleTitle
-      ? `> ${sentence.text.trim()}\n>\n> <${sentence.articleTitle}>${page !== undefined ? `, ${page + 1}면` : ""}`
-      : `> ${sentence.text.trim()}\n`;
-    try {
-      const thought = await createThought.mutateAsync({
-        data: {
-          content: `# \n\n${quoteBlock}`,
-          createdFrom: "quoted",
-          sourceArticleId: sentence.articleId ?? undefined,
-          sourceStoredSentenceId: sentence.id,
-          status: "PRELIMINARY",
-        },
-      });
-      setSelectedSentence(null);
-      router.push({ pathname: "/on-01a", params: { id: thought.id } });
-    } catch {
-      showToast({ message: "메모 생성에 실패했습니다.", type: "error" });
-    }
-  }, [createThought, router, showToast]);
 
   const handleSentenceDeleteConfirm = useCallback(async () => {
     if (!sentenceDeleteTarget || deleteSentence.isPending) return;
@@ -363,7 +301,7 @@ export default function ArchiveScreen() {
         style={styles.sentenceItem}
         onPress={() => {
           closeSentenceOpenRow();
-          setSelectedSentence(item);
+          router.push({ pathname: "/stored-sentence-detail", params: { id: item.id } });
         }}
         contentStyle={styles.sentenceItemRow}
         accessibilityRole="button"
@@ -388,7 +326,7 @@ export default function ArchiveScreen() {
         </View>
       </ScalePressable>
     </SwipeableRow>
-  ), [closeSentenceOpenRow, handleSentenceSwipeOpen, sentenceTextSize]);
+  ), [closeSentenceOpenRow, handleSentenceSwipeOpen, router, sentenceTextSize]);
 
   const renderSentenceSelectionItem = useCallback(({ item }: { item: StoredSentence }) => {
     const isSelected = selectedIds.has(item.id);
@@ -705,83 +643,6 @@ export default function ArchiveScreen() {
             pendingLabel="만드는 중..."
           />
         </View>
-      </BottomSheet>
-
-      <BottomSheet
-        visible={selectedSentence !== null}
-        onClose={() => setSelectedSentence(null)}
-        snapPoints={[0.55]}
-      >
-        {selectedSentence && (
-          <View style={styles.sentenceSheetContainer}>
-            <Text style={styles.sentenceSheetQuote}>
-              &ldquo;{selectedSentence.text}&rdquo;
-            </Text>
-            <Text style={styles.sentenceSheetDate}>
-              {new Date(selectedSentence.createdAt).toLocaleDateString("ko-KR")}
-            </Text>
-            <View style={styles.sentenceSheetDivider} />
-            <View style={styles.sentenceSheetActions}>
-              <ScalePressable
-                style={styles.sentenceSheetRow}
-                onPress={() => handleSentenceCopy(selectedSentence.text)}
-              contentStyle={styles.sentenceSheetRowContent}
-              >
-                <Feather name="copy" size={18} color={Colors.zinc700} />
-                <Text style={styles.sentenceSheetActionLabel}>복사하기</Text>
-              </ScalePressable>
-              <ScalePressable
-                style={styles.sentenceSheetRow}
-                onPress={() => handleSentenceToggleFavorite(selectedSentence.id, selectedSentence.isFavorite)}
-              contentStyle={styles.sentenceSheetRowContent}
-              >
-                {selectedSentence.isFavorite ? (
-                  <AntDesign name="star" size={22} color="#F59E0B" />
-                ) : (
-                  <Feather name="star" size={22} color={Colors.zinc700} />
-                )}
-                <Text style={[styles.sentenceSheetActionLabel, selectedSentence.isFavorite && { color: "#F59E0B" }]}>
-                  {selectedSentence.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-                </Text>
-              </ScalePressable>
-              <ScalePressable
-                style={styles.sentenceSheetRow}
-                onPress={() => handleSentenceQuoteAsMemo(selectedSentence)}
-              contentStyle={styles.sentenceSheetRowContent}
-              >
-                <Feather name="edit" size={18} color={Colors.zinc700} />
-                <Text style={styles.sentenceSheetActionLabel}>인용해서 메모 작성</Text>
-              </ScalePressable>
-              {selectedSentence.articleId ? (
-                <ScalePressable
-                  style={styles.sentenceSheetRow}
-                  onPress={() => {
-                    const articleId = selectedSentence.articleId;
-                    startFadeToBlack(() => {
-                      setSelectedSentence(null);
-                      router.push({ pathname: "/read", params: { articleId, mode: "re_read" } });
-                    });
-                  }}
-                contentStyle={styles.sentenceSheetRowContent}
-                >
-                  <Feather name="external-link" size={18} color={Colors.zinc700} />
-                  <Text style={styles.sentenceSheetActionLabel}>원본으로 이동</Text>
-                </ScalePressable>
-              ) : null}
-              <ScalePressable
-                style={styles.sentenceSheetRow}
-                onPress={() => {
-                  setSentenceDeleteTarget(selectedSentence.id);
-                  setSelectedSentence(null);
-                }}
-              contentStyle={styles.sentenceSheetRowContent}
-              >
-                <Feather name="trash-2" size={18} color="#DC2626" />
-                <Text style={[styles.sentenceSheetActionLabel, { color: "#DC2626" }]}>삭제</Text>
-              </ScalePressable>
-            </View>
-          </View>
-        )}
       </BottomSheet>
 
       <ConfirmModal
@@ -1173,44 +1034,5 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.primaryActionForeground,
-  },
-  sentenceSheetContainer: {
-    paddingVertical: 8,
-    gap: 4,
-  },
-  sentenceSheetQuote: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc800,
-    lineHeight: 24,
-    paddingHorizontal: 4,
-  },
-  sentenceSheetDate: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc500,
-    paddingHorizontal: 4,
-    marginTop: 4,
-  },
-  sentenceSheetDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.zinc100,
-    marginVertical: 12,
-  },
-  sentenceSheetActions: {
-    gap: 4,
-  },
-  sentenceSheetRow: {},
-  sentenceSheetRowContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-  },
-  sentenceSheetActionLabel: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc800,
   },
 });

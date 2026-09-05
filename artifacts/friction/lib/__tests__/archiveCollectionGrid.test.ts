@@ -66,12 +66,36 @@ describe("archive collected sentence list", () => {
   });
 
   it("preserves detail, swipe delete, and accessible multi-selection interactions", () => {
-    expect(regularRenderer).toContain("setSelectedSentence(item)");
+    expect(regularRenderer).toContain('pathname: "/stored-sentence-detail"');
     expect(regularRenderer).toContain("onDeletePress");
     expect(regularRenderer).toContain("onSwipeOpen");
     expect(selectionRenderer).toContain('accessibilityRole="checkbox"');
     expect(selectionRenderer).toContain("accessibilityState={{ checked: isSelected }}");
     expect(selectionRenderer).toContain("toggleSelect(item.id)");
-    expect(archiveScreen).toContain("handleSentenceToggleFavorite(selectedSentence.id");
+    expect(archiveScreen).not.toContain("selectedSentence");
+  });
+});
+
+describe("stored sentence detail route", () => {
+  const detailScreen = readFileSync(join(appRoot, "app/stored-sentence-detail.tsx"), "utf8");
+
+  it("uses the single-item query and exposes every supported menu action", () => {
+    expect(detailScreen).toContain("useGetStoredSentence(sentenceId");
+    expect(detailScreen).toContain('"복사하기"');
+    expect(detailScreen).toContain('"즐겨찾기 해제"');
+    expect(detailScreen).toContain('"인용하여 메모 작성"');
+    expect(detailScreen).toContain('"원본으로 이동"');
+    expect(detailScreen).toContain('"삭제"');
+    expect(detailScreen).toContain("...(sentence.articleId ?");
+  });
+
+  it("keeps typography, source fallbacks, scrolling, and deletion cache refresh explicit", () => {
+    expect(detailScreen).toContain("ReaderTokens.typeScale.bodyCqi");
+    expect(detailScreen).toContain('fontFamily: ReaderTokens.fontFamily.serifBold');
+    expect(detailScreen).toContain('"제목 없는 원문"');
+    expect(detailScreen).toContain('"저장 위치 없음"');
+    expect(detailScreen).toContain("<ScrollView");
+    expect(detailScreen).toContain("invalidateQueries({ queryKey: getListStoredSentencesQueryKey");
+    expect(detailScreen).toContain("router.back()");
   });
 });
