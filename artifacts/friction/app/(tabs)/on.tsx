@@ -18,7 +18,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ApiError,
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
@@ -74,15 +73,20 @@ import { computeBodyLayout } from "@/lib/bodyLayout";
 import {
   buildMixedRecordGroups,
   buildUnifiedRecords,
+  classifyQuestionError,
   filterRecords,
   getQueuedThoughtIds,
   getQueuedThoughts,
+  getQuestionUnavailableMessage,
   getRecordCardBodyLineCount,
   getRecordCardContent,
   getRecordCardTitleLineCount,
+  isPendingQueueQuestionThought,
   recordMatchesQuery,
   resolveQuestionPlacementAnchors,
   shouldRefetchQuestionQueue,
+  shouldShowQuestionErrorToast,
+  type QuestionErrorKind,
   type QuestionPlacementAnchors,
   type RecordDateGroup,
   type RecordKind,
@@ -331,8 +335,6 @@ function RecordSourceCard({
     </ScalePressable>
   );
 }
-
-type QuestionErrorKind = "timeout" | "network" | "auth" | "server" | "unknown";
 export default function OnScreen() {
   const router = useRouter();
   const { tabReselectVersion } = useNavigation();
@@ -382,6 +384,9 @@ export default function OnScreen() {
   // Refresh and activation mutate the same server-owned FIFO queue. Keep one
   // synchronous guard so a late response can never replace a newer snapshot.
   const questionQueueMutationPendingRef = useRef(false);
+  // Suppresses duplicate failure toasts while the same error kind keeps
+  // recurring across retries/refetches; a success resets it to null.
+  const lastShownQuestionErrorKindRef = useRef<QuestionErrorKind | null>(null);
   const hasFocusedRecordScreenRef = useRef(false);
   const questionPlacementRef = useRef<{
     seed: string;
@@ -569,22 +574,22 @@ export default function OnScreen() {
   );
 
   useEffect(() => {
+    // A fresh success clears the suppression so a later failure — even the
+    // same kind — is allowed to toast again.
+    if (questionQuery.isSuccess) {
+      lastShownQuestionErrorKindRef.current = null;
+      return;
+    }
     if (!questionQuery.isError) return;
     // Auth restore is still in progress — this error is transient. Suppress
     // the toast so the user does not see a false alarm; the query will
     // automatically re-fire once authIsLoading becomes false.
     if (authIsLoading) return;
     const errorKind = classifyQuestionError(questionQuery.error);
-    const message =
-      errorKind === "timeout"
-        ? "연결 시간이 초과됐어요. 화면을 당겨 다시 시도해주세요."
-        : errorKind === "network"
-          ? "네트워크 연결을 확인하고 당겨서 새로고침해주세요."
-          : errorKind === "auth"
-            ? "로그인이 만료됐어요. 화면을 당겨 다시 시도해주세요."
-            : "질문을 불러오지 못했습니다. 화면을 당겨 다시 시도해주세요.";
-    showToast({ message, type: "error" });
-  }, [questionQuery.errorUpdatedAt, questionQuery.isError, authIsLoading, showToast]);
+    if (!shouldShowQuestionErrorToast(errorKind, lastShownQuestionErrorKindRef.current)) return;
+    lastShownQuestionErrorKindRef.current = errorKind;
+    showToast({ message: getQuestionUnavailableMessage(errorKind), type: "error" });
+  }, [questionQuery.errorUpdatedAt, questionQuery.isError, questionQuery.isSuccess, authIsLoading, showToast]);
 
   useEffect(() => {
     seedRecordDetailCaches(queryClient, {
@@ -610,7 +615,12 @@ export default function OnScreen() {
   const allRecords = useMemo(
     () => filterRecords(
       buildUnifiedRecords(
-        listedThoughts.filter((thought: Thought) => !queuedIds.has(thought.id)),
+        // The queue ID set only exists after a successful queue fetch; a
+        // still-queued question must stay hidden from the ordinary list even
+        // when that fetch fails, so isPendingQueueQuestionThought is checked
+        // independently rather than relying solely on queuedIds.
+        listedThoughts.filter((thought: Thought) =>
+          !queuedIds.has(thought.id) && !isPendingQueueQuestionThought(thought)),
         articlesQuery.data,
       ),
       kind,
@@ -948,14 +958,10 @@ export default function OnScreen() {
   const questionErrorKind = questionLoadFailed
     ? classifyQuestionError(questionQuery.error)
     : null;
-  const emptyTitle = questionLoadFailed
-    ? questionErrorKind === "timeout"
-      ? "연결 시간이 초과됐어요. 당겨서 다시 시도해주세요."
-      : questionErrorKind === "network"
-        ? "네트워크에 연결되지 않았어요. 연결 후 당겨서 새로고침해주세요."
-        : questionErrorKind === "auth"
-          ? "로그인이 만료됐어요. 당겨서 다시 시도해주세요."
-          : "질문을 불러오지 못했어요. 화면을 당겨 다시 시도해주세요."
+  // Shares the exact same copy the failure toast uses (getQuestionUnavailableMessage)
+  // so the empty state and the toast can never disagree about the same cause.
+  const emptyTitle = questionLoadFailed && questionErrorKind
+    ? getQuestionUnavailableMessage(questionErrorKind)
     : kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
 
   const renderRecordCard = useCallback((
@@ -1378,27 +1384,4 @@ function getRecordCardHeight(_record: UnifiedRecord, width: number): number {
 
 function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: number): number {
   return records.length > 0 ? getRecordCardHeight(records[0], width) : width * Sizing.cardRatio;
-}
-
-/**
- * Maps a raw query error to a coarse failure bucket so the UI can surface
- * a cause-specific message. Keeps all PII out of logic (no logging here).
- */
-function classifyQuestionError(error: unknown): QuestionErrorKind {
-  if (!error) return "unknown";
-  if (error instanceof Error) {
-    if (error.name === "TimeoutError" || error.name === "AbortError") return "timeout";
-    // React Native: "Network request failed"; browser: "Failed to fetch"
-    if (
-      error instanceof TypeError ||
-      error.message.toLowerCase().includes("network") ||
-      error.message.toLowerCase().includes("failed to fetch")
-    )
-      return "network";
-  }
-  if (error instanceof ApiError) {
-    if (error.status === 401 || error.status === 403) return "auth";
-    if (error.status >= 500) return "server";
-  }
-  return "unknown";
 }

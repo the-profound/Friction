@@ -1,10 +1,14 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { Thought } from "@workspace/api-client-react";
+import { ApiError, type Thought } from "@workspace/api-client-react";
 import {
   buildRecordDateGroups,
   buildMixedRecordGroups,
   buildUnifiedRecords,
+  classifyQuestionError,
   compareRecordsNewestFirst,
+  getQuestionUnavailableMessage,
   getQueuedThoughtIds,
   getQueuedThoughts,
   getRecordCardBodyLineCount,
@@ -12,10 +16,13 @@ import {
   getRecordCardContent,
   getRecordCardTitleLineCount,
   getThoughtCardContent,
+  isPendingQueueQuestionThought,
   normalizePreviewTitle,
   normalizePreviewText,
   resolveQuestionPlacementAnchors,
   shouldRefetchQuestionQueue,
+  shouldShowQuestionErrorToast,
+  type QuestionErrorKind,
   type UnifiedRecord,
 } from "../recordList";
 
@@ -29,6 +36,15 @@ function queuedThought(id: string): Thought {
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
   };
+}
+
+/** Builds a queue-endpoint ApiError with the given HTTP status for classifier tests. */
+function questionQueueApiError(status: number): ApiError {
+  return new ApiError(
+    new Response(JSON.stringify({ error: "boom" }), { status }),
+    { error: "boom" },
+    { method: "GET", url: "/thoughts/question-queue" },
+  );
 }
 
 describe("record list model", () => {
@@ -45,6 +61,49 @@ describe("record list model", () => {
     const queuedIds = getQueuedThoughtIds(queuedThoughts, queuedThoughts[0], queuedThoughts[1]);
     const records = buildUnifiedRecords(
       listedThoughts.filter((thought) => !queuedIds.has(thought.id)),
+      [],
+    );
+
+    expect(records.map((record) => record.id)).toEqual(["regular-thought"]);
+  });
+
+  it("keeps a still-queued question hidden from the ordinary list even when the queue fetch fails", () => {
+    // Simulates on.tsx when questionQuery has no successful data: queuedIds
+    // is empty exactly like this, yet the thought list still contains the
+    // question the server-side queue is holding onto.
+    const emptyQueuedIds = new Set<string>();
+    const stillQueued = queuedThought("leaked-queue-question");
+    // The reading screen's in-context "answer this question" flow also
+    // writes createdFrom:"question"/status:"PRELIMINARY", but always with a
+    // sourceArticleId — it must keep showing as an ordinary card.
+    const readingAnswer: Thought = { ...queuedThought("reading-answer"), sourceArticleId: "article-1" };
+    const ordinary = { id: "ordinary", updatedAt: "2026-01-02T00:00:00.000Z" } as unknown as Thought;
+
+    const records = buildUnifiedRecords(
+      [stillQueued, readingAnswer, ordinary].filter(
+        (thought) => !emptyQueuedIds.has(thought.id) && !isPendingQueueQuestionThought(thought),
+      ),
+      [],
+    );
+
+    expect(records.map((record) => record.id)).toEqual(["ordinary", "reading-answer"]);
+  });
+
+  it("keeps the queue-success exclusion behavior unchanged when combined with the resilience check", () => {
+    const queuedThoughts = Array.from(
+      { length: 3 },
+      (_, index) => queuedThought(`queued-${index + 1}`),
+    );
+    const listedThoughts = [
+      ...queuedThoughts,
+      { id: "regular-thought", updatedAt: "2026-01-02T00:00:00.000Z" },
+    ] as unknown as Thought[];
+
+    const queuedIds = getQueuedThoughtIds(queuedThoughts, queuedThoughts[0], queuedThoughts[1]);
+    const records = buildUnifiedRecords(
+      listedThoughts.filter(
+        (thought) => !queuedIds.has(thought.id) && !isPendingQueueQuestionThought(thought),
+      ),
       [],
     );
 
@@ -127,6 +186,152 @@ describe("record list model", () => {
       ] as never,
     );
     expect(records.map((record) => `${record.kind}:${record.id}`)).toEqual(["letter:letter", "editing:editing"]);
+  });
+});
+
+describe("isPendingQueueQuestionThought", () => {
+  it("recognizes a queue-shaped thought independently of the queue response", () => {
+    expect(isPendingQueueQuestionThought({
+      createdFrom: "question",
+      status: "PRELIMINARY",
+      sourceArticleId: null,
+    })).toBe(true);
+    expect(isPendingQueueQuestionThought({
+      createdFrom: "question",
+      status: "PRELIMINARY",
+      sourceArticleId: undefined,
+    })).toBe(true);
+  });
+
+  it("excludes an in-reading question answer, which always carries a sourceArticleId", () => {
+    expect(isPendingQueueQuestionThought({
+      createdFrom: "question",
+      status: "PRELIMINARY",
+      sourceArticleId: "article-1",
+    })).toBe(false);
+  });
+
+  it("excludes an activated question once status has moved on to NORMAL", () => {
+    expect(isPendingQueueQuestionThought({
+      createdFrom: "question",
+      status: "NORMAL",
+      sourceArticleId: null,
+    })).toBe(false);
+  });
+
+  it("excludes every other creation source", () => {
+    for (const createdFrom of ["quoted", "reading", "direct"] as const) {
+      expect(isPendingQueueQuestionThought({
+        createdFrom,
+        status: "PRELIMINARY",
+        sourceArticleId: null,
+      })).toBe(false);
+    }
+  });
+});
+
+describe("classifyQuestionError", () => {
+  it("classifies network failures from both React Native and browser fetch", () => {
+    expect(classifyQuestionError(new TypeError("Network request failed"))).toBe("network");
+    expect(classifyQuestionError(new TypeError("Failed to fetch"))).toBe("network");
+  });
+
+  it("classifies abort/timeout errors by name regardless of error class", () => {
+    const timeout = new Error("timed out");
+    timeout.name = "TimeoutError";
+    const abort = new Error("aborted");
+    abort.name = "AbortError";
+    expect(classifyQuestionError(timeout)).toBe("timeout");
+    expect(classifyQuestionError(abort)).toBe("timeout");
+  });
+
+  it("classifies 401/403 as auth and 5xx as server", () => {
+    expect(classifyQuestionError(questionQueueApiError(401))).toBe("auth");
+    expect(classifyQuestionError(questionQueueApiError(403))).toBe("auth");
+    expect(classifyQuestionError(questionQueueApiError(500))).toBe("server");
+    expect(classifyQuestionError(questionQueueApiError(503))).toBe("server");
+  });
+
+  it("classifies a 404 as unsupported, since the queue handler never returns one itself", () => {
+    expect(classifyQuestionError(questionQueueApiError(404))).toBe("unsupported");
+  });
+
+  it("falls back to unknown for anything else", () => {
+    expect(classifyQuestionError(null)).toBe("unknown");
+    expect(classifyQuestionError(new Error("boom"))).toBe("unknown");
+    expect(classifyQuestionError(questionQueueApiError(400))).toBe("unknown");
+  });
+});
+
+describe("getQuestionUnavailableMessage", () => {
+  const kinds: QuestionErrorKind[] = ["timeout", "network", "auth", "unsupported", "server", "unknown"];
+
+  it("gives every failure kind a non-empty message", () => {
+    for (const kind of kinds) {
+      expect(getQuestionUnavailableMessage(kind).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("never invites a retry when the server does not support the feature at all", () => {
+    const message = getQuestionUnavailableMessage("unsupported");
+    expect(message).not.toContain("다시 시도");
+    expect(message).not.toContain("당겨");
+  });
+
+  it("is the single source both the toast and the empty state read from, so identical kinds always match", () => {
+    for (const kind of kinds) {
+      expect(getQuestionUnavailableMessage(kind)).toBe(getQuestionUnavailableMessage(kind));
+    }
+  });
+});
+
+describe("shouldShowQuestionErrorToast", () => {
+  it("shows the first failure observed in a session", () => {
+    expect(shouldShowQuestionErrorToast("network", null)).toBe(true);
+  });
+
+  it("suppresses a repeat of the same failure kind", () => {
+    expect(shouldShowQuestionErrorToast("network", "network")).toBe(false);
+    expect(shouldShowQuestionErrorToast("unsupported", "unsupported")).toBe(false);
+  });
+
+  it("still shows when the failure kind changes", () => {
+    expect(shouldShowQuestionErrorToast("auth", "network")).toBe(true);
+  });
+
+  it("shows again after a success resets the suppression back to null", () => {
+    const resetAfterSuccess: QuestionErrorKind | null = null;
+    expect(shouldShowQuestionErrorToast("network", resetAfterSuccess)).toBe(true);
+  });
+});
+
+describe("on.tsx question queue wiring", () => {
+  const readScreen = () =>
+    readFileSync(join(__dirname, "../../app/(tabs)/on.tsx"), "utf8");
+
+  it("hides a leaked queue question from the ordinary list independently of queuedIds", () => {
+    const screen = readScreen();
+    expect(screen).toContain(
+      "!queuedIds.has(thought.id) && !isPendingQueueQuestionThought(thought)",
+    );
+  });
+
+  it("delegates error classification and copy to the single recordList source instead of a local copy", () => {
+    const screen = readScreen();
+    expect(screen).not.toMatch(/type QuestionErrorKind =/);
+    expect(screen).not.toMatch(/function classifyQuestionError/);
+    expect(screen).toContain("classifyQuestionError(questionQuery.error)");
+    expect(screen).toContain("getQuestionUnavailableMessage(errorKind)");
+    expect(screen).toContain("getQuestionUnavailableMessage(questionErrorKind)");
+  });
+
+  it("suppresses repeat-kind toasts and resets suppression on the next queue success", () => {
+    const screen = readScreen();
+    expect(screen).toContain("if (questionQuery.isSuccess) {");
+    expect(screen).toContain("lastShownQuestionErrorKindRef.current = null;");
+    expect(screen).toContain(
+      "if (!shouldShowQuestionErrorToast(errorKind, lastShownQuestionErrorKindRef.current)) return;",
+    );
   });
 });
 

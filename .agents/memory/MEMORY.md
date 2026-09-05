@@ -1,3 +1,4 @@
+// hint: Structural and logic conflict. Both design and behavior differ.
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
@@ -93,3 +94,4 @@
 - [Swipeable card edge ornaments](friction-swipeable-edge-ornaments.md) — reserve ornament overflow inside the swipe clip; never rely on negative offsets beyond an overflow-hidden row.
 - [Router-level UUID guard for path IDs](friction-router-param-uuid-guard.md) — router.param 404-guards non-UUID :id before auth runs; must migrate mocked-DB test fixture IDs to real UUIDs first.
 - [Friction prod/dev route skew](friction-prod-dev-route-skew.md) — check deployment logs for the exact failing path before assuming route skew is live; a supplemental query's error must never get its own full-screen branch either.
+- [Question-queue resilience patterns](friction-question-queue-resilience.md) — never gate a list-hiding filter solely on a secondary query's success; an impossible status code (never sent by the handler) safely signals version mismatch; dedupe retry toasts by classified kind, reset on success.

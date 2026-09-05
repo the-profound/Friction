@@ -1,4 +1,4 @@
-import type { Article, Thought } from "@workspace/api-client-react";
+import { ApiError, type Article, type Thought } from "@workspace/api-client-react";
 import { parseMarkdownBlocks, tokensToPlainText } from "../utils/markdownParser";
 import { toKstCalendarDateKey } from "./kstDate";
 
@@ -161,6 +161,102 @@ export function getQueuedThoughts(
     seen.add(thought.id);
     return true;
   });
+}
+
+/**
+ * True when a thought's own fields mark it as an unanswered entry still
+ * sitting in the server-owned question queue. Both server insert paths that
+ * populate the queue (random fallback and AI generation) create the thought
+ * with `createdFrom: "question"`, `status: "PRELIMINARY"`, and no
+ * sourceArticleId; activation flips status to "NORMAL" and removes the queue
+ * row. The reading screen's in-context "answer this question" flow also
+ * writes `createdFrom: "question"` thoughts, but always with a
+ * sourceArticleId — those are finished, first-class thoughts, not queue
+ * placeholders, so the sourceArticleId check keeps them out of this bucket.
+ *
+ * This lets the ordinary thought list hide a still-queued question even when
+ * the queue endpoint itself fails to respond: the two signals (this check and
+ * the queue response's ID set) are combined, never substituted for one
+ * another, so a successful queue fetch keeps behaving exactly as before.
+ */
+export function isPendingQueueQuestionThought(
+  thought: Pick<Thought, "createdFrom" | "status" | "sourceArticleId">,
+): boolean {
+  return (
+    thought.createdFrom === "question"
+    && thought.status === "PRELIMINARY"
+    && thought.sourceArticleId == null
+  );
+}
+
+export type QuestionErrorKind = "timeout" | "network" | "auth" | "unsupported" | "server" | "unknown";
+
+/**
+ * Maps a raw question-queue query error to a coarse failure bucket so the UI
+ * can surface a cause-specific message. Keeps all PII out of logic (no
+ * logging here).
+ *
+ * The question-queue GET handler always answers 200 with a snapshot — it
+ * never sends its own 404. A 404 on this specific endpoint can therefore only
+ * mean the server build the client is talking to does not expose the route
+ * at all (an app/server version mismatch), so it is classified as
+ * "unsupported" rather than a generic server error, and the UI must not
+ * suggest retrying for it.
+ */
+export function classifyQuestionError(error: unknown): QuestionErrorKind {
+  if (!error) return "unknown";
+  if (error instanceof Error) {
+    if (error.name === "TimeoutError" || error.name === "AbortError") return "timeout";
+    // React Native: "Network request failed"; browser: "Failed to fetch"
+    if (
+      error instanceof TypeError ||
+      error.message.toLowerCase().includes("network") ||
+      error.message.toLowerCase().includes("failed to fetch")
+    )
+      return "network";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) return "auth";
+    if (error.status === 404) return "unsupported";
+    if (error.status >= 500) return "server";
+  }
+  return "unknown";
+}
+
+/**
+ * Single source of copy for a failed question-queue load, shared by the
+ * empty-state title and the failure toast so the two can never drift apart
+ * for the same cause. "unsupported" intentionally omits retry wording —
+ * pulling to refresh cannot fix a server build that lacks the route.
+ */
+export function getQuestionUnavailableMessage(kind: QuestionErrorKind): string {
+  switch (kind) {
+    case "timeout":
+      return "연결 시간이 초과됐어요. 화면을 당겨 다시 시도해주세요.";
+    case "network":
+      return "네트워크에 연결되지 않았어요. 연결을 확인한 뒤 화면을 당겨 새로고침해주세요.";
+    case "auth":
+      return "로그인이 만료됐어요. 화면을 당겨 다시 시도해주세요.";
+    case "unsupported":
+      return "서버와 앱 버전이 맞지 않아요. 앱을 최신 버전으로 업데이트해주세요.";
+    case "server":
+    case "unknown":
+    default:
+      return "질문을 불러오지 못했어요. 화면을 당겨 다시 시도해주세요.";
+  }
+}
+
+/**
+ * Decides whether another question-queue failure should raise another toast.
+ * Repeated failures of the same kind (e.g. every retry while offline) must
+ * not stack duplicate toasts. Callers reset `lastShownErrorKind` to null on
+ * the next success, so a later failure — even the same kind — shows again.
+ */
+export function shouldShowQuestionErrorToast(
+  errorKind: QuestionErrorKind,
+  lastShownErrorKind: QuestionErrorKind | null,
+): boolean {
+  return errorKind !== lastShownErrorKind;
 }
 
 export function shouldRefetchQuestionQueue({
