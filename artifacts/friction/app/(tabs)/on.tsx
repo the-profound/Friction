@@ -21,7 +21,6 @@ import {
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
-  getListUserSpaceLettersQueryKey,
   useAddArticleToMyCollection,
   useDeleteArticle,
   useDeleteThought,
@@ -29,18 +28,17 @@ import {
   useListArticles,
   useListMyCollections,
   useListThoughts,
-  useListUserSpaceLetters,
-  useUpdateSpaceLetterVisibility,
   useActivateThoughtQuestion,
   useRefreshThoughtQuestionQueue,
-  SpaceLetterVisibility,
   type Article,
   type MyCollection,
   type SpaceLetter,
   type Thought,
 } from "@workspace/api-client-react";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
-import CardSelectOverlay, { type ChainArticleMeta, type OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
+import { recordArticleToViewModel } from "@/hooks/useRecordLetterCards";
 import RecordRow from "@/components/RecordRow/RecordRow";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -54,9 +52,9 @@ import { Colors, ReaderTokens, Shadows, Sizing, Spacing, Typography, readerFontS
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/contexts/UserContext";
 import { useNavigation } from "@/contexts/NavigationContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import {
   invalidateArticleLists,
@@ -233,7 +231,8 @@ function RecordSourceCard({
         <ArticleCardItem
           title={record.article.title || "제목 없음"}
           authorName={record.article.authorNickname ?? undefined}
-          collectionName={record.article.collectionName ?? spaceNameFallback ?? null}
+          collectionName={record.article.collectionName ?? null}
+              spaceName={spaceNameFallback ?? null}
           cover={record.article.cover}
           cardWidth={width}
           carouselShadow={true}
@@ -332,6 +331,24 @@ export default function OnScreen() {
   const { userId } = useUser();
   const { isLoading: authIsLoading } = useAuth();
   const { showToast } = useToast();
+  // ── Letter overlay (shared 편지 선택 모드) ─────────────────────────────────
+  // One hook replaces the previous inline CardSelectOverlay + visibility-toggle
+  // confirm modal. spaceLetterByArticleId is re-used for card badges.
+  const {
+    isSourceHidden,
+    isOverlayActive,
+    selectedArticleId,
+    openLetterOverlay,
+    closeOverlay,
+    renderLetterOverlay,
+    spaceLetterByArticleId,
+  } = useLetterSelectionOverlay(userId, {
+    onRead: (article) => {
+      startFadeToBlack(() =>
+        router.push({ pathname: "/read", params: { articleId: article.id, mode: "re_read" } }),
+      );
+    },
+  });
   const { createDirectThought, isCreatingThought } = useThoughtComposer();
   const navBottom = useNavBarBottomSafeArea();
   const { width } = useWindowDimensions();
@@ -351,17 +368,6 @@ export default function OnScreen() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const isArchivingRef = useRef(false);
-  // Letter overlay — opened when the user taps a letter card.
-  const [overlayLetter, setOverlayLetter] = useState<Article | null>(null);
-  const [overlayOriginLayout, setOverlayOriginLayout] = useState<OriginLayout | null>(null);
-  const [isOverlaySourceHidden, setIsOverlaySourceHidden] = useState(false);
-  // Pending visibility change waiting for user confirmation.
-  const [visibilityConfirmTarget, setVisibilityConfirmTarget] = useState<{
-    spaceId: string;
-    spaceLetterId: string;
-    newVisibility: "PUBLIC" | "RECIPIENT_ONLY";
-  } | null>(null);
-  const [isChangingVisibility, setIsChangingVisibility] = useState(false);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   // Refresh and activation mutate the same server-owned FIFO queue. Keep one
   // synchronous guard so a late response can never replace a newer snapshot.
@@ -376,15 +382,13 @@ export default function OnScreen() {
   const lastScrollOffsetRef = useRef(0);
 
   useEffect(() => {
-    setOverlayLetter(null);
-    setOverlayOriginLayout(null);
-    setIsOverlaySourceHidden(false);
+    closeOverlay();
     lastScrollOffsetRef.current = 0;
     if (!controlsVisibleRef.current) {
       controlsVisibleRef.current = true;
       setControlsVisible(true);
     }
-  }, [kind, view]);
+  }, [kind, view, closeOverlay]);
 
   useEffect(() => {
     Animated.timing(controlsAnimation, {
@@ -424,10 +428,6 @@ export default function OnScreen() {
   const activateQuestion = useActivateThoughtQuestion();
   const refreshQuestion = useRefreshThoughtQuestionQueue();
   const addToCollection = useAddArticleToMyCollection();
-  const spaceLettersQuery = useListUserSpaceLetters(userId ?? "", {
-    query: { enabled: Boolean(userId) && !authIsLoading },
-  });
-  const updateVisibility = useUpdateSpaceLetterVisibility();
 
   useEffect(() => {
     setKind("thought");
@@ -485,19 +485,6 @@ export default function OnScreen() {
     });
   }, [articlesQuery.data, queryClient, thoughtsQuery.data]);
 
-  const spaceLetterByArticleId = useMemo<Map<string, SpaceLetter>>(() => {
-    const map = new Map<string, SpaceLetter>();
-    for (const sl of (spaceLettersQuery.data ?? []) as SpaceLetter[]) {
-      if (!sl.sourceArticleId) continue;
-      const existing = map.get(sl.sourceArticleId);
-      // PUBLIC wins: prefer the PUBLIC entry so the badge and toggle button
-      // reflect the most-visible state when one article has multiple space_letters.
-      if (!existing || sl.visibility === SpaceLetterVisibility.PUBLIC) {
-        map.set(sl.sourceArticleId, sl);
-      }
-    }
-    return map;
-  }, [spaceLettersQuery.data]);
 
   const queuedThoughts = useMemo(
     () => getQueuedThoughts(
@@ -818,36 +805,6 @@ export default function OnScreen() {
     }
   }, [addToCollection, archiveArticleId, queryClient, router, selectedCollectionId, showToast, sortedCollections]);
 
-  const handleVisibilityToggle = useCallback((articleId: string) => {
-    const sl = spaceLetterByArticleId.get(articleId);
-    if (!sl) return;
-    const newVisibility = sl.visibility === SpaceLetterVisibility.PUBLIC
-      ? SpaceLetterVisibility.RECIPIENT_ONLY
-      : SpaceLetterVisibility.PUBLIC;
-    setVisibilityConfirmTarget({ spaceId: sl.spaceId, spaceLetterId: sl.id, newVisibility });
-  }, [spaceLetterByArticleId]);
-
-  const confirmVisibilityChange = useCallback(async () => {
-    if (!visibilityConfirmTarget || isChangingVisibility) return;
-    setIsChangingVisibility(true);
-    const { spaceId, spaceLetterId, newVisibility } = visibilityConfirmTarget;
-    try {
-      await updateVisibility.mutateAsync({ id: spaceId, letterId: spaceLetterId, data: { visibility: newVisibility } });
-      if (userId) await queryClient.invalidateQueries({ queryKey: getListUserSpaceLettersQueryKey(userId) });
-      invalidateArticleLists(queryClient);
-      setVisibilityConfirmTarget(null);
-      showToast({
-        message: newVisibility === SpaceLetterVisibility.PUBLIC
-          ? "전체 공개로 변경했어요."
-          : "수신자 공개로 변경했어요. 프로필 페이지에서 사라집니다.",
-        type: "success",
-      });
-    } catch {
-      showToast({ message: "변경에 실패했습니다. 다시 시도해주세요.", type: "error" });
-    } finally {
-      setIsChangingVisibility(false);
-    }
-  }, [visibilityConfirmTarget, isChangingVisibility, updateVisibility, queryClient, userId, showToast]);
 
   const isLoading =
     (articlesQuery.isLoading && !articlesQuery.data) ||
@@ -868,28 +825,6 @@ export default function OnScreen() {
   const emptyTitle = questionLoadFailed
     ? "질문을 불러오지 못했어요. 화면을 당겨 다시 시도해주세요."
     : kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
-  const overlayLetterChain = useMemo<(Article | null)[]>(
-    () => (overlayLetter ? [overlayLetter] : []),
-    [overlayLetter],
-  );
-  const overlayMetaChain = useMemo<ChainArticleMeta[]>(
-    () => overlayLetter ? [{
-      authorName: overlayLetter.authorNickname ?? null,
-      authorId: overlayLetter.authorId ?? null,
-      collectionName: overlayLetter.collectionName ?? null,
-      collectionId: overlayLetter.collectionId ?? null,
-      date: overlayLetter.letterAt ?? overlayLetter.createdAt ?? null,
-    }] : [],
-    [overlayLetter],
-  );
-  const handleOverlayRead = useCallback((_index: number) => {
-    if (!overlayLetter) return;
-    const articleId = overlayLetter.id;
-    setIsOverlaySourceHidden(false);
-    setOverlayLetter(null);
-    setOverlayOriginLayout(null);
-    startFadeToBlack(() => router.push({ pathname: "/read", params: { articleId, mode: "re_read" } }));
-  }, [overlayLetter, startFadeToBlack, router]);
 
   const renderRecordCard = useCallback((
     record: CardRecord,
@@ -898,10 +833,14 @@ export default function OnScreen() {
     cardHeight: number,
   ) => {
     const letterSpaceLetter = record.kind === "letter" ? spaceLetterByArticleId.get(record.article.id) : undefined;
-    const letterVisibility = letterSpaceLetter?.visibility ?? undefined;
-    const isOverlaySource = record.kind === "letter" && record.article.id === overlayLetter?.id;
+    // Convert raw API response → LetterCardViewModel so card props and overlay
+    // meta use separated spaceName / collectionName fields consistently.
+    const letterViewModel = record.kind === "letter"
+      ? recordArticleToViewModel(record.article, letterSpaceLetter ?? null)
+      : null;
+    const letterVisibility = letterViewModel?.visibility ?? undefined;
     return (
-      <View style={[styles.recordCardFrame, isOverlaySource && isOverlaySourceHidden && styles.recordCardHidden]}>
+      <View style={[styles.recordCardFrame, record.kind === "letter" && isSourceHidden(record.article.id) && styles.recordCardHidden]}>
         {record.kind === "thought" ? (
           <RecordSourceCard
             record={record}
@@ -926,13 +865,23 @@ export default function OnScreen() {
             width={cardWidth}
             height={cardHeight}
             letterVisibility={letterVisibility}
-            spaceNameFallback={letterSpaceLetter?.spaceName ?? null}
+            spaceNameFallback={letterViewModel?.spaceName ?? null}
             onPress={() => {
               if (!shouldIgnorePress()) {
                 if (record.kind === "letter") {
                   measureOrigin((layout) => {
-                    setOverlayOriginLayout(layout);
-                    setOverlayLetter(record.article);
+                    openLetterOverlay(record.article, {
+                      fallbackOrigin: layout,
+                      meta: {
+                        // Overlay header shows spaceName for space letters; falls
+                        // back to collectionName (personal folder) otherwise.
+                        collectionName: letterViewModel?.spaceName ?? letterViewModel?.collectionName ?? null,
+                        collectionId: letterViewModel?.collectionId ?? null,
+                        date: letterViewModel?.date ?? null,
+                        authorName: letterViewModel?.authorName ?? null,
+                        authorId: letterViewModel?.authorId ?? null,
+                      },
+                    });
                   });
                 } else {
                   openRecord(record);
@@ -954,7 +903,7 @@ export default function OnScreen() {
     );
   }, [
     cardWidth, openQuestion, openRecord, requestRecordDeletion,
-    overlayLetter, isOverlaySourceHidden, spaceLetterByArticleId,
+    isSourceHidden, openLetterOverlay, spaceLetterByArticleId,
   ]);
 
   return (
@@ -1029,7 +978,7 @@ export default function OnScreen() {
           <FlatList
             ref={recordListRef}
             data={cardGroups}
-            extraData={`${recordResetVersion}:${overlayLetter?.id ?? ""}:${isOverlaySourceHidden ? "1" : "0"}:${spaceLetterByArticleId.size}`}
+            extraData={`${recordResetVersion}:${selectedArticleId ?? ""}:${spaceLetterByArticleId.size}`}
             nestedScrollEnabled
             keyExtractor={(group) => group.dateKey}
             renderItem={({ item, index }) => {
@@ -1109,48 +1058,7 @@ export default function OnScreen() {
         </RefreshableEmpty>
       )}
 
-      {(() => {
-        const sl = overlayLetter ? spaceLetterByArticleId.get(overlayLetter.id) : undefined;
-        const isAnon = sl?.displayName != null;
-        const isPub = sl ? sl.visibility === SpaceLetterVisibility.PUBLIC : true;
-        const disabled = isAnon || sl == null;
-        return (
-          <CardSelectOverlay
-            articles={overlayLetterChain}
-            metas={overlayMetaChain}
-            initialIndex={0}
-            originLayout={overlayOriginLayout}
-            onClose={() => {
-              setIsOverlaySourceHidden(false);
-              setOverlayLetter(null);
-              setOverlayOriginLayout(null);
-            }}
-            onRead={handleOverlayRead}
-            onReady={() => setIsOverlaySourceHidden(true)}
-            visibilityButton={overlayLetter ? {
-              icon: (disabled || !isPub ? "users" : "globe") as React.ComponentProps<typeof Feather>["name"],
-              label: isAnon ? "수신자 공개" : isPub ? "전체 공개" : "수신자 공개",
-              disabled,
-              onPress: () => { if (overlayLetter) handleVisibilityToggle(overlayLetter.id); },
-            } : null}
-          />
-        );
-      })()}
-      <ConfirmModal
-        visible={Boolean(visibilityConfirmTarget)}
-        title={visibilityConfirmTarget?.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
-          ? "수신자 공개로 변경하시겠습니까?"
-          : "전체 공개로 변경하시겠습니까?"}
-        description={visibilityConfirmTarget?.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
-          ? "변경하면 이 편지가 프로필 페이지에서 사라집니다."
-          : "변경하면 이 편지가 프로필 페이지에 다시 표시됩니다."}
-        confirmLabel="변경"
-        cancelLabel="취소"
-        confirmDisabled={isChangingVisibility}
-        cancelDisabled={isChangingVisibility}
-        onConfirm={confirmVisibilityChange}
-        onCancel={() => { if (!isChangingVisibility) setVisibilityConfirmTarget(null); }}
-      />
+      {renderLetterOverlay()}
       <ActionSheetModal
         visible={Boolean(letterActionTarget)}
         actions={[

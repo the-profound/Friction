@@ -28,7 +28,9 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
-import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
+import { spaceLetterToViewModel } from "@/hooks/useSpaceLetterCards";
 import DotIndicator from "@/components/DotIndicator/DotIndicator";
 import { useUser } from "@/contexts/UserContext";
 import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
@@ -55,7 +57,6 @@ import type {
   SpaceRoundSlotWithUser,
   SpaceScheduledSendWithLetter,
 } from "@workspace/api-client-react";
-import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
@@ -302,14 +303,14 @@ function SpaceCarousel({
         style={[
           spaceCarouselStyles.cardSlot,
           !isLast && { marginRight: SC_CARD_GAP },
-          letter.id === hiddenCardId && spaceCarouselStyles.cardSlotHidden,
+          (letter.sourceArticleId ?? letter.id) === hiddenCardId && spaceCarouselStyles.cardSlotHidden,
         ]}
       >
         <CanonicalCardSlot width={SC_CARD_W} height={SC_CARD_H}>
           <ArticleCardItem
             title={title ?? "제목 없음"}
             authorName={authorName}
-            collectionName={spaceName}
+            spaceName={spaceName}
             cover={((letter as any).articleCover ?? null) as ArticleCover | null}
             isRead={shouldDimSpaceRoundLetter(roundStatus, letter.isRead)}
             isActive={true}
@@ -763,7 +764,7 @@ function RoundSection({
           return (
             <View
               style={
-                letter.id === hiddenCardId
+                (letter.sourceArticleId ?? letter.id) === hiddenCardId
                   ? spaceCarouselStyles.cardSlotHidden
                   : undefined
               }
@@ -776,7 +777,7 @@ function RoundSection({
                 <ArticleCardItem
                   title={title ?? "제목 없음"}
                   authorName={authorName}
-                  collectionName={spaceName}
+                  spaceName={spaceName}
                   cover={((letter as any).articleCover ?? null) as ArticleCover | null}
                   isRead={letter.isRead}
                   isActive={true}
@@ -1101,19 +1102,21 @@ export default function SpaceDetailScreen() {
   );
 
   // ── Card select overlay state ─────────────────────────────────────────────
-  const [tapLetter, setTapLetter] = useState<SpaceLetter | null>(null);
-  const [tapLetterOrigin, setTapLetterOrigin] = useState<OriginLayout | null>(null);
-  const [tapArticle, setTapArticle] = useState<Article | null>(null);
-  const [isTappedSourceHidden, setIsTappedSourceHidden] = useState(false);
+  // tappedLetterRef: the SpaceLetter tapped last — kept in a ref (not state) so
+  // the onRead/onClose callbacks in useLetterSelectionOverlay always have access
+  // without triggering an extra render.
+  const tappedLetterRef = useRef<SpaceLetter | null>(null);
+  // cancelScrollRestorationRef breaks the hook ordering cycle:
+  // useLetterSelectionOverlay needs no deps, useSelectionScrollRestoration needs
+  // isOverlayActive, onRead needs cancelScrollRestoration — a ref links them.
+  const cancelScrollRestorationRef = useRef<(() => void) | null>(null);
+  // Ref mirror of selectedArticleId — lets async fetch callbacks guard against
+  // the stale-hydration race where letter A's delayed response overwrites B's overlay.
+  const selectedArticleIdRef = useRef<string | null>(null);
   const spaceScrollRef = useRef<ScrollView>(null);
   const restoreSpaceScrollOffset = useCallback((offset: number) => {
     spaceScrollRef.current?.scrollTo({ y: offset, animated: false });
   }, []);
-  const {
-    handleScroll: handleSelectionScroll,
-    captureScrollOffset,
-    cancelScrollRestoration,
-  } = useSelectionScrollRestoration(tapLetter !== null, restoreSpaceScrollOffset);
 
   useEffect(() => {
     if (showInviteGuide === "1") {
@@ -1222,145 +1225,98 @@ export default function SpaceDetailScreen() {
     });
   }, [queryClient, id, userId]);
 
+  // isAnonymousSpace must be derived before useLetterSelectionOverlay so it
+  // can be passed as `allowAncestorChain`. Placed after the data queries and
+  // derived values so the hook ordering is deterministic every render.
+  const isAnonymousSpace = !!space?.isAnonymous;
+
+  const {
+    isOverlayActive,
+    isSourceHidden,
+    selectedArticleId,
+    openLetterOverlay,
+    updateOverlayArticle,
+    renderLetterOverlay,
+  } = useLetterSelectionOverlay(userId, {
+    allowAncestorChain: !isAnonymousSpace,
+    onRead: (article, isNonPrimary) => {
+      cancelScrollRestorationRef.current?.();
+      if (!isNonPrimary) {
+        // Primary card seeded with id = letter.sourceArticleId ?? letter.id.
+        // If the letter had no published article, navigating to a reader is
+        // meaningless — bail out.
+        if (!tappedLetterRef.current?.sourceArticleId) return;
+        wentToReaderRef.current = true;
+        router.push({ pathname: "/read" as never, params: { articleId: article.id } });
+      } else {
+        router.push({ pathname: "/read" as never, params: { articleId: article.id, mode: "re_read" } });
+      }
+    },
+    onClose: () => {
+      tappedLetterRef.current = null;
+    },
+  });
+  const {
+    handleScroll: handleSelectionScroll,
+    captureScrollOffset,
+    cancelScrollRestoration,
+  } = useSelectionScrollRestoration(isOverlayActive, restoreSpaceScrollOffset);
+  // Sync after both hooks have resolved so onRead always sees current cancelScrollRestoration.
+  cancelScrollRestorationRef.current = cancelScrollRestoration;
+  // Keep selectedArticleIdRef in sync so async hydration can validate it.
+  useEffect(() => { selectedArticleIdRef.current = selectedArticleId; }, [selectedArticleId]);
+
   const handlePressLetter = useCallback(
     (letter: SpaceLetter, layout: OriginLayout) => {
       captureScrollOffset();
-      setIsTappedSourceHidden(false);
-      setTapLetter(letter);
-      setTapLetterOrigin(layout);
-      // The carousel response already has the title and cover visible to the
-      // user. Seed the overlay with that exact presentation immediately so its
-      // origin-scale animation never flashes a loading card or a refetched cover.
-      setTapArticle({
+      tappedLetterRef.current = letter;
+      // Seed the overlay immediately with the carousel's visible title/cover so
+      // the open animation never flashes a blank card while the full article loads.
+      const seededArticle = {
         id: letter.sourceArticleId ?? letter.id,
         title: (letter as any).articleTitle ?? "제목 없음",
         cover: ((letter as any).articleCover ?? null) as ArticleCover | null,
         sourceArticleId: null,
-      } as Article);
+      } as Article;
+      // ViewModel adapter centralises author-name resolution and field separation.
+      const vm = spaceLetterToViewModel(letter, space?.name ?? "", isAnonymousSpace);
+      const tappedRound = rounds.find((r) => r.id === letter.spaceRoundId);
+      const tappedRoundStatus = tappedRound
+        ? getSpaceRoundPresentationStatus(tappedRound, now)
+        : "ACTIVE";
+      openLetterOverlay(seededArticle, {
+        fallbackOrigin: layout,
+        meta: {
+          authorName: vm.authorName ?? null,
+          authorId: vm.authorId ?? null,
+          // spaceName is the collection-line label for space letters.
+          collectionName: vm.spaceName ?? null,
+          date: vm.date ?? letter.createdAt,
+          isRead: shouldDimSpaceRoundLetter(tappedRoundStatus, letter.isRead),
+        },
+      });
+      // Async fetch to hydrate the overlay with the full article object
+      // (includes sourceArticleId for ancestor chain traversal).
       if (letter.sourceArticleId) {
+        // Capture the seeded article ID this selection expects. If the user
+        // closes and opens a different letter before the fetch resolves, the
+        // ref will have advanced and we discard the stale result.
+        const expectedId = letter.sourceArticleId ?? letter.id;
         queryClient.fetchQuery({
           queryKey: getGetArticleQueryKey(letter.sourceArticleId),
           queryFn: () => getArticle(letter.sourceArticleId!),
           staleTime: 5 * 60 * 1000,
         }).then((article) => {
-          setTapArticle(article as Article);
+          if (selectedArticleIdRef.current === expectedId) {
+            updateOverlayArticle(article as Article);
+          }
         }).catch(() => {});
       }
     },
-    [queryClient, captureScrollOffset],
+    [queryClient, captureScrollOffset, openLetterOverlay, updateOverlayArticle,
+     isAnonymousSpace, rounds, now, space?.name],
   );
 
-  const handleOverlayClose = useCallback(() => {
-    setIsTappedSourceHidden(false);
-    setTapLetter(null);
-    setTapLetterOrigin(null);
-    setTapArticle(null);
-  }, []);
-
-  const handleNavigateToAuthor = useCallback(
-    (authorId: string) => {
-      router.push(`/user-profile/${authorId}` as never);
-    },
-    [router],
-  );
-
-  // ── Article chain for the overlay (shared with 수신함/프로필) ──────────────
-  // In anonymous spaces we skip ancestor traversal so real author identities
-  // in the reply chain are never exposed.
-  const isAnonymousSpace = !!space?.isAnonymous;
-  const ancestorChain = useAncestorChain(
-    isAnonymousSpace ? null : tapArticle?.sourceArticleId,
-    queryClient,
-  );
-
-  const { chainArticles, chainMetas, chainInitialIndex } = useMemo(() => {
-    if (!tapLetter) {
-      return {
-        chainArticles: [] as (Article | null)[],
-        chainMetas: [] as ChainArticleMeta[],
-        chainInitialIndex: 0,
-      };
-    }
-
-    const artList: (Article | null)[] = [];
-    const metaList: ChainArticleMeta[] = [];
-
-    for (const slot of ancestorChain) {
-      artList.push(slot.article);
-      metaList.push(
-        slot.article
-          ? {
-              authorName: (slot.article as any).authorNickname ?? null,
-              authorId: slot.article.authorId ?? null,
-              date: slot.article.letterAt ?? null,
-            }
-          : {},
-      );
-    }
-
-    const initIdx = artList.length;
-    const authorNickname = (tapLetter as any).authorNickname as string | null;
-    const displayName = (tapLetter as any).displayName as string | null;
-    const authorName = getSpaceLetterAuthorName(
-      tapLetter.letterType,
-      isAnonymousSpace,
-      displayName,
-      authorNickname,
-    );
-    const tappedRound = rounds.find(
-      (round) => round.id === tapLetter.spaceRoundId,
-    );
-    const tappedRoundStatus = tappedRound
-      ? getSpaceRoundPresentationStatus(tappedRound, now)
-      : "ACTIVE";
-    // Keep the entry presentation pinned to the exact carousel cover. The
-    // fetched article is still used for its sourceArticleId above, but it must
-    // not replace the card during the opening animation.
-    artList.push({
-      ...(tapArticle ?? {}),
-      id: tapLetter.sourceArticleId ?? tapLetter.id,
-      title: (tapLetter as any).articleTitle ?? "제목 없음",
-      cover: ((tapLetter as any).articleCover ?? null) as ArticleCover | null,
-    } as Article);
-    metaList.push({
-      authorName,
-      authorId: isAnonymousSpace ? null : tapLetter.authorId ?? null,
-      collectionName: space?.name ?? null,
-      date: tapLetter.createdAt,
-      isRead: shouldDimSpaceRoundLetter(tappedRoundStatus, tapLetter.isRead),
-    });
-
-    return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
-  }, [tapLetter, tapArticle, ancestorChain, isAnonymousSpace, now, rounds, space?.name]);
-
-  const handleOverlayRead = useCallback(
-    (chainIdx: number) => {
-      const isTapped = chainIdx === chainInitialIndex;
-      const article = chainArticles[chainIdx];
-      const letter = tapLetter;
-      if ((isTapped && letter?.sourceArticleId) || (!isTapped && article)) {
-        cancelScrollRestoration();
-      }
-      setTapLetter(null);
-      setTapLetterOrigin(null);
-      setTapArticle(null);
-      if (isTapped) {
-        if (!letter?.sourceArticleId) return;
-        wentToReaderRef.current = true;
-        router.push({
-          pathname: "/read" as never,
-          params: { articleId: letter.sourceArticleId },
-        });
-        return;
-      }
-      if (!article) return;
-      router.push({
-        pathname: "/read" as never,
-        params: { articleId: article.id, mode: "re_read" },
-      });
-    },
-    [tapLetter, chainArticles, chainInitialIndex, router, cancelScrollRestoration],
-  );
 
   const handleCopyInviteCode = useCallback(async () => {
     if (!space?.inviteCode) return;
@@ -1513,7 +1469,7 @@ export default function SpaceDetailScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={handleSelectionScroll}
         scrollEventThrottle={16}
-        scrollEnabled={tapLetter === null}
+        scrollEnabled={!isOverlayActive}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -1698,9 +1654,7 @@ export default function SpaceDetailScreen() {
                       pendingCenterReservations={pendingCenterReservations}
                       isPendingCenterLettersFetching={scheduledSendsQuery.isFetching}
                       onPressWriteOpening={handlePressWriteOpening}
-                      hiddenCardId={
-                        isTappedSourceHidden ? tapLetter?.id ?? null : null
-                      }
+                      hiddenCardId={selectedArticleId}
                       spaceId={id}
                       userId={userId}
                       onScheduleSlot={handleScheduleSlot}
@@ -1834,18 +1788,7 @@ export default function SpaceDetailScreen() {
       />
 
       {/* ── Card select overlay (shared 편지 선택 모드) ── */}
-      {tapLetter && (
-        <CardSelectOverlay
-          articles={chainArticles}
-          metas={chainMetas}
-          initialIndex={chainInitialIndex}
-          originLayout={tapLetterOrigin}
-          onClose={handleOverlayClose}
-          onRead={handleOverlayRead}
-          onReady={() => setIsTappedSourceHidden(true)}
-          onNavigateToAuthor={handleNavigateToAuthor}
-        />
-      )}
+      {renderLetterOverlay()}
     </View>
   );
 }

@@ -11,6 +11,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 
 import ScalePressable from "@/components/shared/ScalePressable";
+import { myArticleToViewModel } from "@/hooks/useMyLetterCards";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
@@ -315,8 +316,10 @@ export default function MyScreen() {
           <View style={styles.gridRow}>
             {item.items.map((article) => {
               const isHidden = isSourceHidden(article.id);
-              const itemCollectionName =
-                sendRecordByArticleId[article.id]?.name ?? null;
+              // ViewModel separates spaceName from collectionName; send-record
+              // name takes priority as it's the user-visible folder label.
+              const vm = myArticleToViewModel(article, spaceLetterByArticleId.get(article.id) ?? null);
+              const collectionName = sendRecordByArticleId[article.id]?.name ?? vm.collectionName;
               return (
                 <View
                   key={article.id}
@@ -332,12 +335,11 @@ export default function MyScreen() {
                 >
                   <CanonicalCardSlot width={cellWidth} height={cellHeight}>
                     <ArticleCardItem
-                      title={article.title || "제목 없음"}
-                      authorName={
-                        article.authorNickname ?? user?.nickname ?? undefined
-                      }
-                      collectionName={itemCollectionName}
-                      cover={article.cover}
+                      title={vm.article?.title ?? "제목 없음"}
+                      authorName={vm.authorName ?? undefined}
+                      collectionName={collectionName}
+                      spaceName={vm.spaceName}
+                      cover={vm.cover ?? undefined}
                       isActive
                       onPress={() => handleLetterPress(article)}
                     />

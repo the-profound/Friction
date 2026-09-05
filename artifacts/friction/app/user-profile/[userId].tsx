@@ -18,6 +18,7 @@ import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
+import { profileArticleToViewModel } from "@/hooks/useProfileLetterCards";
 import { Colors, Spacing, Typography, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useToast } from "@/contexts/ToastContext";
@@ -382,8 +383,10 @@ export default function UserProfileScreen() {
           <View style={styles.gridRow}>
             {item.items.map((article) => {
               const isHidden = isSourceHidden(article.id);
-              const itemCollectionName =
-                sendRecordByArticleId[article.id]?.name ?? null;
+              // ViewModel separates spaceName from collectionName; send-record
+              // name takes priority as the user-visible folder label.
+              const vm = profileArticleToViewModel(article);
+              const collectionName = sendRecordByArticleId[article.id]?.name ?? vm.collectionName;
               return (
                 <View
                   key={article.id}
@@ -399,12 +402,11 @@ export default function UserProfileScreen() {
                 >
                   <CanonicalCardSlot width={cellWidth} height={cellHeight}>
                     <ArticleCardItem
-                      title={article.title || "제목 없음"}
-                      authorName={
-                        article.authorNickname ?? user?.nickname ?? undefined
-                      }
-                      collectionName={itemCollectionName}
-                      cover={article.cover}
+                      title={vm.article?.title ?? "제목 없음"}
+                      authorName={vm.authorName ?? undefined}
+                      collectionName={collectionName}
+                      spaceName={vm.spaceName}
+                      cover={vm.cover ?? undefined}
                       visibility="PUBLIC"
                       isActive
                       onPress={() => handleLetterPress(article)}

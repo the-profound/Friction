@@ -14,6 +14,13 @@ interface ArticleCardItemProps {
   title: string;
   authorName?: string;
   collectionName?: string | null;
+  /**
+   * Space name shown on the card cover's collection/space line.
+   * When both `spaceName` and `collectionName` are provided, `spaceName`
+   * takes priority and `collectionName` appears as a secondary line.
+   * When only one is set, that one is shown.
+   */
+  spaceName?: string | null;
   onPress: () => void;
   onLongPress?: () => void;
   disabled?: boolean;
@@ -92,6 +99,7 @@ function ArticleCardItem({
   title,
   authorName,
   collectionName,
+  spaceName,
   onPress,
   onLongPress,
   disabled = false,
@@ -135,6 +143,7 @@ function ArticleCardItem({
           title={title}
           authorName={authorName}
           collectionName={collectionName}
+          spaceName={spaceName}
           letterTypeBadge={letterTypeBadge}
           date={date}
           visibility={visibility}

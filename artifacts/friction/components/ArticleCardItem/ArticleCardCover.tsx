@@ -32,6 +32,12 @@ interface ArticleCardCoverProps {
   /** Card is the default; list uses a compact, fixed-height text treatment. */
   layout?: "card" | "list";
   collectionName?: string | null;
+  /**
+   * Space name for the card's collection/space line.
+   * When set, spaceName is shown as the primary label; collectionName is shown
+   * as a second line only when it differs from spaceName.
+   */
+  spaceName?: string | null;
   date?: string | null;
   letterTypeBadge?: string | null;
   /** When 'RECIPIENT_ONLY', renders a 👥 badge on the cover. No badge for 'PUBLIC' or when omitted. */
@@ -61,6 +67,7 @@ export default function ArticleCardCover({
   authorName,
   layout = "card",
   collectionName,
+  spaceName,
   date,
   letterTypeBadge,
   visibility,
@@ -69,6 +76,15 @@ export default function ArticleCardCover({
   borderRadius = 16,
   onImageLoad,
 }: ArticleCardCoverProps) {
+  // Resolve which label to show on the collection/space line.
+  // spaceName (where the letter lives in a Space) takes priority over
+  // collectionName (personal folder). Callers that set only one field get that
+  // label; callers that set both display spaceName first.
+  const primaryLabel = spaceName ?? collectionName ?? null;
+  const secondaryLabel =
+    spaceName && collectionName && collectionName !== spaceName
+      ? collectionName
+      : null;
   const [measuredSize, setMeasuredSize] = useState({ width: 0, height: 0 });
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [displayedImageUrl, setDisplayedImageUrl] = useState<string | null>(null);
@@ -139,7 +155,7 @@ export default function ArticleCardCover({
   const senderBottom = getArticleCardSenderBottomOffset(
     pad,
     collectionSize * 1.3,
-    isListLayout || !!collectionName,
+    isListLayout || !!primaryLabel,
   );
 
   const handleImageError = useCallback(() => {
@@ -284,7 +300,7 @@ export default function ArticleCardCover({
               {authorName}
             </Text>
           ) : null}
-          {collectionName ? (
+          {primaryLabel ? (
             <Text
               style={[
                 styles.collection,
@@ -297,7 +313,24 @@ export default function ArticleCardCover({
               ]}
               numberOfLines={1}
             >
-              {collectionName}
+              {primaryLabel}
+            </Text>
+          ) : null}
+          {secondaryLabel ? (
+            <Text
+              style={[
+                styles.collection,
+                {
+                  color: textColor,
+                  fontFamily: boldFontFamily,
+                  fontSize: Math.max(5, Math.round(collectionSize * 0.85)),
+                  lineHeight: Math.max(5, Math.round(collectionSize * 0.85)) * 1.3,
+                  opacity: 0.75,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {secondaryLabel}
             </Text>
           ) : null}
         </View>

@@ -20,7 +20,9 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
-import CardSelectOverlay, { type OriginLayout, type ChainArticleMeta, type EnvelopeInfo } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
+import { useLetterSelectionOverlay, type ChainArticleMeta } from "@/hooks/useLetterSelectionOverlay";
+import { inboxItemToViewModel } from "@/hooks/useInboxLetterCards";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useQueryClient, QueryClientContext } from "@tanstack/react-query";
 import { useListInbox, useMarkInboxOpened, useDeleteInboxItem, getListInboxQueryKey } from "@workspace/api-client-react";
@@ -129,17 +131,65 @@ function InboxScreenContent() {
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
-  const [tapItemOrigin, setTapItemOrigin] = useState<OriginLayout | null>(null);
-  const [isTappedSourceHidden, setIsTappedSourceHidden] = useState(false);
+  // Refs break the hook ordering cycle:
+  // useLetterSelectionOverlay is called first (all deps available immediately).
+  // useSelectionScrollRestoration follows (needs isOverlayActive from hook).
+  // onRead/getChain read refs so they always see current values without
+  // requiring declaration before the hook call.
+  const cancelScrollRestorationRef = useRef<(() => void) | null>(null);
+  const chainArticlesRef = useRef<(Article | null)[]>([]);
+  const chainMetasRef = useRef<ChainArticleMeta[]>([]);
+  const chainInitialIndexRef = useRef<number>(0);
+  const inboxItemByArticleIdRef = useRef<Map<string, InboxItem>>(new Map());
   const inboxListRef = useRef<FlatList<DateGroup>>(null);
   const restoreInboxScrollOffset = useCallback((offset: number) => {
     inboxListRef.current?.scrollToOffset({ offset, animated: false });
   }, []);
   const {
+    isOverlayActive,
+    isSourceHidden,
+    selectedArticleId,
+    openLetterOverlay,
+    renderLetterOverlay,
+  } = useLetterSelectionOverlay(userId, {
+    // The inbox chain uses InboxItem.replyToArticleId (not Article.sourceArticleId)
+    // so we disable internal ancestor traversal and supply the chain ourselves.
+    allowAncestorChain: false,
+    getChain: (_article) => {
+      if (!chainArticlesRef.current.length) return null;
+      return {
+        articles: chainArticlesRef.current,
+        metas: chainMetasRef.current,
+        initialIndex: chainInitialIndexRef.current,
+      };
+    },
+    onRead: (article) => {
+      // prepareInboxItem is declared later in this component but this function
+      // is only called after the component has fully rendered, so TDZ is safe.
+      const inboxItem = inboxItemByArticleIdRef.current.get(article.id);
+      if (inboxItem) {
+        prepareInboxItem(inboxItem);
+        const entry = getInboxReaderEntry(inboxItem);
+        cancelScrollRestorationRef.current?.();
+        setTapItem(null);
+        router.push({ pathname: "/read", params: entry });
+      } else {
+        cancelScrollRestorationRef.current?.();
+        setTapItem(null);
+        router.push({ pathname: "/read", params: { articleId: article.id, mode: "re_read" } });
+      }
+    },
+    onClose: () => {
+      setTapItem(null);
+    },
+  });
+  const {
     handleScroll: handleSelectionScroll,
     captureScrollOffset,
     cancelScrollRestoration,
-  } = useSelectionScrollRestoration(tapItem !== null, restoreInboxScrollOffset);
+  } = useSelectionScrollRestoration(isOverlayActive, restoreInboxScrollOffset);
+  // Sync ref after both hooks have returned so onRead always sees the latest value.
+  cancelScrollRestorationRef.current = cancelScrollRestoration;
 
   const { data: inboxData, isLoading, refetch } = useListInbox(
     // isRead=false tells the server to return only unread items, keeping the
@@ -207,10 +257,44 @@ function InboxScreenContent() {
 
   const handleCardPress = useCallback((item: InboxItem, layout: OriginLayout) => {
     captureScrollOffset();
-    setIsTappedSourceHidden(false);
-    setTapItemOrigin(layout);
+    // Set tapItem BEFORE openLetterOverlay so getChain sees it on the same render.
     setTapItem(item);
-  }, [captureScrollOffset]);
+    const article = item.article;
+    if (!article) return;
+    openLetterOverlay(article, {
+      fallbackOrigin: layout,
+      originUsesCarouselShadow: true,
+      envelopeInfo: (item as any).isEnvelope && !item.openedAt
+        ? {
+            senderName: item.senderDisplayName ?? item.sender?.nickname ?? item.sender?.id ?? null,
+            senderLocation: item.collectionName ?? null,
+            recipientName: nickname ?? null,
+            onOpen: async () => {
+              const openedAt = new Date().toISOString();
+              patchInboxItemInCache(queryClient, item.id, { openedAt });
+              try {
+                await markOpened.mutateAsync({ id: item.id });
+              } catch (e) {
+                console.warn("Failed to mark envelope opened:", e instanceof Error ? e.message : e);
+              }
+            },
+          }
+        : null,
+      meta: (() => {
+        // Convert inbox item through the ViewModel adapter so overlay meta uses
+        // the same field separation (spaceName / collectionName) as card rendering.
+        const vm = inboxItemToViewModel(item);
+        return {
+          collectionName: vm.collectionName,
+          collectionId: vm.collectionId ?? null,
+          date: vm.date ?? null,
+          authorName: vm.authorName ?? null,
+          authorId: vm.authorId ?? null,
+          isRead: vm.isRead ?? undefined,
+        };
+      })(),
+    });
+  }, [captureScrollOffset, openLetterOverlay, nickname, queryClient, markOpened]);
 
   const handleInboxScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -243,7 +327,7 @@ function InboxScreenContent() {
             return (
               <View
                 style={
-                  isTappedSourceHidden && item.id === tapItem?.id
+                  item.articleId && isSourceHidden(item.articleId)
                     ? styles.cardSlotHidden
                     : undefined
                 }
@@ -280,22 +364,10 @@ function InboxScreenContent() {
     [
       scrollPressGuard.shouldIgnoreVerticalPress,
       handleCardPress,
-      isTappedSourceHidden,
-      nickname,
+      isSourceHidden,
       tabReselectVersion.IN,
-      tapItem?.id,
     ],
   );
-
-  const handleModalClose = useCallback(() => {
-    setIsTappedSourceHidden(false);
-    setTapItem(null);
-    setTapItemOrigin(null);
-  }, []);
-
-  const handleNavigateToCollection = useCallback((collectionId: string) => {
-    router.push({ pathname: "/of-02-detail", params: { id: collectionId } });
-  }, [router]);
 
   const prepareInboxItem = useCallback((item: InboxItem) => {
     if (!item.openedAt) {
@@ -307,35 +379,6 @@ function InboxScreenContent() {
     }
   }, [markOpened, queryClient]);
 
-  const handleRead = useCallback((chainIdx: number) => {
-    // Look up which article and inbox item correspond to the active carousel slot.
-    // chainArticles / inboxItemByArticleId are captured via refs so the callback
-    // stays stable even after setTapItem(null) clears the overlay.
-    const article = chainArticlesRef.current[chainIdx];
-    const inboxItem = article
-      ? inboxItemByArticleIdRef.current.get(article.id) ?? null
-      : null;
-
-    if (inboxItem) {
-      // CardSelectOverlay handles the fade-to-black internally (Modal renders above global overlay).
-      // Here we just navigate immediately after the fade calls back.
-      prepareInboxItem(inboxItem);
-      const entry = getInboxReaderEntry(inboxItem);
-      cancelScrollRestoration();
-      setTapItem(null);
-      router.push({
-        pathname: "/read",
-        params: entry,
-      });
-    } else if (article) {
-      cancelScrollRestoration();
-      setTapItem(null);
-      router.push({
-        pathname: "/read",
-        params: { articleId: article.id, mode: "re_read" },
-      });
-    }
-  }, [prepareInboxItem, router, cancelScrollRestoration]);
 
   const handleDelete = useCallback(async () => {
     if (!tapItem) return;
@@ -454,11 +497,11 @@ function InboxScreenContent() {
     return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
   }, [tapItem, ancestorChain, inboxItemByArticleId, inboxData]);
 
-  // Stable refs so the handleRead callback can read the latest chain
-  // even after tapItem has been cleared (setTapItem(null)).
-  const chainArticlesRef = useRef<(Article | null)[]>([]);
-  const inboxItemByArticleIdRef = useRef<Map<string, InboxItem>>(new Map());
+  // Sync chain refs so getChain and onRead always read the current values
+  // even after multiple renders. These refs are declared above the hook call.
   chainArticlesRef.current = chainArticles;
+  chainMetasRef.current = chainMetas;
+  chainInitialIndexRef.current = chainInitialIndex;
   inboxItemByArticleIdRef.current = inboxItemByArticleId;
 
   // Refetch the inbox when this tab regains focus ONLY if the cached data
@@ -517,7 +560,7 @@ function InboxScreenContent() {
             ref={inboxListRef}
             {...LIST_PERF_PRESET}
             data={groups}
-            extraData={`${tapItem?.id ?? ""}:${isTappedSourceHidden}:${tabReselectVersion.IN}`}
+            extraData={`${selectedArticleId ?? ""}:${isOverlayActive}:${tabReselectVersion.IN}`}
             keyExtractor={groupKeyExtractor}
             renderItem={renderGroupItem}
             refreshControl={
@@ -531,41 +574,12 @@ function InboxScreenContent() {
             snapToInterval={INBOX_GROUP_HEIGHT}
             snapToAlignment="start"
             decelerationRate="fast"
-            scrollEnabled={Platform.OS !== "web" && tapItem === null}
+            scrollEnabled={Platform.OS !== "web" && !isOverlayActive}
           />
         </View>
       )}
 
-      <CardSelectOverlay
-        articles={chainArticles}
-        metas={chainMetas}
-        initialIndex={chainInitialIndex}
-        originLayout={tapItemOrigin}
-        onClose={handleModalClose}
-        onRead={handleRead}
-        onReady={() => setIsTappedSourceHidden(true)}
-        originUsesCarouselShadow
-        onNavigateToCollection={handleNavigateToCollection}
-        onNavigateToAuthor={(authorId) => router.push(`/user-profile/${authorId}` as never)}
-        envelopeInfo={
-          tapItem && (tapItem as any).isEnvelope && !tapItem.openedAt
-            ? {
-                senderName: tapItem.senderDisplayName ?? tapItem.sender?.nickname ?? tapItem.sender?.id ?? null,
-                senderLocation: tapItem.collectionName ?? null,
-                recipientName: nickname ?? null,
-                onOpen: async () => {
-                  const openedAt = new Date().toISOString();
-                  patchInboxItemInCache(queryClient, tapItem.id, { openedAt });
-                  try {
-                    await markOpened.mutateAsync({ id: tapItem.id });
-                  } catch (e) {
-                    console.warn("Failed to mark envelope opened:", e instanceof Error ? e.message : e);
-                  }
-                },
-              }
-            : null
-        }
-      />
+      {renderLetterOverlay()}
 
     </View>
   );

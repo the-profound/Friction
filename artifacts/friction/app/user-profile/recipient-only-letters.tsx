@@ -15,6 +15,7 @@ import HeaderButton from "@/components/shared/HeaderButton";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
+import { profileArticleToViewModel } from "@/hooks/useProfileLetterCards";
 import { Colors, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { useUser } from "@/contexts/UserContext";
@@ -102,6 +103,8 @@ export default function RecipientOnlyLettersScreen() {
       <View style={styles.gridRow}>
         {rowItems.map((article) => {
           const hidden = isSourceHidden(article.id);
+          // ViewModel extracts spaceName when the API embeds it on the article.
+          const vm = profileArticleToViewModel(article);
           return (
             <View
               key={article.id}
@@ -115,10 +118,11 @@ export default function RecipientOnlyLettersScreen() {
             >
               <CanonicalCardSlot width={cellWidth} height={cellHeight}>
                 <ArticleCardItem
-                  title={article.title || "제목 없음"}
-                  authorName={article.authorNickname ?? undefined}
-                  collectionName={null}
-                  cover={article.cover}
+                  title={vm.article?.title ?? "제목 없음"}
+                  authorName={vm.authorName ?? undefined}
+                  collectionName={vm.collectionName}
+                  spaceName={vm.spaceName}
+                  cover={vm.cover ?? undefined}
                   visibility="RECIPIENT_ONLY"
                   isActive
                   onPress={() => handleLetterPress(article)}

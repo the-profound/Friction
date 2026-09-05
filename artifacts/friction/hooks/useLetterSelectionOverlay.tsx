@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { View, Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -17,18 +17,30 @@ import {
 import CardSelectOverlay, {
   type ChainArticleMeta,
   type OriginLayout,
+  type EnvelopeInfo,
 } from "@/components/CardSelectOverlay/CardSelectOverlay";
+
+// Re-export so screens can import these types from the hook and avoid
+// importing CardSelectOverlay directly (which is the goal of this task).
+export type { OriginLayout, EnvelopeInfo } from "@/components/CardSelectOverlay/CardSelectOverlay";
+export type { ChainArticleMeta } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors } from "@/constants/tokens";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useToast } from "@/contexts/ToastContext";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import { useAuth } from "@/contexts/AuthContext";
+import { Colors } from "@/constants/tokens";
 
 export interface LetterOverlayMeta {
   collectionName?: string | null;
   collectionId?: string | null;
   date?: string | null;
+  /** Override the author name shown in the overlay info bar. */
+  authorName?: string | null;
+  /** Override the author ID for info-bar navigation (pass null for anonymous). */
+  authorId?: string | null;
+  /** Override the isRead dimming of the card. */
+  isRead?: boolean;
 }
 
 export interface OpenLetterOverlayOptions {
@@ -51,6 +63,13 @@ export interface OpenLetterOverlayOptions {
   currentCollectionId?: string | null;
   /** Prevents the info bar from linking back to the current author. */
   currentAuthorId?: string | null;
+  /** Envelope info for sealed letters (inbox use). */
+  envelopeInfo?: EnvelopeInfo | null;
+  /**
+   * Pass true when the source carousel uses the restrained carousel shadow
+   * token so the hero transition blends shadows correctly.
+   */
+  originUsesCarouselShadow?: boolean;
 }
 
 export interface UseLetterSelectionOverlayReturn {
@@ -66,6 +85,13 @@ export interface UseLetterSelectionOverlayReturn {
   openLetterOverlay: (article: Article, options?: OpenLetterOverlayOptions) => void;
   /** Programmatically close the overlay (e.g. when the filter kind/view changes). */
   closeOverlay: () => void;
+  /**
+   * Update the selected article in-place after an async fetch resolves.
+   * Useful for screens that seed a lightweight article on open and then load
+   * the full article (with a real sourceArticleId) asynchronously.
+   * No-op when the overlay is not currently open.
+   */
+  updateOverlayArticle: (article: Article) => void;
   /**
    * Renders CardSelectOverlay + visibility-change ConfirmModal.
    * Include once in the screen's JSX.
@@ -88,6 +114,39 @@ interface HookOptions {
    * (e.g. cancel scroll-position restoration before leaving the screen).
    */
   onBeforeRead?: () => void;
+  /**
+   * When false, the ancestor-chain lookup is skipped entirely.
+   * Use for anonymous spaces where traversing the reply chain would expose
+   * real author identities. Default: true.
+   */
+  allowAncestorChain?: boolean;
+  /**
+   * Override for the "읽기" action. When provided, called instead of the
+   * default `router.push('/read')`. The hook still clears its own state
+   * before invoking this callback.
+   * `isNonPrimary` is true when the user tapped a chain slot that is NOT the
+   * initially-opened article (i.e. an ancestor or descendant slot).
+   */
+  onRead?: (article: Article, isNonPrimary: boolean) => void;
+  /**
+   * Called just after the overlay is closed (user pressed ✕ or backdrop).
+   * Use to clean up per-screen state that mirrors the overlay lifecycle.
+   */
+  onClose?: () => void;
+  /**
+   * When provided, replaces the hook's internal chain-building during render.
+   * Called with the currently-selected article on every render while the
+   * overlay is open. Return null to fall back to the hook's own chain.
+   *
+   * Because renderLetterOverlay() is called directly inside the parent
+   * component's render, this function always has access to the latest
+   * reactive state in the calling component — no stale-closure issues.
+   */
+  getChain?: (article: Article) => {
+    articles: (Article | null)[];
+    metas: ChainArticleMeta[];
+    initialIndex: number;
+  } | null;
 }
 
 function hasPersonalSend(records: SendRecordWithDetails[], articleId: string): boolean {
@@ -117,9 +176,17 @@ export function useLetterSelectionOverlay(
   const { showToast } = useToast();
   const { isLoading: authIsLoading } = useAuth();
 
-  // Keep the callback ref fresh without listing it as a useCallback dep.
+  // Keep callback refs fresh without listing them as useCallback deps.
   const onBeforeReadRef = useRef(options?.onBeforeRead);
   onBeforeReadRef.current = options?.onBeforeRead;
+  const onReadRef = useRef(options?.onRead);
+  onReadRef.current = options?.onRead;
+  const onCloseRef = useRef(options?.onClose);
+  onCloseRef.current = options?.onClose;
+  // getChain is accessed directly in renderLetterOverlay() (not via ref) so
+  // it always has the latest closure. We still keep a ref for handleOverlayRead.
+  const getChainRef = useRef(options?.getChain);
+  getChainRef.current = options?.getChain;
 
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedOrigin, setSelectedOrigin] = useState<OriginLayout | null>(null);
@@ -129,6 +196,8 @@ export function useLetterSelectionOverlay(
     currentCollectionId?: string | null;
     currentAuthorId?: string | null;
   }>({});
+  const [selectedEnvelopeInfo, setSelectedEnvelopeInfo] = useState<EnvelopeInfo | null>(null);
+  const [selectedCarouselShadow, setSelectedCarouselShadow] = useState(false);
 
   // Visibility toggle state
   const [visibilityConfirmTarget, setVisibilityConfirmTarget] = useState<{
@@ -177,8 +246,9 @@ export function useLetterSelectionOverlay(
     return map;
   }, [spaceLettersQuery.data]);
 
+  const allowChain = options?.allowAncestorChain !== false;
   const ancestorChain = useAncestorChain(
-    selectedArticle?.sourceArticleId ?? null,
+    allowChain ? (selectedArticle?.sourceArticleId ?? null) : null,
     queryClient,
   );
 
@@ -214,16 +284,35 @@ export function useLetterSelectionOverlay(
     const initIdx = artList.length;
     artList.push(selectedArticle);
     metaList.push({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      authorName: (selectedArticle as any).authorNickname ?? null,
-      authorId: selectedArticle.authorId ?? null,
+      // Allow callers to override author presentation (e.g. anonymous spaces).
+      authorName:
+        selectedMeta.authorName !== undefined
+          ? selectedMeta.authorName
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          : ((selectedArticle as any).authorNickname ?? null),
+      authorId:
+        selectedMeta.authorId !== undefined
+          ? selectedMeta.authorId
+          : (selectedArticle.authorId ?? null),
       collectionName: selectedMeta.collectionName ?? null,
       collectionId: selectedMeta.collectionId ?? null,
       date: selectedMeta.date ?? null,
+      isRead: selectedMeta.isRead,
     });
 
     return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
   }, [selectedArticle, ancestorChain, selectedMeta]);
+
+  /**
+   * Stable ref holding the chain that was last rendered by renderLetterOverlay.
+   * handleOverlayRead reads from here so that getChain-based chains (inbox,
+   * custom screens) are reflected correctly in the read callback.
+   */
+  const effectiveChainRef = useRef<{
+    articles: (Article | null)[];
+    metas: ChainArticleMeta[];
+    initialIndex: number;
+  }>({ articles: [], metas: [], initialIndex: 0 });
 
   const closeOverlay = useCallback(() => {
     setIsSelectedSourceHidden(false);
@@ -231,23 +320,34 @@ export function useLetterSelectionOverlay(
     setSelectedOrigin(null);
     setSelectedMeta({});
     setOverlayNavOptions({});
+    setSelectedEnvelopeInfo(null);
+    setSelectedCarouselShadow(false);
+    onCloseRef.current?.();
   }, []);
 
   const handleOverlayRead = useCallback(
     (chainIdx: number) => {
-      const article = chainArticles[chainIdx];
+      const { articles, initialIndex } = effectiveChainRef.current;
+      const article = articles[chainIdx];
       if (!article) return;
+      const isNonPrimary = chainIdx !== initialIndex;
       onBeforeReadRef.current?.();
       setSelectedArticle(null);
       setSelectedOrigin(null);
       setSelectedMeta({});
       setOverlayNavOptions({});
-      router.push({
-        pathname: "/read" as never,
-        params: { articleId: article.id, mode: "re_read" },
-      });
+      setSelectedEnvelopeInfo(null);
+      setSelectedCarouselShadow(false);
+      if (onReadRef.current) {
+        onReadRef.current(article, isNonPrimary);
+      } else {
+        router.push({
+          pathname: "/read" as never,
+          params: { articleId: article.id, mode: "re_read" },
+        });
+      }
     },
-    [chainArticles, router],
+    [router],
   );
 
   const openLetterOverlay = useCallback(
@@ -259,6 +359,8 @@ export function useLetterSelectionOverlay(
         currentCollectionId: openOptions?.currentCollectionId,
         currentAuthorId: openOptions?.currentAuthorId,
       });
+      setSelectedEnvelopeInfo(openOptions?.envelopeInfo ?? null);
+      setSelectedCarouselShadow(openOptions?.originUsesCarouselShadow ?? false);
 
       if (openOptions?.measureRef) {
         openOptions.measureRef.measureInWindow((x, y, width, height) => {
@@ -272,6 +374,10 @@ export function useLetterSelectionOverlay(
     },
     [],
   );
+
+  const updateOverlayArticle = useCallback((article: Article) => {
+    setSelectedArticle((current) => (current !== null ? article : null));
+  }, []);
 
   const handleVisibilityToggle = useCallback(
     (articleId: string) => {
@@ -342,12 +448,42 @@ export function useLetterSelectionOverlay(
   // It is called immediately during render ({renderLetterOverlay()}) so
   // stale-closure issues from useCallback deps would silently break the UI.
   const renderLetterOverlay = (): React.ReactNode => {
-    // Visibility button: only for the current user's own letters.
+    // ── Resolve effective chain ──────────────────────────────────────────────
+    // If the caller provided getChain, use that (allows reactive external
+    // chains like the inbox's replyToArticleId + descendant chain).
+    // Otherwise, fall back to the internally-built ancestor chain.
+    let effectiveArticles: (Article | null)[];
+    let effectiveMetas: ChainArticleMeta[];
+    let effectiveInitialIndex: number;
+
+    if (selectedArticle && options?.getChain) {
+      const external = options.getChain(selectedArticle);
+      if (external) {
+        effectiveArticles = external.articles;
+        effectiveMetas = external.metas;
+        effectiveInitialIndex = external.initialIndex;
+      } else {
+        effectiveArticles = chainArticles;
+        effectiveMetas = chainMetas;
+        effectiveInitialIndex = chainInitialIndex;
+      }
+    } else {
+      effectiveArticles = chainArticles;
+      effectiveMetas = chainMetas;
+      effectiveInitialIndex = chainInitialIndex;
+    }
+
+    // Keep the ref updated so handleOverlayRead always sees the right chain.
+    effectiveChainRef.current = {
+      articles: effectiveArticles,
+      metas: effectiveMetas,
+      initialIndex: effectiveInitialIndex,
+    };
+
+    // ── Visibility button ───────────────────────────────────────────────────
+    // Visibility toggle button: only for the current user's own letters.
     const isMyLetter = Boolean(userId && selectedArticle?.authorId === userId);
     // Look up the SpaceLetter entry by article id.
-    // sl may be undefined when the query hasn't resolved yet or the
-    // sourceArticleId mapping differs — in that case we still show the button
-    // (disabled) so the affordance is always visible on own letters.
     const sl =
       isMyLetter && selectedArticle
         ? spaceLetterByArticleId.get(selectedArticle.id)
@@ -360,8 +496,6 @@ export function useLetterSelectionOverlay(
     if (isMyLetter) {
       const isAnon = sl?.displayName != null;
       const isPub = sl ? sl.visibility === SpaceLetterVisibility.PUBLIC : false;
-      // Restricted and unsent letters show a fixed "수신자 공개" button that
-      // explains why visibility cannot be changed.
       visibilityButton = {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         icon: (isAnon || sl == null || !isPub ? "users" : "globe") as any,
@@ -388,18 +522,12 @@ export function useLetterSelectionOverlay(
       };
     }
 
-    // Build a View-based overlay for visibility confirm / info dialogs.
-    // These are rendered INSIDE the CardSelectOverlay's native Modal window
-    // (via the inlineModal prop) so they always appear above the overlay
-    // backdrop. A sibling RN Modal cannot guarantee this because the
-    // CardSelectOverlay Modal was presented first and sits on top in the
-    // native window stack regardless of zIndex.
+    // ── Inline modal for visibility dialogs ─────────────────────────────────
+    // Rendered via CardSelectOverlay's inlineModal prop so it appears INSIDE
+    // the native Modal window. A sibling native Modal cannot guarantee z-order
+    // above an already-presented Modal on all platforms.
     const isConfirmVisible = visibilityConfirmTarget !== null;
     const isInfoVisible = visibilityInfoModal !== null;
-
-    // Defined unconditionally so it can also be passed as onInlineModalRequestClose.
-    // This lets Android's hardware Back button dismiss the dialog (instead of
-    // closing the whole overlay) while honouring the in-flight guard.
     const handleDismiss = () => {
       if (isChangingVisibility) return;
       setVisibilityConfirmTarget(null);
@@ -408,13 +536,11 @@ export function useLetterSelectionOverlay(
 
     let inlineModalNode: React.ReactNode = null;
     if (isConfirmVisible || isInfoVisible) {
-
       const title = isConfirmVisible
         ? (visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
             ? "수신자 공개로 변경하시겠습니까?"
             : "전체 공개로 변경하시겠습니까?")
         : "전체 공개로 변경할 수 없어요";
-
       const description = isConfirmVisible
         ? (visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
             ? "편지가 내 프로필에서 사라지며, 발신 시점의 수신자만 읽을 수 있게 됩니다."
@@ -424,7 +550,6 @@ export function useLetterSelectionOverlay(
             : visibilityInfoModal === "personal"
               ? "개인에게 발신된 편지는 수신자 공개로만 설정할 수 있어요"
               : "발신하지 않은 편지는 수신자 공개로만 설정할 수 있어요");
-
       inlineModalNode = (
         <Pressable style={inlineOverlayStyles.backdrop} onPress={handleDismiss}>
           <View style={inlineOverlayStyles.contentWrapper}>
@@ -467,9 +592,9 @@ export function useLetterSelectionOverlay(
 
     return (
       <CardSelectOverlay
-        articles={chainArticles}
-        metas={chainMetas}
-        initialIndex={chainInitialIndex}
+        articles={effectiveArticles}
+        metas={effectiveMetas}
+        initialIndex={effectiveInitialIndex}
         originLayout={selectedOrigin}
         onClose={closeOverlay}
         onRead={handleOverlayRead}
@@ -482,8 +607,10 @@ export function useLetterSelectionOverlay(
         }
         currentCollectionId={overlayNavOptions.currentCollectionId}
         currentAuthorId={overlayNavOptions.currentAuthorId}
+        originUsesCarouselShadow={selectedCarouselShadow}
+        envelopeInfo={selectedEnvelopeInfo}
         visibilityButton={visibilityButton}
-        inlineModal={inlineModalNode}
+        inlineModal={inlineModalNode ?? undefined}
         onInlineModalRequestClose={
           isConfirmVisible || isInfoVisible ? handleDismiss : undefined
         }
@@ -497,77 +624,76 @@ export function useLetterSelectionOverlay(
     selectedArticleId: selectedArticle?.id ?? null,
     openLetterOverlay,
     closeOverlay,
+    updateOverlayArticle,
     renderLetterOverlay,
     spaceLetterByArticleId,
   };
 }
 
-// ── Styles for the View-based inline overlay (rendered inside CardSelectOverlay's Modal) ──
+// Styles for the View-based visibility dialog rendered inside the overlay's
+// native Modal window via the `inlineModal` prop.
 const inlineOverlayStyles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 40,
   },
   contentWrapper: {
-    width: "100%",
-    alignItems: "center",
+    width: "85%",
+    maxWidth: 340,
   },
   card: {
-    width: "100%",
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingTop: 24,
+    borderRadius: 12,
     paddingHorizontal: 24,
+    paddingTop: 28,
     paddingBottom: 20,
   },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
     color: Colors.zinc900,
     textAlign: "center",
+    marginBottom: 10,
   },
   description: {
     fontSize: 14,
-    color: Colors.zinc500,
+    color: Colors.zinc700,
     textAlign: "center",
-    marginTop: 8,
     lineHeight: 20,
+    marginBottom: 24,
   },
   buttons: {
     flexDirection: "row",
-    marginTop: 20,
-    gap: 10,
+    gap: 8,
   },
   button: {
     flex: 1,
-    height: 48,
   },
   buttonContent: {
-    height: 48,
+    paddingVertical: 12,
+    borderRadius: 8,
     alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
   },
   cancelButton: {
     backgroundColor: Colors.zinc100,
   },
   confirmButton: {
-    backgroundColor: Colors.primaryAction,
-  },
-  buttonDisabled: {
-    opacity: 0.4,
+    backgroundColor: Colors.zinc900,
   },
   cancelText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Colors.zinc600,
+    color: Colors.zinc900,
+    fontSize: 14,
+    fontWeight: "500",
   },
   confirmText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Colors.primaryActionForeground,
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });
+
