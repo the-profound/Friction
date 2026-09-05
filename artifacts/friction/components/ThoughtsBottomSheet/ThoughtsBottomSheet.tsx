@@ -38,6 +38,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Thought } from "@workspace/api-client-react";
 import ScalePressable from "@/components/shared/ScalePressable";
+import MemoToolbar from "@/components/MemoToolbar/MemoToolbar";
 import { Colors, ReaderTokens, Shadows, Spacing } from "@/constants/tokens";
 import {
   createKeyedSingleFlight,
@@ -48,6 +49,7 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  shouldShowReadingThoughtToolbar,
   startImmediateClose,
   type OptimisticReadingThought,
 } from "@/lib/thoughtInlineEditor";
@@ -209,6 +211,7 @@ export default function ThoughtsBottomSheet({
   }, [outerHeightAnim]);
 
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [editorFocused, setEditorFocused] = useState(false);
   const keyboardVisibleRef = useRef(false);
   keyboardVisibleRef.current = keyboardVisible;
   /** 마지막으로 받은 키보드 높이 — 롱프레스 경로처럼 이미 열린 키보드로 진입 시 사용 */
@@ -236,6 +239,18 @@ export default function ThoughtsBottomSheet({
     thoughtTypography.lineHeight * THOUGHT_INPUT_MIN_LINES +
     THOUGHT_INPUT_VERTICAL_PADDING;
   const inputHeight = Math.max(inputMinHeight, inputContentHeight);
+  const showKeyboardToolbar = shouldShowReadingThoughtToolbar({
+    visible,
+    editorActive: editor != null,
+    editorFocused,
+    keyboardVisible,
+    native: Platform.OS !== "web",
+  });
+
+  const dismissEditorKeyboard = useCallback(() => {
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+  }, []);
 
   useEffect(() => {
     setInputContentHeight(0);
@@ -475,6 +490,7 @@ export default function ThoughtsBottomSheet({
   // ── 스와이프·편집 상태 초기화 헬퍼 ─────────────────────────────────────────
   // 시트가 닫히거나 articleId가 바뀔 때 반드시 호출해 cross-context state leak을 방지한다.
   const resetTransientState = useCallback(() => {
+    setEditorFocused(false);
     setEditor(null);
   }, []);
 
@@ -1100,6 +1116,8 @@ export default function ThoughtsBottomSheet({
                         cursorColor={Colors.cursorAccent}
                         selectionColor={Colors.cursorAccent}
                         accessibilityLabel="단상 내용"
+                        onFocus={() => setEditorFocused(true)}
+                        onBlur={() => setEditorFocused(false)}
                         onContentSizeChange={(event) =>
                           handleEditorContentSizeChange(
                             editor.key,
@@ -1163,6 +1181,8 @@ export default function ThoughtsBottomSheet({
                       cursorColor={Colors.cursorAccent}
                       selectionColor={Colors.cursorAccent}
                       accessibilityLabel="새 단상 내용"
+                      onFocus={() => setEditorFocused(true)}
+                      onBlur={() => setEditorFocused(false)}
                       onContentSizeChange={(event) =>
                         handleEditorContentSizeChange(
                           editor.key,
@@ -1206,6 +1226,13 @@ export default function ThoughtsBottomSheet({
             )}
           </ScrollView>
         </View>
+        {showKeyboardToolbar && (
+          <MemoToolbar
+            mode="restricted"
+            keyboardVisible={keyboardVisible}
+            onDismissKeyboard={dismissEditorKeyboard}
+          />
+        )}
         <Animated.View style={{ height: inputPadAnim }} pointerEvents="none" />
         {!keyboardVisible && (
           <ScalePressable

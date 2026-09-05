@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createKeyedSingleFlight,
@@ -10,11 +12,44 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  shouldShowReadingThoughtToolbar,
   startImmediateClose,
   type OptimisticReadingThought,
 } from "../thoughtInlineEditor";
 
 describe("inline reading thought lifecycle", () => {
+  it("shows the restricted toolbar only for a focused native editor with an open keyboard", () => {
+    const active = {
+      visible: true,
+      editorActive: true,
+      editorFocused: true,
+      keyboardVisible: true,
+      native: true,
+    };
+
+    expect(shouldShowReadingThoughtToolbar(active)).toBe(true);
+    expect(shouldShowReadingThoughtToolbar({ ...active, visible: false })).toBe(false);
+    expect(shouldShowReadingThoughtToolbar({ ...active, editorActive: false })).toBe(false);
+    expect(shouldShowReadingThoughtToolbar({ ...active, editorFocused: false })).toBe(false);
+    expect(shouldShowReadingThoughtToolbar({ ...active, keyboardVisible: false })).toBe(false);
+    expect(shouldShowReadingThoughtToolbar({ ...active, native: false })).toBe(false);
+  });
+
+  it("wires both reading inputs to one restricted toolbar above the keyboard spacer", () => {
+    const source = readFileSync(
+      join(__dirname, "../../components/ThoughtsBottomSheet/ThoughtsBottomSheet.tsx"),
+      "utf8",
+    );
+
+    expect(source.match(/onFocus=\{\(\) => setEditorFocused\(true\)\}/g)).toHaveLength(2);
+    expect(source.match(/onBlur=\{\(\) => setEditorFocused\(false\)\}/g)).toHaveLength(2);
+    expect(source).toContain('mode="restricted"');
+    expect(source).toContain("inputRef.current?.blur();");
+    expect(source.indexOf("{showKeyboardToolbar && (")).toBeLessThan(
+      source.indexOf('<Animated.View style={{ height: inputPadAnim }} pointerEvents="none" />'),
+    );
+  });
+
   it("starts closing immediately without waiting for the save result", async () => {
     let resolveSave!: (value: boolean) => void;
     const events: string[] = [];

@@ -22,6 +22,20 @@ export interface KeyedSingleFlight<TResult> {
   pendingKey(): string | undefined;
 }
 
+export function shouldShowReadingThoughtToolbar(input: {
+  visible: boolean;
+  editorActive: boolean;
+  editorFocused: boolean;
+  keyboardVisible: boolean;
+  native: boolean;
+}): boolean {
+  return input.visible
+    && input.editorActive
+    && input.editorFocused
+    && input.keyboardVisible
+    && input.native;
+}
+
 /**
  * TextInput/platform/server boundaries may produce different line separators.
  * Store one canonical LF representation without trimming user-authored structure.
