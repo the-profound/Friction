@@ -7,6 +7,7 @@ import {
   isCurrentEditorCommit,
   isCurrentOptimisticRequest,
   mergeReadingThoughtsById,
+  normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
   startImmediateClose,
@@ -104,6 +105,35 @@ describe("inline reading thought lifecycle", () => {
       text: " 기존 단상 ",
       initialText: "기존 단상",
     })).toBe("unchanged");
+  });
+
+  it("canonicalizes platform line separators without trimming intentional structure", () => {
+    expect(normalizeThoughtLineBreaks("\r\n첫 줄\r둘째 줄\u2028\u2029끝\n"))
+      .toBe("\n첫 줄\n둘째 줄\n\n끝\n");
+  });
+
+  it("treats equivalent CRLF and LF content as unchanged", () => {
+    expect(getThoughtInlineCommitAction({
+      isExisting: true,
+      text: "첫 줄\r\n\r\n셋째 줄",
+      initialText: "첫 줄\n\n셋째 줄",
+    })).toBe("unchanged");
+  });
+
+  it("preserves user line breaks through optimistic and confirmed merges", () => {
+    const content = normalizeThoughtLineBreaks("첫 줄\r\n\r\n셋째 줄");
+    const local: OptimisticReadingThought = {
+      id: "multiline",
+      content,
+      createdAt: "2026-09-04T00:00:00.000Z",
+      saveState: "confirmed",
+      requestGeneration: 1,
+    };
+
+    expect(mergeReadingThoughtsById(
+      [{ id: "multiline", content: "stale soft-wrapped text" }],
+      [local],
+    )).toEqual([{ id: "multiline", content: "첫 줄\n\n셋째 줄" }]);
   });
 
   it("formats selected text and its source in the new inline card", () => {

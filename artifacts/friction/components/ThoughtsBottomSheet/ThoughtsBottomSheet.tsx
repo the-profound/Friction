@@ -38,13 +38,14 @@ import {
 } from "@workspace/api-client-react";
 import type { Thought } from "@workspace/api-client-react";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors, ReaderTokens, Shadows, Spacing, Typography } from "@/constants/tokens";
+import { Colors, ReaderTokens, Shadows, Spacing } from "@/constants/tokens";
 import {
   createKeyedSingleFlight,
   getThoughtInlineCommitAction,
   isCurrentEditorCommit,
   isCurrentOptimisticRequest,
   mergeReadingThoughtsById,
+  normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
   startImmediateClose,
@@ -79,20 +80,6 @@ function getSnapTarget(currentH: number, vy: number, full: number, mid: number):
   if (currentH > (full + mid) / 2) return full;
   if (currentH > mid / 2) return mid;
   return 0;
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "방금";
-  if (diffMin < 60) return `${diffMin}분 전`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}시간 전`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD}일 전`;
-  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 type EditorState = {
@@ -506,7 +493,7 @@ export default function ThoughtsBottomSheet({
         resetTransientState();
         setEditor({
           key: createClientId(),
-          text: pendingQuote ?? "",
+          text: normalizeThoughtLineBreaks(pendingQuote ?? ""),
           initialText: "",
           requestGeneration: 1,
           pending: false,
@@ -586,6 +573,7 @@ export default function ThoughtsBottomSheet({
   const commitEditor = useCallback(async (): Promise<boolean> => {
     const current = editorRef.current;
     if (!current) return true;
+    const committedText = normalizeThoughtLineBreaks(current.text);
     // 다른 편집 저장 뒤에 대기하더라도 캡처 이후 입력이 바뀌지 않게 즉시 잠근다.
     setEditor((value) => value?.key === current.key
       ? { ...value, pending: true, error: undefined }
@@ -593,7 +581,7 @@ export default function ThoughtsBottomSheet({
     return commitSingleFlightRef.current.run(current.key, async () => {
       const action = getThoughtInlineCommitAction({
         isExisting: !!current.thought,
-        text: current.text,
+        text: committedText,
         initialText: current.initialText,
       });
       try {
@@ -610,7 +598,7 @@ export default function ThoughtsBottomSheet({
           } else if (action === "update") {
             const saved = await updateThought.mutateAsync({
               id: current.thought.id,
-              data: { content: current.text },
+              data: { content: committedText },
             }) as Thought;
             await cancelThoughtQueries();
             upsertThoughtInCaches(saved);
@@ -618,7 +606,7 @@ export default function ThoughtsBottomSheet({
               ...optimisticThoughtsRef.current.filter((item) => item.id !== saved.id),
               {
                 id: saved.id,
-                content: saved.content ?? current.text,
+                content: normalizeThoughtLineBreaks(saved.content ?? committedText),
                 sourceArticleId: saved.sourceArticleId ?? articleId,
                 createdAt: saved.createdAt,
                 saveState: "confirmed",
@@ -631,7 +619,7 @@ export default function ThoughtsBottomSheet({
             data: {
               clientId: current.key,
               requestGeneration: current.requestGeneration,
-              content: current.text,
+              content: committedText,
               createdFrom: "reading",
               sourceArticleId: articleId,
               status: "PRELIMINARY",
@@ -643,7 +631,7 @@ export default function ThoughtsBottomSheet({
             ...optimisticThoughtsRef.current.filter((item) => item.id !== saved.id),
             {
               id: saved.id,
-              content: saved.content ?? current.text,
+              content: normalizeThoughtLineBreaks(saved.content ?? committedText),
               sourceArticleId: saved.sourceArticleId ?? articleId,
               createdAt: saved.createdAt,
               saveState: "confirmed",
@@ -782,7 +770,7 @@ export default function ThoughtsBottomSheet({
     if (current && !current.thought && action === "create") {
       const optimistic: OptimisticReadingThought = {
         id: current.key,
-        content: current.text,
+        content: normalizeThoughtLineBreaks(current.text),
         sourceArticleId: articleId,
         createdAt: new Date().toISOString(),
         saveState: "pending",
@@ -815,7 +803,7 @@ export default function ThoughtsBottomSheet({
     if (editorRef.current && !(await commitEditor())) return;
     if (openSession !== sessionTokenRef.current) return;
     const key = thought?.id ?? createClientId();
-    const text = thought?.content ?? "";
+    const text = normalizeThoughtLineBreaks(thought?.content ?? "");
     setEditor({
       key,
       thought,
@@ -1065,12 +1053,6 @@ export default function ThoughtsBottomSheet({
                       style={styles.card}
                       onLayout={(event) => updateThoughtCardLayout(t.id, event.nativeEvent.layout)}
                     >
-                      <View style={styles.optimisticMetaRow}>
-                        <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
-                        {t.saveState === "pending" && (
-                          <ActivityIndicator size="small" color={Colors.zinc400} />
-                        )}
-                      </View>
                       <Text style={[styles.cardText, thoughtTypography]}>{t.content}</Text>
                       {t.saveState === "failed" && (
                         <View style={styles.errorRow}>
@@ -1095,11 +1077,14 @@ export default function ThoughtsBottomSheet({
                       }}
                       style={styles.editorCard}
                     >
-                      <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
                       <TextInput
                         ref={inputRef}
                         value={editor.text}
-                        onChangeText={(text) => setEditor((value) => value ? { ...value, text, error: undefined } : value)}
+                        onChangeText={(text) => setEditor((value) => value ? {
+                          ...value,
+                          text: normalizeThoughtLineBreaks(text),
+                          error: undefined,
+                        } : value)}
                         editable={!editor.pending}
                         style={[
                           styles.cardInput,
@@ -1113,6 +1098,7 @@ export default function ThoughtsBottomSheet({
                         placeholder="단상을 적어보세요"
                         placeholderTextColor={Colors.zinc400}
                         cursorColor={Colors.cursorAccent}
+                        selectionColor={Colors.cursorAccent}
                         accessibilityLabel="단상 내용"
                         onContentSizeChange={(event) =>
                           handleEditorContentSizeChange(
@@ -1144,7 +1130,6 @@ export default function ThoughtsBottomSheet({
                       accessibilityRole="button"
                       accessibilityLabel="단상 수정"
                     >
-                      <Text style={styles.cardDate}>{formatRelativeDate(t.createdAt)}</Text>
                       <Text style={[styles.cardText, thoughtTypography]}>{t.content ?? ""}</Text>
                     </Pressable>
                   ))}
@@ -1158,7 +1143,11 @@ export default function ThoughtsBottomSheet({
                     <TextInput
                       ref={inputRef}
                       value={editor.text}
-                      onChangeText={(text) => setEditor((value) => value ? { ...value, text, error: undefined } : value)}
+                      onChangeText={(text) => setEditor((value) => value ? {
+                        ...value,
+                        text: normalizeThoughtLineBreaks(text),
+                        error: undefined,
+                      } : value)}
                       editable={!editor.pending}
                       style={[
                         styles.cardInput,
@@ -1172,6 +1161,7 @@ export default function ThoughtsBottomSheet({
                       placeholder="단상을 적어보세요"
                       placeholderTextColor={Colors.zinc400}
                       cursorColor={Colors.cursorAccent}
+                      selectionColor={Colors.cursorAccent}
                       accessibilityLabel="새 단상 내용"
                       onContentSizeChange={(event) =>
                         handleEditorContentSizeChange(
@@ -1314,18 +1304,6 @@ const styles = StyleSheet.create({
     gap: 7,
     backgroundColor: Colors.white,
     ...Shadows.card,
-  },
-  cardDate: {
-    ...Typography.caption,
-    color: Colors.zinc500,
-    alignSelf: "flex-end",
-  },
-  optimisticMetaRow: {
-    minHeight: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 8,
   },
   cardText: {
     color: Colors.zinc600,

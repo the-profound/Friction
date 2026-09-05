@@ -76,6 +76,20 @@ describe("editable React Native input cursor contract", () => {
     expect(source).toContain("{ minHeight: inputMinHeight, height: inputHeight }");
     expect(source.match(/scrollEnabled=\{false\}/g)).toHaveLength(2);
     expect(source.match(/thoughtTypography/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(source.match(/selectionColor=\{Colors\.cursorAccent\}/g)).toHaveLength(2);
+  });
+
+  it("starts every reading thought card with its body and keeps retry recovery", () => {
+    const source = readFileSync(
+      join(appRoot, "components/ThoughtsBottomSheet/ThoughtsBottomSheet.tsx"),
+      "utf8",
+    );
+
+    expect(source).not.toContain("formatRelativeDate");
+    expect(source).not.toContain("optimisticMetaRow");
+    expect(source).not.toContain("cardDate");
+    expect(source).toContain('t.saveState === "failed"');
+    expect(source).toContain("retryOptimisticThought(t.id)");
   });
 });
 

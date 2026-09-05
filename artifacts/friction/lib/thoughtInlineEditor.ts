@@ -23,6 +23,14 @@ export interface KeyedSingleFlight<TResult> {
 }
 
 /**
+ * TextInput/platform/server boundaries may produce different line separators.
+ * Store one canonical LF representation without trimming user-authored structure.
+ */
+export function normalizeThoughtLineBreaks(text: string): string {
+  return text.replace(/\r\n?|\u2028|\u2029/g, "\n");
+}
+
+/**
  * 저장 작업이 최신 편집 스냅샷을 동기적으로 캡처하게 한 뒤, 그 Promise를 기다리지
  * 않고 같은 호출 스택에서 닫기 피드백을 시작한다.
  */
@@ -120,8 +128,8 @@ export function getThoughtInlineCommitAction(input: {
   text: string;
   initialText: string;
 }): ThoughtInlineCommitAction {
-  const text = input.text.trim();
-  const initialText = input.initialText.trim();
+  const text = normalizeThoughtLineBreaks(input.text).trim();
+  const initialText = normalizeThoughtLineBreaks(input.initialText).trim();
 
   if (!input.isExisting) return text ? "create" : "discard-new";
   if (!text) return "delete";
