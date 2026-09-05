@@ -837,15 +837,34 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
 
   if (source.content && process.env.OPENROUTER_API_KEY) {
     try {
-      const candidates = similar
-        .filter((s) => s.content != null)
-        .map((s) => ({ id: s.id, content: s.content! }));
+  const candidates = body?.candidates;
 
-      if (candidates.length > 0) {
-        const results = await analyzeThoughtExpansion(
-          { id: source.id, content: source.content },
-          candidates,
-        );
+  if (!isNoteObject(targetNote)) {
+    res
+      .status(400)
+      .json({ error: "targetNote must have id and content fields" });
+    return;
+  }
+  if (
+    !Array.isArray(candidates) ||
+    candidates.length === 0 ||
+    !candidates.every(isNoteObject)
+  ) {
+    res.status(400).json({
+      error: "candidates must be a non-empty array of {id, content} objects",
+    });
+    return;
+  }
+
+  if (!process.env.OPENROUTER_API_KEY) {
+    res
+      .status(500)
+      .json({ error: "OPENROUTER_API_KEY is not configured on the server" });
+    return;
+  }
+
+  try {
+    const results = await analyzeThoughtExpansion(targetNote, candidates);
         for (const result of results) {
           analysisMap[result.id] = { r: result.r, k: result.k, h: result.h };
         }
@@ -903,7 +922,7 @@ router.post(
   "/thoughts/question-queue/refresh",
   requireAuth,
   async (req, res) => {
-    const userId = req.user!.id;
+  const userId = req.user!.id;
     const currentThoughtId = (req.body as Record<string, unknown> | undefined)
       ?.currentThoughtId;
     if (typeof currentThoughtId !== "string") {
@@ -917,58 +936,98 @@ router.post(
       | { requeued: false; snapshot: Awaited<ReturnType<typeof queueSnapshot>> }
       | { requeued: true; sourceCandidates: SourceCandidate[]; needed: number };
 
-    const phase1: Phase1Result = await db.transaction(async (tx) => {
-      await lockQuestionQueue(tx, userId);
-      const before = await normalizeQuestionQueue(tx, userId);
-      const current = before[0];
-      if (!current || current.thought.id !== currentThoughtId) {
-        return {
-          requeued: false as const,
-          snapshot: await queueSnapshot(tx, userId),
-        };
-      }
+  const phase1: ActivatePhase1 = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    const normalizedQueue = await normalizeQuestionQueue(tx, userId);
 
-      await cleanupQuestionQueue(tx, userId);
-      const lastPosition = before.at(-1)?.position ?? current.position;
-      await tx
-        .update(thoughtQuestionQueueTable)
-        .set({ position: lastPosition + 1 })
-        .where(eq(thoughtQuestionQueueTable.id, current.queueId));
-      await compactQuestionQueue(tx, userId);
+    const [thought] = await tx
+      .select()
+      .from(thoughtsTable)
+      .where(
+        and(
+          eq(thoughtsTable.id, thoughtId),
+          eq(thoughtsTable.authorId, userId),
+          isNull(thoughtsTable.deletedAt),
+        ),
+      )
+      .limit(1);
 
-      // Queue count is unchanged after the move (current card was not deleted).
-      const { sourceCandidates, needed } = await readCandidates(
-        tx,
-        userId,
-        before.length,
-      );
-      return { requeued: true as const, sourceCandidates, needed };
-    });
+    if (!thought) return { kind: "not_found" as const };
 
-    if (!phase1.requeued) {
-      res.json({ ...phase1.snapshot, requeued: false });
-      return;
+    const [queued] = await tx
+      .select({ id: thoughtQuestionQueueTable.id })
+      .from(thoughtQuestionQueueTable)
+      .where(
+        and(
+          eq(thoughtQuestionQueueTable.userId, userId),
+          eq(thoughtQuestionQueueTable.thoughtId, thoughtId),
+        ),
+      )
+      .limit(1);
+
+    if (
+      !queued &&
+      thought.status === "NORMAL" &&
+      thought.createdFrom === "question"
+    ) {
+      return {
+        kind: "retry" as const,
+        body: {
+          activatedThought: thought,
+          ...(await queueSnapshot(tx, userId)),
+        },
+      };
+    }
+    if (!queued || thought.status !== "PRELIMINARY") {
+      return { kind: "not_queued" as const };
     }
 
-    // Phase 2: AI calls outside any DB transaction.
-    const aiResults = await generateAIQuestions(
-      phase1.sourceCandidates,
-      phase1.needed,
+    const [activatedThought] = await tx
+      .update(thoughtsTable)
+      .set({ status: "NORMAL", updatedAt: new Date() })
+      .where(eq(thoughtsTable.id, thought.id))
+      .returning();
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(eq(thoughtQuestionQueueTable.id, queued.id));
+    await compactQuestionQueue(tx, userId);
+
+    // Queue count after removing the activated thought.
+    const postCompactLength = Math.max(0, normalizedQueue.length - 1);
+    const { sourceCandidates, needed } = await readCandidates(
+      tx,
+      userId,
+      postCompactLength,
     );
+    return { kind: "activated" as const, activatedThought, sourceCandidates, needed };
+  });
 
-    // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
-    const snapshot = await db.transaction(async (tx) => {
-      await lockQuestionQueue(tx, userId);
-      const queued = await normalizeQuestionQueue(tx, userId);
-      await writeGeneratedQuestions(tx, userId, aiResults, queued);
-      return queueSnapshot(tx, userId);
-    });
+  if (phase1.kind === "not_found") {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+  if (phase1.kind === "not_queued") {
+    res.status(409).json({ error: "Thought is not an active queued question" });
+    return;
+  }
+  if (phase1.kind === "retry") {
+    res.status(200).json(phase1.body);
+    return;
+  }
 
-    res.json({ ...snapshot, requeued: true });
-  },
-);
+  // Phase 2: AI calls outside any DB transaction.
+  const aiResults = await generateAIQuestions(
+    phase1.sourceCandidates,
+    phase1.needed,
+  );
 
-router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
+  // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
+  const snapshot = snapshotResult?.snapshot ?? null;
+
+  res.status(200).json({ activatedThought: phase1.activatedThought, ...snapshot });
+});
+
+router.get("/thoughts", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const thoughtId = req.params.id;
 
@@ -1071,12 +1130,7 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
   );
 
   // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
-  const snapshot = await db.transaction(async (tx) => {
-    await lockQuestionQueue(tx, userId);
-    const queued = await normalizeQuestionQueue(tx, userId);
-    await writeGeneratedQuestions(tx, userId, aiResults, queued);
-    return queueSnapshot(tx, userId);
-  });
+  const snapshot = snapshotResult?.snapshot ?? null;
 
   res.status(200).json({ activatedThought: phase1.activatedThought, ...snapshot });
 });
@@ -1130,13 +1184,13 @@ router.get("/thoughts", requireAuth, async (req, res) => {
     })
     .from(thoughtsTable)
     .where(and(...conditions))
-    .orderBy(desc(thoughtsTable.createdAt));
+    .orderBy(desc(thoughtsTable.createdAt), desc(thoughtsTable.id));
 
   res.json(thoughts);
 });
 
 router.post("/thoughts", requireAuth, async (req, res) => {
-  const parsed = CreateThoughtBody.safeParse(req.body);
+  const parsed = UpdateThoughtBody.safeParse(req.body);
   if (!parsed.success) {
     res
       .status(400)
@@ -1173,97 +1227,66 @@ router.post("/thoughts", requireAuth, async (req, res) => {
 
   let thought;
   if (clientId) {
-    const result = await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-create:${clientId}`}))`,
+  const result = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
+    );
+    const [existing] = await tx
+      .select({
+        id: thoughtsTable.id,
+        authorId: thoughtsTable.authorId,
+        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+      })
+      .from(thoughtsTable)
+      .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
+      .for("update");
+
+    if (!existing) return "not-found" as const;
+    if (existing.authorId !== userId) return "forbidden" as const;
+
+    const [activePromotion] = await tx
+      .select({ id: thoughtPromotionsTable.id })
+      .from(thoughtPromotionsTable)
+      .where(
+        and(
+          eq(thoughtPromotionsTable.fromThoughtId, id),
+          eq(thoughtPromotionsTable.promotionType, "promote"),
+        ),
+      )
+      .limit(1);
+    if (activePromotion) return "promoted" as const;
+
+    const deletedAt = new Date();
+    const [deleted] = await tx
+      .update(thoughtsTable)
+      .set({ deletedAt })
+      .where(
+        and(
+          eq(thoughtsTable.id, id),
+          eq(thoughtsTable.authorId, userId),
+          isNull(thoughtsTable.deletedAt),
+          existing.migratedFromArticleId
+            ? eq(
+                thoughtsTable.migratedFromArticleId,
+                existing.migratedFromArticleId,
+              )
+            : isNull(thoughtsTable.migratedFromArticleId),
+        ),
+      )
+      .returning({ id: thoughtsTable.id });
+    if (!deleted) return "conflict" as const;
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(
+        and(
+          eq(thoughtQuestionQueueTable.userId, userId),
+          eq(thoughtQuestionQueueTable.thoughtId, id),
+        ),
       );
-      const [inserted] = await tx
-        .insert(thoughtsTable)
-        .values(insertValues)
-        .onConflictDoNothing({ target: thoughtsTable.id })
-        .returning();
-      if (inserted) return { status: 201, thought: inserted } as const;
-
-      const [existing] = await tx
-        .select()
-        .from(thoughtsTable)
-        .where(eq(thoughtsTable.id, clientId))
-        .for("update");
-      if (!existing || existing.authorId !== authorId) {
-        return {
-          status: 409,
-          error: "Thought id is already in use",
-        } as const;
-      }
-
-      const [activePromotion] = await tx
-        .select({ id: thoughtPromotionsTable.id })
-        .from(thoughtPromotionsTable)
-        .where(eq(thoughtPromotionsTable.fromThoughtId, clientId))
-        .limit(1);
-      if (
-        activePromotion ||
-        existing.deletedAt ||
-        existing.migratedFromArticleId
-      ) {
-        return {
-          status: 409,
-          error: "Thought can no longer accept a create retry",
-        } as const;
-      }
-
-      if (
-        existing.createdFrom !== createdFrom ||
-        existing.sourceArticleId !== (sourceArticleId ?? null) ||
-        existing.sourceStoredSentenceId !==
-          (sourceStoredSentenceId ?? null) ||
-        existing.status !== (status ?? "NORMAL")
-      ) {
-        return {
-          status: 409,
-          error: "Thought create retry does not match the original request",
-        } as const;
-      }
-
-      const retryAction = getThoughtCreateRetryAction({
-        existingGeneration: existing.createRequestGeneration,
-        incomingGeneration: requestGeneration,
-        contentMatches: existing.content === content,
-      });
-      if (retryAction === "return-existing") {
-        return { status: 201, thought: existing } as const;
-      }
-      if (retryAction === "conflict") {
-        return {
-          status: 409,
-          error: "Thought create retry generation conflicts with existing content",
-        } as const;
-      }
-
-      const [updated] = await tx
-        .update(thoughtsTable)
-        .set({
-          content,
-          createRequestGeneration: requestGeneration,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(thoughtsTable.id, clientId),
-            eq(thoughtsTable.authorId, authorId),
-            isNull(thoughtsTable.deletedAt),
-            sql`${thoughtsTable.createRequestGeneration} < ${requestGeneration}`,
-          ),
-        )
-        .returning();
-      if (!updated) {
-        return {
-          status: 409,
-          error: "Thought changed before the create retry completed",
-        } as const;
-      }
-      return { status: 201, thought: updated } as const;
-    });
+    await compactQuestionQueue(tx, userId);
+    return "deleted" as const;
+  });
 
     if ("error" in result) {
       res.status(result.status).json({ error: result.error });
@@ -1375,6 +1398,7 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   }
 
   const result = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
     );
@@ -1388,11 +1412,8 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
       .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
       .for("update");
 
-    if (!existing)
-      return { status: 404, body: { error: "Thought not found" } } as const;
-    if (existing.authorId !== userId) {
-      return { status: 403, body: { error: "Forbidden" } } as const;
-    }
+    if (!existing) return "not-found" as const;
+    if (existing.authorId !== userId) return "forbidden" as const;
 
     const [activePromotion] = await tx
       .select({ id: thoughtPromotionsTable.id })
@@ -1404,18 +1425,12 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
         ),
       )
       .limit(1);
-    if (activePromotion) {
-      return {
-        status: 409,
-        body: {
-          error: "A promoted thought must be edited through its review article",
-        },
-      } as const;
-    }
+    if (activePromotion) return "promoted" as const;
 
-    const [updated] = await tx
+    const deletedAt = new Date();
+    const [deleted] = await tx
       .update(thoughtsTable)
-      .set({ content, updatedAt: new Date() })
+      .set({ deletedAt })
       .where(
         and(
           eq(thoughtsTable.id, id),
@@ -1429,27 +1444,18 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
             : isNull(thoughtsTable.migratedFromArticleId),
         ),
       )
-      .returning({
-        id: thoughtsTable.id,
-        authorId: thoughtsTable.authorId,
-        content: thoughtsTable.content,
-        createdFrom: thoughtsTable.createdFrom,
-        sourceArticleId: thoughtsTable.sourceArticleId,
-        sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
-        status: thoughtsTable.status,
-        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
-        createdAt: thoughtsTable.createdAt,
-        updatedAt: thoughtsTable.updatedAt,
-      });
-    if (!updated) {
-      return {
-        status: 409,
-        body: {
-          error: "Thought changed while it was being updated. Please retry.",
-        },
-      } as const;
-    }
-    return { status: 200, body: updated } as const;
+      .returning({ id: thoughtsTable.id });
+    if (!deleted) return "conflict" as const;
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(
+        and(
+          eq(thoughtQuestionQueueTable.userId, userId),
+          eq(thoughtQuestionQueueTable.thoughtId, id),
+        ),
+      );
+    await compactQuestionQueue(tx, userId);
+    return "deleted" as const;
   });
 
   if (result.status === 404) {
@@ -1494,142 +1500,66 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
   const snapshot = snapshotResult?.snapshot ?? null;
 
   try {
-    const result = await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${thoughtId}`}))`,
+  const result = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
+    );
+    const [existing] = await tx
+      .select({
+        id: thoughtsTable.id,
+        authorId: thoughtsTable.authorId,
+        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+      })
+      .from(thoughtsTable)
+      .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
+      .for("update");
+
+    if (!existing) return "not-found" as const;
+    if (existing.authorId !== userId) return "forbidden" as const;
+
+    const [activePromotion] = await tx
+      .select({ id: thoughtPromotionsTable.id })
+      .from(thoughtPromotionsTable)
+      .where(
+        and(
+          eq(thoughtPromotionsTable.fromThoughtId, id),
+          eq(thoughtPromotionsTable.promotionType, "promote"),
+        ),
+      )
+      .limit(1);
+    if (activePromotion) return "promoted" as const;
+
+    const deletedAt = new Date();
+    const [deleted] = await tx
+      .update(thoughtsTable)
+      .set({ deletedAt })
+      .where(
+        and(
+          eq(thoughtsTable.id, id),
+          eq(thoughtsTable.authorId, userId),
+          isNull(thoughtsTable.deletedAt),
+          existing.migratedFromArticleId
+            ? eq(
+                thoughtsTable.migratedFromArticleId,
+                existing.migratedFromArticleId,
+              )
+            : isNull(thoughtsTable.migratedFromArticleId),
+        ),
+      )
+      .returning({ id: thoughtsTable.id });
+    if (!deleted) return "conflict" as const;
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(
+        and(
+          eq(thoughtQuestionQueueTable.userId, userId),
+          eq(thoughtQuestionQueueTable.thoughtId, id),
+        ),
       );
-      const [thought] = await tx
-        .select()
-        .from(thoughtsTable)
-        .where(
-          and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)),
-        )
-        .for("update");
-
-      if (!thought)
-        return { status: 404, body: { error: "Thought not found" } } as const;
-      if (thought.authorId !== userId)
-        return { status: 403, body: { error: "Forbidden" } } as const;
-
-      const [existingPromotion] = await tx
-        .select({
-          articleId: thoughtPromotionsTable.toDraftId,
-          promotionType: thoughtPromotionsTable.promotionType,
-        })
-        .from(thoughtPromotionsTable)
-        .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtId))
-        .limit(1);
-      if (existingPromotion) {
-        if (existingPromotion.promotionType !== "promote") {
-          return {
-            status: 409,
-            body: { error: "Thought has already been promoted" },
-          } as const;
-        }
-        const [existingArticle] = await tx
-          .select()
-          .from(articlesTable)
-          .where(
-            and(
-              eq(articlesTable.id, existingPromotion.articleId),
-              eq(articlesTable.authorId, userId),
-              isNull(articlesTable.deletedAt),
-            ),
-          )
-          .limit(1);
-        if (!existingArticle) {
-          return {
-            status: 409,
-            body: { error: "Thought promotion result is unavailable" },
-          } as const;
-        }
-        return { status: 200, body: existingArticle } as const;
-      }
-
-      if (!canPromoteThoughtToArticle(thought)) {
-        return {
-          status: 409,
-          body: {
-            error: "Thought is not in a stage that can be promoted",
-            code: "INVALID_STAGE",
-          },
-        } as const;
-      }
-
-      if (
-        snapshot &&
-        snapshot.expectedUpdatedAt.getTime() !== thought.updatedAt.getTime()
-      ) {
-        return {
-          status: 409,
-          body: {
-            error:
-              "Snapshot is older than the current thought; refresh before promoting",
-            code: "STALE_SNAPSHOT",
-          },
-        } as const;
-      }
-
-      const thoughtContent = snapshot
-        ? formatThoughtMarkdown(snapshot.title, snapshot.content)
-        : (thought.content ?? "");
-      const parsedMarkdown = parseThoughtMarkdown(thoughtContent);
-      if (!parsedMarkdown) {
-        return {
-          status: 400,
-          body: {
-            error:
-              "Thought must start with a non-empty H1 title and contain a non-empty body",
-            code: "INVALID_SNAPSHOT",
-          },
-        } as const;
-      }
-
-      const [article] = await tx
-        .insert(articlesTable)
-        .values({
-          authorId: thought.authorId,
-          title: parsedMarkdown.title,
-          content: parsedMarkdown.body,
-          status: "DIVIDING",
-          sourceArticleId: thought.sourceArticleId,
-        })
-        .returning();
-
-      await tx.insert(thoughtPromotionsTable).values({
-        fromThoughtId: thought.id,
-        toDraftId: article.id,
-        promotionType: "promote",
-      });
-      const [updatedThought] = await tx
-        .update(thoughtsTable)
-        .set({
-          ...(snapshot ? { content: thoughtContent } : {}),
-          status: "NORMAL",
-          migratedFromArticleId: null,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(thoughtsTable.id, thought.id),
-            eq(thoughtsTable.authorId, userId),
-            isNull(thoughtsTable.deletedAt),
-            eq(thoughtsTable.status, thought.status),
-            thought.migratedFromArticleId
-              ? eq(
-                  thoughtsTable.migratedFromArticleId,
-                  thought.migratedFromArticleId,
-                )
-              : isNull(thoughtsTable.migratedFromArticleId),
-          ),
-        )
-        .returning({ id: thoughtsTable.id });
-      if (!updatedThought) {
-        throw new Error("Thought changed during promotion");
-      }
-
-      return { status: 201, body: article } as const;
-    });
+    await compactQuestionQueue(tx, userId);
+    return "deleted" as const;
+  });
 
     res.status(result.status).json(result.body);
   } catch (error) {

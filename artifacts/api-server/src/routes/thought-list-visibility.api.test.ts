@@ -31,6 +31,7 @@ const state = vi.hoisted(() => {
 
   const thoughtsById = new Map<string, Record<string, unknown>>();
   const promotedThoughtIds = new Set<string>();
+  let orderByArgumentCount = 0;
 
   const db: any = {
     select: (_fields?: Record<string, unknown>) => {
@@ -43,7 +44,8 @@ const state = vi.hoisted(() => {
         where() {
           return chain;
         },
-        orderBy() {
+        orderBy(...columns: unknown[]) {
+          orderByArgumentCount = columns.length;
           return chain;
         },
         then(
@@ -64,11 +66,15 @@ const state = vi.hoisted(() => {
                       ) &&
                       !promotedThoughtIds.has(row.id as string),
                   )
-                  .sort(
-                    (a, b) =>
+                  .sort((a, b) => {
+                    const createdAtDifference =
                       (b.createdAt as Date).getTime() -
-                      (a.createdAt as Date).getTime(),
-                  )
+                      (a.createdAt as Date).getTime();
+                    return (
+                      createdAtDifference ||
+                      (b.id as string).localeCompare(a.id as string)
+                    );
+                  })
               : [];
           return Promise.resolve(resolved).then(onFulfilled, onRejected);
         },
@@ -77,7 +83,19 @@ const state = vi.hoisted(() => {
     },
   };
 
-  return { activeUser: "", thoughtsById, promotedThoughtIds, tables, db };
+  return {
+    activeUser: "",
+    thoughtsById,
+    promotedThoughtIds,
+    get orderByArgumentCount() {
+      return orderByArgumentCount;
+    },
+    resetOrderByArgumentCount() {
+      orderByArgumentCount = 0;
+    },
+    tables,
+    db,
+  };
 });
 
 vi.mock("@workspace/db", () => ({
@@ -174,6 +192,7 @@ beforeEach(() => {
   state.activeUser = "";
   state.thoughtsById.clear();
   state.promotedThoughtIds.clear();
+  state.resetOrderByArgumentCount();
 });
 
 afterAll(() => vi.restoreAllMocks());
@@ -251,6 +270,36 @@ describe("GET /thoughts visibility", () => {
       expect(a.map((item) => item.id)).toEqual(["a-direct-new"]);
       expect(aAfterRefetch.map((item) => item.id)).toEqual(["a-direct-new"]);
       expect(b.map((item) => item.id)).toEqual(["b-normal"]);
+    });
+  });
+
+  it("returns a stable newest-first order with id breaking created-at ties", async () => {
+    const older = new Date("2026-01-01T00:00:00.000Z");
+    const newer = new Date("2026-01-02T00:00:00.000Z");
+    state.thoughtsById.set(
+      "same-time-a",
+      thought("same-time-a", "user-a", { createdAt: newer }),
+    );
+    state.thoughtsById.set(
+      "older-z",
+      thought("older-z", "user-a", { createdAt: older }),
+    );
+    state.thoughtsById.set(
+      "same-time-z",
+      thought("same-time-z", "user-a", { createdAt: newer }),
+    );
+
+    await withServer(async (baseUrl) => {
+      const first = await getThoughts(baseUrl, "user-a");
+      const second = await getThoughts(baseUrl, "user-a");
+
+      expect(first.map((item) => item.id)).toEqual([
+        "same-time-z",
+        "same-time-a",
+        "older-z",
+      ]);
+      expect(second).toEqual(first);
+      expect(state.orderByArgumentCount).toBe(2);
     });
   });
 });
