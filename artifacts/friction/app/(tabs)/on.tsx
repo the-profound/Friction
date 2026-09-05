@@ -909,8 +909,8 @@ export default function OnScreen() {
   return (
     <View style={styles.container}>
       <PageHeader
-        title="기록"
-        titleImage={require("@/assets/images/wordmark_maroon.png")}
+        title="기록함"
+        centeredBrandTitle
         showSearch
         searchActive={searchActive}
         onSearchPress={() => {

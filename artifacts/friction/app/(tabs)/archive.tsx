@@ -10,7 +10,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
@@ -62,8 +61,6 @@ export default function ArchiveScreen() {
   const queryClient = useQueryClient();
 
   const [activeSubTab, setActiveSubTab] = useState<ArchiveSubTab>("personal");
-  const [searchActive, setSearchActive] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -91,43 +88,27 @@ export default function ArchiveScreen() {
 
   const selectedCount = selectedIds.size;
 
-  const filteredMyCollections = useMemo(() => {
-    let list = myCollections;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((c) => c.name.toLowerCase().includes(q));
-    }
-    return [...list].sort((a, b) => {
+  const sortedMyCollections = useMemo(() => {
+    return [...myCollections].sort((a, b) => {
       if (a.isArchive && !b.isArchive) return -1;
       if (!a.isArchive && b.isArchive) return 1;
       return 0;
     });
-  }, [myCollections, searchQuery]);
+  }, [myCollections]);
 
   const impressionCollection = useMemo(() => {
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const found = myCollections.find((c) => c.isImpression);
-      return found && found.name.toLowerCase().includes(q) ? found : null;
-    }
     return myCollections.find((c) => c.isImpression) ?? null;
-  }, [myCollections, searchQuery]);
+  }, [myCollections]);
 
   const regularCollections = useMemo(() => {
-    return filteredMyCollections.filter((c) => !c.isImpression);
-  }, [filteredMyCollections]);
+    return sortedMyCollections.filter((c) => !c.isImpression);
+  }, [sortedMyCollections]);
 
   const cardWidth = Math.floor(windowWidth - Spacing.screenPx * 2);
   const sentenceTextSize = readerFontSize(
     ReaderTokens.typeScale.bodyCqi,
     Math.max(1, cardWidth - 32),
   );
-
-  const filteredSentences = useMemo(() => {
-    if (!searchQuery.trim()) return sentences;
-    const q = searchQuery.toLowerCase();
-    return sentences.filter((s) => s.text.toLowerCase().includes(q));
-  }, [sentences, searchQuery]);
 
   const closeSentenceOpenRow = useCallback(() => {
     if (sentenceOpenRowRef.current) {
@@ -148,8 +129,6 @@ export default function ArchiveScreen() {
   const enterSelectionMode = useCallback(() => {
     setSelectedIds(new Set());
     setSelectionMode(true);
-    setSearchActive(false);
-    setSearchQuery("");
   }, []);
 
   const exitSelectionMode = useCallback(() => {
@@ -197,13 +176,6 @@ export default function ArchiveScreen() {
       showToast({ message: "삭제에 실패했어요.", type: "error" });
     }
   }, [selectedIds, deleteSentence, sentencesQuery, exitSelectionMode, showToast]);
-
-  const handleSearch = useCallback(() => {
-    setSearchActive((prev) => {
-      if (prev) setSearchQuery("");
-      return !prev;
-    });
-  }, []);
 
   const handleAdd = useCallback(() => {
     if (activeSubTab === "sentence") {
@@ -559,13 +531,13 @@ export default function ArchiveScreen() {
       );
     }
 
-    return filteredSentences.length === 0 ? (
+    return sentences.length === 0 ? (
       renderEmptySentence()
     ) : (
       <FlatList
         {...LIST_PERF_PRESET}
         key="archive-sentence-list"
-        data={filteredSentences}
+        data={sentences}
         keyExtractor={(item) => item.id}
         renderItem={selectionMode ? renderSentenceSelectionItem : renderSentenceItem}
         contentContainerStyle={[
@@ -599,16 +571,13 @@ export default function ArchiveScreen() {
         </View>
       ) : (
         <PageHeader
-          title="보관"
+          title="보관함"
+          centeredBrandTitle
           showAdd={activeSubTab !== "sentence"}
           onAddPress={handleAdd}
-          showSearch
-          onSearchPress={handleSearch}
-          searchActive={searchActive}
           showKebab={activeSubTab === "sentence"}
           onKebabPress={enterSelectionMode}
           kebabAccessibilityLabel="수집한 문장 선택 모드 열기"
-          searchLast={activeSubTab === "sentence"}
         />
       )}
 
@@ -618,7 +587,7 @@ export default function ArchiveScreen() {
             <ScalePressable
               style={styles.subTabItem}
               contentStyle={[styles.subTabItemContent, { paddingLeft: 16, paddingRight: 8 }]}
-              onPress={() => { setActiveSubTab("personal"); setSearchQuery(""); setSearchActive(false); }}
+              onPress={() => setActiveSubTab("personal")}
             >
               <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
                 폴더
@@ -630,7 +599,7 @@ export default function ArchiveScreen() {
             <ScalePressable
               style={styles.subTabItem}
               contentStyle={[styles.subTabItemContent, { paddingLeft: 8, paddingRight: 16 }]}
-              onPress={() => { setActiveSubTab("sentence"); setSearchQuery(""); setSearchActive(false); exitSelectionMode(); }}
+              onPress={() => { setActiveSubTab("sentence"); exitSelectionMode(); }}
             >
               <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
                 수집한 문장
@@ -639,17 +608,6 @@ export default function ArchiveScreen() {
             </ScalePressable>
           </View>
         </View>
-      )}
-
-
-      {!selectionMode && (
-        <AnimatedSearchBar
-          active={searchActive}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder={activeSubTab === "personal" ? "폴더 이름으로 검색" : "문장 내용으로 검색"}
-          extraTopSpacing
-        />
       )}
 
       {renderContent()}

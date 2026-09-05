@@ -10,7 +10,7 @@ import { Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Shadows, Sizing } from "@/constants/tokens";
 
-export type HeaderButtonVariant = "back" | "menu";
+export type HeaderButtonVariant = "back" | "menu" | "settings";
 
 export interface HeaderButtonProps
   extends Omit<PressableProps, "children" | "style" | "accessibilityLabel"> {
@@ -23,6 +23,7 @@ export interface HeaderButtonProps
 const DEFAULT_LABELS: Record<HeaderButtonVariant, string> = {
   back: "뒤로가기",
   menu: "메뉴",
+  settings: "설정 열기",
 };
 
 /**
@@ -43,10 +44,15 @@ export default function HeaderButton({
   ...rest
 }: HeaderButtonProps) {
   const unavailable = disabled || busy;
-  const iconName = variant === "back" ? "arrow-left" : "more-horizontal";
+  const iconName =
+    variant === "back"
+      ? "arrow-left"
+      : variant === "settings"
+        ? "settings"
+        : "more-horizontal";
   const iconColor = unavailable
     ? Colors.zinc400
-    : variant === "menu"
+    : variant === "menu" || variant === "settings"
       ? Colors.white
       : Colors.backButtonIcon;
 
@@ -56,7 +62,9 @@ export default function HeaderButton({
       style={styles.button}
       contentStyle={[
         styles.surface,
-        variant === "menu" ? styles.menuSurface : styles.backSurface,
+        variant === "menu" || variant === "settings"
+          ? styles.menuSurface
+          : styles.backSurface,
       ]}
       onPress={onPress}
       disabled={unavailable}

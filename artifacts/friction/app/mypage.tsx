@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
-import HeaderButton from "@/components/shared/HeaderButton";
+import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -131,16 +131,14 @@ export default function MyPageScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
-      <View style={styles.header}>
-        <HeaderButton
-          variant="back"
-          onPress={() => router.back()}
-          accessibilityLabel="설정 및 활동에서 돌아가기"
-        />
-        <Text style={styles.headerTitle}>설정 및 활동</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+    <View style={styles.container}>
+      <PageHeader
+        title="설정"
+        centeredBrandTitle
+        showBack
+        onBackPress={() => router.back()}
+        backAccessibilityLabel="설정에서 돌아가기"
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -309,23 +307,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.zinc50,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: 12,
-    backgroundColor: Colors.zinc50,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    ...Typography.bodySemiBold,
-    fontSize: 17,
-    color: Colors.zinc900,
-  },
-  headerSpacer: {
-    width: 44,
   },
   scroll: {
     flex: 1,

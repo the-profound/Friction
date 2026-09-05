@@ -431,9 +431,10 @@ export default function MyScreen() {
         ListHeaderComponent={
           <View>
             <PageHeader
-              title="마이"
-              hideTitle
+              title="내 정보"
+              centeredBrandTitle
               showProfile
+              profileButtonVariant="settings"
               onProfilePress={() => router.push("/mypage" as never)}
               profileAccessibilityLabel="설정 및 활동 열기"
             />
@@ -557,7 +558,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
     paddingBottom: 20,
-    marginTop: -57,
   },
   avatar: {
     width: 78,

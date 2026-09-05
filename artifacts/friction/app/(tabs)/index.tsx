@@ -11,7 +11,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
@@ -128,8 +127,6 @@ function InboxScreenContent() {
   const queryClient = useQueryClient();
   const { userId, nickname } = useUser();
   const { showToast } = useToast();
-  const [searchActive, setSearchActive] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
   // Refs break the hook ordering cycle:
   // useLetterSelectionOverlay is called first (all deps available immediately).
@@ -216,17 +213,7 @@ function InboxScreenContent() {
     );
   }, [inboxData]);
 
-  const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return visibleItems;
-    const q = searchQuery.toLowerCase();
-    return visibleItems.filter((item) => {
-      const title = item.article?.title?.toLowerCase() ?? "";
-      const senderName = getInboxSenderName(item).toLowerCase();
-      return title.includes(q) || senderName.includes(q);
-    });
-  }, [visibleItems, searchQuery]);
-
-  const groups = useMemo(() => groupBySlot(filteredItems), [filteredItems]);
+  const groups = useMemo(() => groupBySlot(visibleItems), [visibleItems]);
   const scrollPressGuard = useScrollPressGuard();
   const inboxGroupKeys = useMemo(
     () => groups.map((group) => group.dateKey),
@@ -247,13 +234,6 @@ function InboxScreenContent() {
     estimatedGroupHeight: INBOX_GROUP_HEIGHT,
     onPageGestureStart: scrollPressGuard.onScroll,
   });
-
-  const handleSearchPress = useCallback(() => {
-    setSearchActive((prev) => {
-      if (prev) setSearchQuery("");
-      return !prev;
-    });
-  }, []);
 
   const handleCardPress = useCallback((item: InboxItem, layout: OriginLayout) => {
     captureScrollOffset();
@@ -521,17 +501,8 @@ function InboxScreenContent() {
   return (
     <View style={styles.container}>
       <PageHeader
-        title="수신"
-        showSearch
-        onSearchPress={handleSearchPress}
-        searchActive={searchActive}
-      />
-
-      <AnimatedSearchBar
-        active={searchActive}
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder="제목, 이웃 이름으로 검색"
+        title="수신함"
+        centeredBrandTitle
       />
 
       {isLoading ? (

@@ -492,7 +492,8 @@ export default function SpacesScreen() {
   return (
     <View style={styles.container}>
       <PageHeader
-        title="공간"
+        title="공간 목록"
+        centeredBrandTitle
         showAdd
         onAddPress={() => setShowAddSheet(true)}
         showArchive
