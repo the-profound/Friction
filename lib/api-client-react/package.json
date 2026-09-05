@@ -15,9 +15,9 @@
     "@tanstack/react-query": "catalog:"
   },
   "devDependencies": {
-    "react": "19.2.3"
+    "react": "19.2.8"
   },
   "peerDependencies": {
-    "react": "19.2.3"
+    "react": "19.2.8"
   }
 }

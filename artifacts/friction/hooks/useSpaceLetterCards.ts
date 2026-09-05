@@ -9,7 +9,7 @@
 
 import type { SpaceLetter } from "@workspace/api-client-react";
 import type { LetterCardViewModel } from "@/types/letterCard";
-import { getSpaceLetterAuthorName } from "@/lib/spaceLetterAuthorName";
+import { getSpaceLetterAuthorName } from "@/lib/spaceRoundPresentation";
 
 export function spaceLetterToViewModel(
   letter: SpaceLetter,

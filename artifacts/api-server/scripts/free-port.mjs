@@ -3,6 +3,7 @@
 // kill it (only if it looks like our own server process) and wait for the
 // port to be released before the new instance starts.
 import { execSync } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
 
 const port = Number(process.env.PORT);
@@ -11,7 +12,7 @@ if (!Number.isFinite(port) || port <= 0) {
   process.exit(1);
 }
 
-function listenerPids(p) {
+function listenerPidsFromLsof(p) {
   try {
     const out = execSync(`lsof -t -iTCP:${p} -sTCP:LISTEN`, {
       encoding: "utf8",
@@ -26,6 +27,63 @@ function listenerPids(p) {
   } catch {
     return []; // lsof exits non-zero when nothing is listening
   }
+}
+
+function listenerPidsFromProc(p) {
+  const socketInodes = new Set();
+
+  for (const table of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    let lines;
+    try {
+      lines = fs.readFileSync(table, "utf8").trim().split("\n").slice(1);
+    } catch {
+      continue;
+    }
+
+    for (const line of lines) {
+      const fields = line.trim().split(/\s+/);
+      const localAddress = fields[1];
+      const state = fields[3];
+      const inode = fields[9];
+      if (!localAddress || state !== "0A" || !inode) continue;
+
+      const portHex = localAddress.split(":").at(-1);
+      if (Number.parseInt(portHex, 16) === p) socketInodes.add(inode);
+    }
+  }
+
+  if (socketInodes.size === 0) return [];
+
+  const pids = [];
+  for (const entry of fs.readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry) || Number(entry) === process.pid) continue;
+    const fdDirectory = `/proc/${entry}/fd`;
+    let descriptors;
+    try {
+      descriptors = fs.readdirSync(fdDirectory);
+    } catch {
+      continue;
+    }
+
+    for (const descriptor of descriptors) {
+      let target;
+      try {
+        target = fs.readlinkSync(`${fdDirectory}/${descriptor}`);
+      } catch {
+        continue;
+      }
+      const match = target.match(/^socket:\[(\d+)\]$/);
+      if (match && socketInodes.has(match[1])) {
+        pids.push(Number(entry));
+        break;
+      }
+    }
+  }
+  return pids;
+}
+
+function listenerPids(p) {
+  return [...new Set([...listenerPidsFromLsof(p), ...listenerPidsFromProc(p)])];
 }
 
 function cmdline(pid) {
