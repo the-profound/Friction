@@ -49,6 +49,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
 type ArchiveSubTab = "personal" | "sentence";
+const FILTER_BUTTON_HEIGHT = 36;
 
 export default function ArchiveScreen() {
   const { startFadeToBlack } = useReaderTransition();
@@ -203,7 +204,7 @@ export default function ArchiveScreen() {
       setCreateSheetVisible(false);
       router.push({ pathname: "/of-01-detail", params: { id: newMyCollection.id, name: newName.trim() } });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "폴더 생성에 실패했습니다.";
+      const msg = e instanceof Error ? e.message : "모음 생성에 실패했습니다.";
       showToast({ message: msg, type: "error" });
     }
   }, [newName, newDescription, userId, isCreating, createMyCollection, myCollectionsQuery, router, showToast]);
@@ -318,7 +319,7 @@ export default function ArchiveScreen() {
         onPress={() => router.push({ pathname: "/of-01-detail", params: { id: item.id, name: item.name } })}
         contentStyle={styles.card}
         accessibilityRole="button"
-        accessibilityLabel={`${item.name} 보관함, ${item.articleCount ?? 0}편`}
+        accessibilityLabel={`${item.name} 모음, ${item.articleCount ?? 0}편`}
       >
         <View style={styles.cardContent}>
           <View style={styles.cardTopRow}>
@@ -366,7 +367,7 @@ export default function ArchiveScreen() {
         }}
         contentStyle={styles.sentenceItemRow}
         accessibilityRole="button"
-        accessibilityLabel="수집한 문장 상세 열기"
+        accessibilityLabel="문장 상세 열기"
       >
         <View style={styles.sentenceItemContent}>
           <View style={styles.sentenceMeta}>
@@ -397,7 +398,7 @@ export default function ArchiveScreen() {
         onPress={() => toggleSelect(item.id)}
         contentStyle={styles.selectionRowContent}
         accessibilityRole="checkbox"
-        accessibilityLabel="수집한 문장 선택"
+        accessibilityLabel="문장 선택"
         accessibilityState={{ checked: isSelected }}
       >
         <View style={styles.checkboxTouchTarget}>
@@ -433,16 +434,16 @@ export default function ArchiveScreen() {
       contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
     >
       <Feather name="folder" size={40} color={Colors.zinc300} />
-      <Text style={styles.emptyTitle}>내 폴더가 없어요</Text>
+      <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
       <Text style={styles.emptySubtitle}>완성된 편지를 모아두는 나만의 공간을 만들어보세요</Text>
       <ScalePressable
         style={styles.emptyButton}
         contentStyle={styles.emptyButtonContent}
         onPress={handleAdd}
         accessibilityRole="button"
-        accessibilityLabel="새 폴더 만들기"
+        accessibilityLabel="새 모음 만들기"
       >
-        <Text style={styles.emptyButtonText}>새 폴더 만들기</Text>
+        <Text style={styles.emptyButtonText}>새 모음 만들기</Text>
       </ScalePressable>
     </RefreshableEmpty>
   );
@@ -454,7 +455,7 @@ export default function ArchiveScreen() {
       contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
     >
       <Feather name="bookmark" size={40} color={Colors.zinc300} />
-      <Text style={styles.emptyTitle}>수집한 문장이 없어요</Text>
+      <Text style={styles.emptyTitle}>문장이 없어요</Text>
       <Text style={styles.emptySubtitle}>읽기 화면에서 마음에 드는 문장을{"\n"}길게 눌러 수집해보세요</Text>
     </RefreshableEmpty>
   );
@@ -507,7 +508,7 @@ export default function ArchiveScreen() {
                 onPress={() => router.push({ pathname: "/of-01-detail", params: { id: impressionCollection.id, name: impressionCollection.name } })}
                 contentStyle={styles.card}
                 accessibilityRole="button"
-                accessibilityLabel={`${impressionCollection.name} 보관함, ${impressionCollection.articleCount ?? 0}편`}
+                accessibilityLabel={`${impressionCollection.name} 모음, ${impressionCollection.articleCount ?? 0}편`}
               >
                 <View style={styles.cardContent}>
                   <View style={styles.cardTopRow}>
@@ -573,42 +574,73 @@ export default function ArchiveScreen() {
         <PageHeader
           title="보관함"
           centeredBrandTitle
-          showAdd={activeSubTab !== "sentence"}
-          onAddPress={handleAdd}
-          showKebab={activeSubTab === "sentence"}
-          onKebabPress={enterSelectionMode}
-          kebabAccessibilityLabel="수집한 문장 선택 모드 열기"
         />
       )}
 
-      {!selectionMode && (
-        <View style={styles.subTabBar}>
-          <View style={{ flex: 1 }}>
-            <ScalePressable
-              style={styles.subTabItem}
-              contentStyle={[styles.subTabItemContent, { paddingLeft: 16, paddingRight: 8 }]}
-              onPress={() => setActiveSubTab("personal")}
-            >
-              <Text style={[styles.subTabText, activeSubTab === "personal" && styles.subTabTextActive]}>
-                폴더
-              </Text>
-              {activeSubTab === "personal" && <View style={styles.subTabUnderline} />}
-            </ScalePressable>
-          </View>
-          <View style={{ flex: 1 }}>
-            <ScalePressable
-              style={styles.subTabItem}
-              contentStyle={[styles.subTabItemContent, { paddingLeft: 8, paddingRight: 16 }]}
-              onPress={() => { setActiveSubTab("sentence"); exitSelectionMode(); }}
-            >
-              <Text style={[styles.subTabText, activeSubTab === "sentence" && styles.subTabTextActive]}>
-                수집한 문장
-              </Text>
-              {activeSubTab === "sentence" && <View style={styles.subTabUnderline} />}
-            </ScalePressable>
-          </View>
+      <View style={styles.filterRow}>
+        <View style={styles.filterGroup}>
+          <ScalePressable
+            style={styles.filterButton}
+            contentStyle={[
+              styles.filterButtonContent,
+              activeSubTab === "personal" && styles.filterButtonContentActive,
+            ]}
+            onPress={() => {
+              setActiveSubTab("personal");
+              exitSelectionMode();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="모음 보기"
+            accessibilityState={{ selected: activeSubTab === "personal" }}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              activeSubTab === "personal" && styles.filterButtonTextActive,
+            ]}>
+              모음
+            </Text>
+          </ScalePressable>
+          <ScalePressable
+            style={styles.filterButton}
+            contentStyle={[
+              styles.filterButtonContent,
+              activeSubTab === "sentence" && styles.filterButtonContentActive,
+            ]}
+            onPress={() => setActiveSubTab("sentence")}
+            accessibilityRole="button"
+            accessibilityLabel="문장 보기"
+            accessibilityState={{ selected: activeSubTab === "sentence" }}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              activeSubTab === "sentence" && styles.filterButtonTextActive,
+            ]}>
+              문장
+            </Text>
+          </ScalePressable>
         </View>
-      )}
+        {activeSubTab === "personal" ? (
+          <ScalePressable
+            style={styles.addButton}
+            contentStyle={styles.addButtonContent}
+            onPress={handleAdd}
+            accessibilityRole="button"
+            accessibilityLabel="새 모음 만들기"
+          >
+            <Feather name="plus" size={Sizing.plusIconSize} color={Colors.primaryActionForeground} />
+          </ScalePressable>
+        ) : !selectionMode ? (
+          <ScalePressable
+            style={styles.menuButton}
+            contentStyle={styles.menuButtonContent}
+            onPress={enterSelectionMode}
+            accessibilityRole="button"
+            accessibilityLabel="문장 선택 모드 열기"
+          >
+            <Feather name="more-horizontal" size={Sizing.searchIconSize} color={Colors.zinc700} />
+          </ScalePressable>
+        ) : null}
+      </View>
 
       {renderContent()}
 
@@ -637,14 +669,14 @@ export default function ArchiveScreen() {
       <BottomSheet
         visible={createSheetVisible}
         onClose={() => setCreateSheetVisible(false)}
-        title="새 폴더"
+        title="새 모음"
         snapPoints={[0.65, 0.95]}
         keyboardAware
       >
         <View style={styles.createForm}>
           <TextInput
             style={styles.createInput}
-            placeholder="폴더 이름"
+            placeholder="모음 이름"
             placeholderTextColor={Colors.zinc400}
             cursorColor={Colors.cursorAccent}
             value={newName}
@@ -801,35 +833,84 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.zinc500,
   },
-  subTabBar: {
+  filterRow: {
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.zinc100,
-  },
-  subTabItem: {},
-  subTabItemContent: {
     alignItems: "center",
-    paddingTop: 12,
-    paddingBottom: 0,
+    justifyContent: "space-between",
+    minHeight: FILTER_BUTTON_HEIGHT,
+    paddingHorizontal: Spacing.screenPx,
+    marginTop: 4,
+    marginBottom: 16,
   },
-  subTabText: {
-    ...Typography.body,
-    fontSize: 15,
-    color: Colors.zinc400, // typography-ok: inactive sub-tab label
-    paddingBottom: 10,
+  filterGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
   },
-  subTabTextActive: {
+  filterButton: {
+    height: FILTER_BUTTON_HEIGHT,
+    alignSelf: "flex-start",
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filterButtonContent: {
+    height: FILTER_BUTTON_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 14,
+    borderRadius: FILTER_BUTTON_HEIGHT / 2,
+    borderWidth: 1,
+    borderColor: Colors.zinc200,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterButtonContentActive: {
+    borderColor: Colors.noticeAccent,
+    backgroundColor: Colors.noticeAccent,
+  },
+  filterButtonText: {
     ...Typography.bodySemiBold,
-    color: Colors.zinc900,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.zinc600,
   },
-  subTabUnderline: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 1.5,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 1,
+  filterButtonTextActive: {
+    color: Colors.white,
+  },
+  addButton: {
+    width: FILTER_BUTTON_HEIGHT,
+    height: FILTER_BUTTON_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  addButtonContent: {
+    width: FILTER_BUTTON_HEIGHT,
+    height: FILTER_BUTTON_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: FILTER_BUTTON_HEIGHT / 2,
+    backgroundColor: Colors.primaryAction,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Shadows.navBar,
+  },
+  menuButton: {
+    width: FILTER_BUTTON_HEIGHT,
+    height: FILTER_BUTTON_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  menuButtonContent: {
+    width: FILTER_BUTTON_HEIGHT,
+    height: FILTER_BUTTON_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: FILTER_BUTTON_HEIGHT / 2,
+    backgroundColor: Colors.searchBgInactive,
+    alignItems: "center",
+    justifyContent: "center",
   },
   // ─── Card ────────────────────────────────────────────────────────────────────
   listTopSpacer: {
