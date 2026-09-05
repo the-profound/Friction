@@ -5,8 +5,11 @@ import {
   NotoSerifKR_600SemiBold,
   NotoSerifKR_800ExtraBold,
 } from "@expo-google-fonts/noto-serif-kr";
-import { QueryClient, onlineManager } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import {
+  QueryClient,
+  QueryClientProvider,
+  onlineManager,
+} from "@tanstack/react-query";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { getNotificationsModule } from "@/lib/safeNotifications";
@@ -49,7 +52,6 @@ import {
   getActiveReadingForUser,
   getAuthNavigationDecision,
 } from "@/lib/authNavigation";
-import { offlineQueryPersistOptions } from "@/lib/offlineQueryPersistence";
 
 setBaseUrl(runtimeConfig.apiBaseUrl);
 
@@ -454,11 +456,6 @@ export default function RootLayout() {
     NotoSerifKR_800ExtraBold,
   });
   const [fontLoadTimedOut, setFontLoadTimedOut] = useState(false);
-  // Cold-start restore of the persisted (allowlisted) query cache — see
-  // lib/offlineQueryPersistence.ts. Runs in parallel with font loading below
-  // (both start on first mount), so it only adds to startup time if it is
-  // slower than fonts, which a local AsyncStorage read essentially never is.
-  const [offlineCacheRestored, setOfflineCacheRestored] = useState(false);
 
   useEffect(() => {
     if (fontsLoaded || fontError) return;
@@ -471,19 +468,7 @@ export default function RootLayout() {
     return () => clearTimeout(timeoutId);
   }, [fontsLoaded, fontError]);
 
-  useEffect(() => {
-    if (offlineCacheRestored) return;
-    const timeoutId = setTimeout(() => {
-      console.warn(
-        "[offlineQueryPersistence] Restoring the persisted query cache exceeded 3 seconds; continuing without waiting further.",
-      );
-      setOfflineCacheRestored(true);
-    }, 3000);
-    return () => clearTimeout(timeoutId);
-  }, [offlineCacheRestored]);
-
-  const startupReady =
-    (fontsLoaded || fontError || fontLoadTimedOut) && offlineCacheRestored;
+  const startupReady = fontsLoaded || fontError || fontLoadTimedOut;
 
   useEffect(() => {
     if (startupReady) {
@@ -512,12 +497,10 @@ export default function RootLayout() {
           )
         : null}
       <ErrorBoundary>
-        <PersistQueryClientProvider
-          client={queryClient}
-          persistOptions={offlineQueryPersistOptions}
-          onSuccess={() => setOfflineCacheRestored(true)}
-          onError={() => setOfflineCacheRestored(true)}
-        >
+        {/* Disk persistence is temporarily disabled after a production-only
+            startup regression. React Query's in-memory cache and NetInfo
+            reconnect behavior remain active. */}
+        <QueryClientProvider client={queryClient}>
           {startupReady ? (
             <GestureHandlerRootView>
               <AuthProvider>
@@ -539,7 +522,7 @@ export default function RootLayout() {
           ) : (
             loadingView
           )}
-        </PersistQueryClientProvider>
+        </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );
