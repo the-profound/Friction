@@ -20,6 +20,7 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
+import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
