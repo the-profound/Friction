@@ -1,13 +1,15 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const net = require("net");
 const { Readable } = require("stream");
 const { pipeline } = require("stream/promises");
 
 let metroProcess = null;
 
 const projectRoot = path.resolve(__dirname, "..");
-const METRO_PORT = 19000;
+const DEFAULT_METRO_PORT = 19000;
+let metroPort = DEFAULT_METRO_PORT;
 
 function findWorkspaceRoot(startDir) {
   let dir = startDir;
@@ -88,12 +90,21 @@ function validateReleaseEnvironment() {
   }
 }
 
+function getBundleConfigurationPresence(bundle, expectedValues) {
+  return Object.fromEntries(
+    Object.entries(expectedValues).map(([name, value]) => [
+      name,
+      Boolean(value && bundle.includes(value)),
+    ]),
+  );
+}
+
 function validateBundleConfiguration(timestamp) {
-  const expectedValues = [
-    process.env.EXPO_PUBLIC_SUPABASE_URL,
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-    getDeploymentDomain(),
-  ];
+  const expectedValues = {
+    EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    EXPO_PUBLIC_DOMAIN: getDeploymentDomain(),
+  };
 
   for (const platform of ["ios", "android"]) {
     const bundlePath = path.join(
@@ -107,13 +118,16 @@ function validateBundleConfiguration(timestamp) {
       "bundle.js",
     );
     const bundle = fs.readFileSync(bundlePath, "utf8");
-    const missing = expectedValues.some(
-      (value) => !value || !bundle.includes(value),
-    );
-    if (missing) {
+    const presence = getBundleConfigurationPresence(bundle, expectedValues);
+    if (Object.values(presence).some((included) => !included)) {
+      const diagnostic = Object.entries(presence)
+        .map(([name, included]) => `${name}=${included ? "included" : "missing"}`)
+        .join(", ");
       exitWithError(
-        `ERROR: ${platform} release bundle does not contain the validated ` +
-          "Supabase/API configuration. Refusing to publish it.",
+        `ERROR: ${platform} release bundle configuration mismatch ` +
+          `(${diagnostic}); Metro ownership: pid=${metroProcess?.pid ?? "none"}, ` +
+          `port=${metroPort}, startedByBuild=${Boolean(metroProcess)}. ` +
+          "Refusing to publish it.",
       );
     }
   }
@@ -159,9 +173,9 @@ function clearMetroCache() {
   console.log("Cache cleared");
 }
 
-async function checkMetroHealth() {
+async function checkMetroHealth(port = metroPort) {
   try {
-    const response = await fetch(`http://localhost:${METRO_PORT}/status`, {
+    const response = await fetch(`http://localhost:${port}/status`, {
       signal: AbortSignal.timeout(5000),
     });
     return response.ok;
@@ -170,18 +184,42 @@ async function checkMetroHealth() {
   }
 }
 
+function canListen(port) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", (error) => {
+      if (error.code === "EADDRINUSE") resolve(false);
+      else reject(error);
+    });
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+async function selectOwnedMetroPort(preferredPort = DEFAULT_METRO_PORT) {
+  if (await canListen(preferredPort)) return preferredPort;
+
+  console.warn(
+    `Metro isolation: port ${preferredPort} is already occupied; ` +
+      "the existing instance will not be reused.",
+  );
+  for (let candidate = preferredPort + 1; candidate < preferredPort + 100; candidate++) {
+    if (await canListen(candidate)) return candidate;
+  }
+  throw new Error(
+    `Metro isolation failed: no private port available after ${preferredPort}.`,
+  );
+}
+
 function getExpoPublicReplId() {
   return process.env.REPL_ID || process.env.EXPO_PUBLIC_REPL_ID;
 }
 
 async function startMetro(expoPublicDomain, expoPublicReplId) {
-  const isRunning = await checkMetroHealth();
-  if (isRunning) {
-    console.log("Metro already running");
-    return;
-  }
-
-  console.log("Starting Metro...");
+  metroPort = await selectOwnedMetroPort();
+  console.log(`Starting build-owned Metro on port ${metroPort}...`);
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
   const env = {
     ...process.env,
@@ -203,7 +241,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
       "--minify",
       "--localhost",
       "--port",
-      String(METRO_PORT),
+      String(metroPort),
     ],
     {
       stdio: ["ignore", "pipe", "pipe"],
@@ -212,6 +250,14 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
       env,
     },
   );
+  metroProcess.once("exit", (code, signal) => {
+    if (code !== null || signal) {
+      console.error(
+        `Build-owned Metro exited (pid=${metroProcess?.pid ?? "unknown"}, ` +
+          `port=${metroPort}, code=${code ?? "none"}, signal=${signal ?? "none"}).`,
+      );
+    }
+  });
 
   if (metroProcess.stdout) {
     metroProcess.stdout.on("data", (data) => {
@@ -229,14 +275,16 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
   for (let i = 0; i < 60; i++) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const healthy = await checkMetroHealth();
+    const healthy = metroProcess.exitCode === null && await checkMetroHealth();
     if (healthy) {
-      console.log("Metro ready");
+      console.log(`Build-owned Metro ready (pid=${metroProcess.pid}, port=${metroPort})`);
       return;
     }
   }
 
-  console.error("Metro timeout");
+  console.error(
+    `Build-owned Metro timeout (pid=${metroProcess?.pid ?? "none"}, port=${metroPort})`,
+  );
   process.exit(1);
 }
 
@@ -279,7 +327,7 @@ async function downloadFile(url, outputPath) {
 async function downloadBundle(platform, timestamp) {
   const entryPath = path.resolve(projectRoot, "node_modules", "expo-router", "entry");
   const bundlePath = path.relative(workspaceRoot, entryPath);
-  const url = new URL(`http://localhost:${METRO_PORT}/${bundlePath}.bundle`);
+  const url = new URL(`http://localhost:${metroPort}/${bundlePath}.bundle`);
   url.searchParams.set("platform", platform);
   url.searchParams.set("dev", "false");
   url.searchParams.set("hot", "false");
@@ -307,7 +355,7 @@ async function downloadManifest(platform) {
 
   try {
     console.log(`Fetching ${platform} manifest...`);
-    const response = await fetch(`http://localhost:${METRO_PORT}/manifest`, {
+    const response = await fetch(`http://localhost:${metroPort}/manifest`, {
       headers: { "expo-platform": platform },
       signal: controller.signal,
     });
@@ -375,7 +423,7 @@ function extractAssets(timestamp) {
       const originalPath = match[1];
       const filename = match[3] + "." + match[4];
 
-      const tempUrl = new URL(`http://localhost:${METRO_PORT}${originalPath}`);
+      const tempUrl = new URL(`http://localhost:${metroPort}${originalPath}`);
       const unstablePath = tempUrl.searchParams.get("unstable_path");
 
       if (!unstablePath) {
@@ -417,7 +465,7 @@ async function downloadAssets(assets, timestamp) {
   const failures = [];
 
   const downloadPromises = assets.map(async (asset) => {
-    const tempUrl = new URL(`http://localhost:${METRO_PORT}${asset.originalPath}`);
+    const tempUrl = new URL(`http://localhost:${metroPort}${asset.originalPath}`);
     const unstablePath = tempUrl.searchParams.get("unstable_path");
 
     if (!unstablePath) {
@@ -490,7 +538,7 @@ function updateBundleUrls(timestamp, baseUrl) {
     bundle = bundle.replace(
       /httpServerLocation:"(\/[^"]+)"/g,
       (_match, capturedPath) => {
-        const tempUrl = new URL(`http://localhost:${METRO_PORT}${capturedPath}`);
+        const tempUrl = new URL(`http://localhost:${metroPort}${capturedPath}`);
         const unstablePath = tempUrl.searchParams.get("unstable_path");
 
         if (!unstablePath) {
@@ -615,10 +663,16 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   console.error("Build failed:", error.message);
   if (metroProcess) {
     metroProcess.kill();
   }
   process.exit(1);
 });
+
+module.exports = {
+  DEFAULT_METRO_PORT,
+  getBundleConfigurationPresence,
+  selectOwnedMetroPort,
+};

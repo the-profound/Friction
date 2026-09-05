@@ -82,7 +82,7 @@ describe("on-01a editor hydration and initialization", () => {
     expect(toolbar).toContain('testID="memo-toolbar-dismiss-keyboard"');
     expect(toolbar).not.toContain("keyboardOnlyCapsule");
     expect(toolbar).not.toContain("keyboardOnlyBtn");
-    expect(screen).not.toContain("thought?.createdFrom");
+    expect(toolbar).not.toContain("thought?.createdFrom");
   });
 
   it("keeps the complete toolbar and inline menus for other thoughts and dividing", () => {

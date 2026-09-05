@@ -18,7 +18,7 @@
     "check:dev-bundle": "node scripts/validate-dev-font-bundle.mjs",
     "validate:release": "node scripts/validate-release-env.mjs",
     "validate:resolved-release": "node scripts/validate-resolved-release-config.mjs",
-    "test:release-publication-guards": "bash scripts/test-release-publication-guards.sh",
+    "test:release-publication-guards": "bash scripts/test-release-publication-guards.sh && node scripts/test-build-metro-isolation.js",
     "eas-build-post-install": "node scripts/validate-release-env.mjs && node scripts/validate-resolved-release-config.mjs",
     "eas-build-on-success": "node scripts/validate-eas-bundle.mjs && node scripts/validate-resolved-release-config.mjs"
   },
