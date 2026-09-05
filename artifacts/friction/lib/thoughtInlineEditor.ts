@@ -23,6 +23,19 @@ export interface KeyedSingleFlight<TResult> {
 }
 
 /**
+ * 저장 작업이 최신 편집 스냅샷을 동기적으로 캡처하게 한 뒤, 그 Promise를 기다리지
+ * 않고 같은 호출 스택에서 닫기 피드백을 시작한다.
+ */
+export function startImmediateClose(
+  saveSnapshot: () => Promise<boolean>,
+  startClose: () => void,
+): Promise<boolean> {
+  const save = saveSnapshot();
+  startClose();
+  return save;
+}
+
+/**
  * 같은 편집 키의 중복 요청만 한 물리 요청을 공유한다. 다른 키는 앞 요청이 끝난 뒤
  * 자신의 operation을 실행해, 오래된 저장 성공을 새 편집의 성공으로 오인하지 않는다.
  */

@@ -9,10 +9,26 @@ import {
   mergeReadingThoughtsById,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  startImmediateClose,
   type OptimisticReadingThought,
 } from "../thoughtInlineEditor";
 
 describe("inline reading thought lifecycle", () => {
+  it("starts closing immediately without waiting for the save result", async () => {
+    let resolveSave!: (value: boolean) => void;
+    const events: string[] = [];
+    const save = () => {
+      events.push("snapshot");
+      return new Promise<boolean>((resolve) => { resolveSave = resolve; });
+    };
+
+    const pending = startImmediateClose(save, () => { events.push("close"); });
+
+    expect(events).toEqual(["snapshot", "close"]);
+    resolveSave(true);
+    await expect(pending).resolves.toBe(true);
+  });
+
   it("shares one physical save across consecutive close requests", async () => {
     const singleFlight = createKeyedSingleFlight<string>();
     let resolveSave!: (value: string) => void;

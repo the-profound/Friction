@@ -47,6 +47,7 @@ import {
   mergeReadingThoughtsById,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  startImmediateClose,
   type OptimisticReadingThought,
 } from "@/lib/thoughtInlineEditor";
 
@@ -254,8 +255,8 @@ export default function ThoughtsBottomSheet({
   }, [editor?.key]);
   /** 같은 편집 저장을 요청한 닫기/전환은 하나의 물리 요청을 함께 기다린다. */
   const commitSingleFlightRef = useRef(createKeyedSingleFlight<boolean>());
-  /** 연속 닫기 탭이 성공 뒤 close 애니메이션을 여러 번 시작하지 않게 한다. */
-  const closeRequestRef = useRef<Promise<void> | null>(null);
+  /** 연속 닫기 탭이 저장과 close 애니메이션을 여러 번 시작하지 않게 한다. */
+  const closeRequestRef = useRef<Promise<boolean> | null>(null);
   const [optimisticThoughts, setOptimisticThoughts] = useState<OptimisticReadingThought[]>([]);
   const optimisticThoughtsRef = useRef(optimisticThoughts);
   optimisticThoughtsRef.current = optimisticThoughts;
@@ -463,8 +464,6 @@ export default function ThoughtsBottomSheet({
       // finished 가드 대신 토큰을 쓰는 이유: 애니메이션이 취소돼도(finished:false)
       // 정상 close라면 반드시 정리가 실행되어야 하기 때문.
       if (closeToken !== sessionTokenRef.current) return;
-      // 애니메이션 완료 후 일괄 초기화
-      setEditor(null);
       onClose();
     });
   }, [screenHeight, onWillClose, onClose]);
@@ -500,15 +499,19 @@ export default function ThoughtsBottomSheet({
       // (close 애니메이션 도중 FAB/롱프레스로 재오픈하는 경로)
       sessionTokenRef.current += 1;
       closeRequestRef.current = null;
-      // 새 시트 세션 시작 — 이전 편집·스와이프 상태를 모두 초기화
-      resetTransientState();
-      setEditor({
-        key: createClientId(),
-        text: pendingQuote ?? "",
-        initialText: "",
-        requestGeneration: 1,
-        pending: false,
-      });
+      // 닫힌 뒤 백그라운드 저장이 아직 진행 중이거나 실패했다면 같은 스냅샷을
+      // 복원한다. 성공/빈 입력으로 정리된 경우에만 새 편집기를 만든다.
+      const recoverableEditor = editorRef.current;
+      if (!recoverableEditor?.pending && !recoverableEditor?.error) {
+        resetTransientState();
+        setEditor({
+          key: createClientId(),
+          text: pendingQuote ?? "",
+          initialText: "",
+          requestGeneration: 1,
+          pending: false,
+        });
+      }
       // 시트는 defaultPanelHeight(50% = mid) 높이로 열린다 → snapStage = "mid"
       // "full"로 설정하면 키보드 열릴 때 65% 분기가 동작하지 않음
       snapStageRef.current = "mid";
@@ -865,20 +868,10 @@ export default function ThoughtsBottomSheet({
   }, [scrollEditorBottomIntoView]);
 
   // 모든 닫기 경로(배경 탭, 핸들 드래그, 외부 ref)는 동일한 저장 수명주기를 거친다.
-  // 실패하면 시트를 닫지 않아 입력과 재시도 안내가 그대로 남는다.
+  // 최신 스냅샷 저장을 시작한 직후 결과를 기다리지 않고 닫기 애니메이션을 시작한다.
   doCloseRef.current = () => {
     if (closeRequestRef.current) return;
-    const closeSession = sessionTokenRef.current;
-    let closeRequest!: Promise<void>;
-    closeRequest = (async () => {
-      const committed = await commitEditor();
-      if (committed && closeSession === sessionTokenRef.current) {
-        // 성공 뒤에는 close 애니메이션이 끝날 때까지 잠금을 유지한다.
-        doClose();
-      } else if (closeRequestRef.current === closeRequest) {
-        closeRequestRef.current = null;
-      }
-    })();
+    const closeRequest = startImmediateClose(commitEditor, doClose);
     closeRequestRef.current = closeRequest;
   };
 
