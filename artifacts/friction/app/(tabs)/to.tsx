@@ -572,7 +572,10 @@ const styles = StyleSheet.create({
   },
   settingsButton: {
     position: "absolute",
-    top: 0,
+    // Matches archive.tsx's filterRow marginTop (4px) below the shared
+    // PageHeader, so the top-right button sits at the same vertical
+    // position on both tabs. See task #1980.
+    top: 4,
     right: 0,
   },
   avatar: {
