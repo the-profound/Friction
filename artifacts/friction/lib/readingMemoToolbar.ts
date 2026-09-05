@@ -41,14 +41,16 @@ export function reduceEditorKeyboardState(
 
 export type MemoToolbarRenderContract = {
   visible: boolean;
-  mode: "full" | "keyboardOnly";
+  mode: "full" | "restricted";
   placement: "keyboardAvoidingFlow" | "floating";
 };
+
+export type MemoEditorContext = "readingMemo" | "record";
 
 export function resolveMemoToolbarRenderContract(input: {
   platform: string;
   isNavigating: boolean;
-  isReadingMemo: boolean;
+  editorContext?: MemoEditorContext;
   selectionIsHorizontalRule: boolean;
   keyboard: EditorKeyboardState;
   inlineMenuOpen: boolean;
@@ -57,7 +59,7 @@ export function resolveMemoToolbarRenderContract(input: {
   const {
     platform,
     isNavigating,
-    isReadingMemo,
+    editorContext,
     selectionIsHorizontalRule,
     keyboard,
     inlineMenuOpen,
@@ -65,12 +67,12 @@ export function resolveMemoToolbarRenderContract(input: {
   } = input;
   const nativeScreenAvailable = platform !== "web" && !isNavigating;
 
-  if (isReadingMemo) {
+  if (editorContext === "readingMemo") {
     return {
       visible:
         nativeScreenAvailable &&
         (keyboard.nativeKeyboardVisible || keyboard.editorFocused),
-      mode: "keyboardOnly",
+      mode: "restricted",
       placement: "keyboardAvoidingFlow",
     };
   }

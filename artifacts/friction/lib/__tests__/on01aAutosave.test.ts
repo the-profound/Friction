@@ -25,6 +25,8 @@ import {
 
 const appRoot = join(__dirname, "../..");
 const readScreen = () => readFileSync(join(appRoot, "app/on-01a.tsx"), "utf8");
+const readRecordScreen = () =>
+  readFileSync(join(appRoot, "app/(tabs)/on.tsx"), "utf8");
 const readAutoSave = () => readFileSync(join(appRoot, "lib/useAutoSave.ts"), "utf8");
 const readEditorSource = () =>
   readFileSync(
@@ -48,7 +50,7 @@ const readEditorTypes = () =>
   );
 
 describe("on-01a editor hydration and initialization", () => {
-  it("renders loaded reading memos in keyboard-avoiding flow with only dismiss", () => {
+  it("uses route context for the full-width restricted reading toolbar", () => {
     const screen = readScreen();
     const toolbar = readFileSync(
       join(appRoot, "components/MemoToolbar/MemoToolbar.tsx"),
@@ -56,7 +58,7 @@ describe("on-01a editor hydration and initialization", () => {
     );
 
     expect(screen).toContain(
-      'const isReadingMemo = isThoughtMode && thought?.createdFrom === "reading";',
+      'const isReadingMemoContext = isThoughtMode && editorContext === "readingMemo";',
     );
     expect(screen.indexOf("if ((!isLocalDirectDraft && !id) || dataLoading)")).toBeLessThan(
       screen.indexOf("<MemoToolbar"),
@@ -65,19 +67,22 @@ describe("on-01a editor hydration and initialization", () => {
     expect(screen).toContain('toolbarContract.placement === "keyboardAvoidingFlow"');
     expect(screen).toContain('toolbarContract.placement === "floating"');
     expect(screen).toContain(
-      '!isNavigating && !isReadingMemo && inlineMenuMode === "addMenu"',
+       '!isNavigating && !isReadingMemoContext && inlineMenuMode === "addMenu"',
     );
     expect(screen).toContain(
-      '!isNavigating && !isReadingMemo && inlineMenuMode !== null && inlineMenuMode !== "addMenu"',
+       '!isNavigating && !isReadingMemoContext && inlineMenuMode !== null && inlineMenuMode !== "addMenu"',
     );
 
-    expect(toolbar).toContain('export type MemoToolbarMode = "full" | "keyboardOnly";');
-    expect(toolbar).toContain("{!keyboardOnly && (");
-    expect(toolbar).toContain("{!keyboardOnly && <View style={styles.keyboardSeparator} />}");
+    expect(toolbar).toContain('export type MemoToolbarMode = "full" | "restricted";');
+    expect(toolbar).toContain("scrollEnabled={!restricted && aaActive}");
+    expect(toolbar).toContain("disabled={restricted}");
+    expect(toolbar).toContain("accessibilityState={restricted ? disabledState : undefined}");
+    expect(toolbar).toContain("<View style={styles.keyboardSeparator} />");
     expect(toolbar).toContain('accessibilityLabel="키보드 내리기"');
     expect(toolbar).toContain('testID="memo-toolbar-dismiss-keyboard"');
-    expect(toolbar).toContain("width: 44");
-    expect(toolbar).toContain("height: 44");
+    expect(toolbar).not.toContain("keyboardOnlyCapsule");
+    expect(toolbar).not.toContain("keyboardOnlyBtn");
+    expect(screen).not.toContain("thought?.createdFrom");
   });
 
   it("keeps the complete toolbar and inline menus for other thoughts and dividing", () => {
@@ -93,6 +98,14 @@ describe("on-01a editor hydration and initialization", () => {
     expect(toolbar).toContain("onInsertDivider");
     expect(toolbar).toContain("onShiftEnter");
     expect(screen).toContain("mode={toolbarContract.mode}");
+  });
+
+  it("opens record thoughts with the full editor toolbar regardless of creation source", () => {
+    const recordScreen = readRecordScreen();
+
+    expect(recordScreen).toContain(
+      'params: { id: record.thought.id, editorContext: "record" }',
+    );
   });
 
   it("ignores only the export caused by unchanged server hydration", () => {
@@ -142,14 +155,14 @@ describe("on-01a editor hydration and initialization", () => {
     expect(resolveMemoToolbarRenderContract({
       platform: "ios",
       isNavigating: false,
-      isReadingMemo: true,
+      editorContext: "readingMemo",
       selectionIsHorizontalRule: true,
       keyboard: focused,
       inlineMenuOpen: false,
       keyboardRestorePending: false,
     })).toEqual({
       visible: true,
-      mode: "keyboardOnly",
+      mode: "restricted",
       placement: "keyboardAvoidingFlow",
     });
 
@@ -164,7 +177,7 @@ describe("on-01a editor hydration and initialization", () => {
     expect(resolveMemoToolbarRenderContract({
       platform: "android",
       isNavigating: false,
-      isReadingMemo: true,
+      editorContext: "readingMemo",
       selectionIsHorizontalRule: false,
       keyboard: transientBlur,
       inlineMenuOpen: false,
@@ -178,7 +191,7 @@ describe("on-01a editor hydration and initialization", () => {
     expect(resolveMemoToolbarRenderContract({
       platform: "android",
       isNavigating: false,
-      isReadingMemo: true,
+      editorContext: "readingMemo",
       selectionIsHorizontalRule: false,
       keyboard: hidden,
       inlineMenuOpen: false,
@@ -194,7 +207,7 @@ describe("on-01a editor hydration and initialization", () => {
     expect(resolveMemoToolbarRenderContract({
       platform: "ios",
       isNavigating: false,
-      isReadingMemo: false,
+      editorContext: "record",
       selectionIsHorizontalRule: false,
       keyboard: shown,
       inlineMenuOpen: false,

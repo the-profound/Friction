@@ -200,10 +200,11 @@ export default function WritingScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const queryClient = useQueryClient();
-  const { id, source, mode: modeParam, returnPage, returnBlock, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
+  const { id, source, mode: modeParam, editorContext, returnPage, returnBlock, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
     id?: string;
     source?: string;
     mode?: string;
+    editorContext?: "readingMemo" | "record";
     returnPage?: string;
     returnBlock?: string;
     spaceId?: string;
@@ -289,7 +290,7 @@ export default function WritingScreen() {
   isThoughtModeRef.current = isThoughtMode;
 
   const dataLoading = !!id && !isLocalDirectDraft && detailResolution.kind === "loading";
-  const isReadingMemo = isThoughtMode && thought?.createdFrom === "reading";
+  const isReadingMemoContext = isThoughtMode && editorContext === "readingMemo";
 
   // A question-queue thought is created with status PRELIMINARY and only the
   // POST /thoughts/:id/activate route ever moves it to NORMAL; nothing else
@@ -399,11 +400,11 @@ export default function WritingScreen() {
   }, [keyboardRestorePending]);
 
   useEffect(() => {
-    if (!isReadingMemo) return;
+    if (!isReadingMemoContext) return;
     addMenuPendingRef.current = false;
     setInlineMenuMode(null);
     setKeyboardRestorePending(false);
-  }, [isReadingMemo]);
+  }, [isReadingMemoContext]);
 
   // 인라인 메뉴 패널 높이: 키보드가 한 번이라도 올라왔으면 그 높이를,
   // 아직 키보드 이벤트가 없었으면 화면의 40%로 폴백한다.
@@ -2915,7 +2916,7 @@ export default function WritingScreen() {
   const toolbarContract = resolveMemoToolbarRenderContract({
     platform: Platform.OS,
     isNavigating,
-    isReadingMemo: !!isReadingMemo,
+    editorContext: isReadingMemoContext ? "readingMemo" : "record",
     selectionIsHorizontalRule: selectionState.activeBlock === "horizontalRule",
     keyboard: editorKeyboardState,
     inlineMenuOpen: inlineMenuMode !== null,
@@ -3027,7 +3028,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── [+] 팝업 메뉴 (addMenu) ── */}
-        {!isNavigating && !isReadingMemo && inlineMenuMode === "addMenu" && (
+        {!isNavigating && !isReadingMemoContext && inlineMenuMode === "addMenu" && (
           <AddMenuPopup
             keyboardHeight={keyboardHeight}
             plusBtnCenterX={plusBtnCenterX}
@@ -3037,7 +3038,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── 인라인 메뉴 패널 (본문/문장수집 인용) ── */}
-        {!isNavigating && !isReadingMemo && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
+        {!isNavigating && !isReadingMemoContext && inlineMenuMode !== null && inlineMenuMode !== "addMenu" && (
           <InlineMenuPanel
             mode={inlineMenuMode}
             panelHeight={inlinePanelHeight}

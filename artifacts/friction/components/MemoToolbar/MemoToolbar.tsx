@@ -13,7 +13,7 @@ import type { OnSelectionUpdatePayload } from "@/components/WebViewMarkdownEdito
 import type { InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 
 export type FormatType = "bold" | "italic" | "underline" | "quote";
-export type MemoToolbarMode = "full" | "keyboardOnly";
+export type MemoToolbarMode = "full" | "restricted";
 
 const BLOCK_LABELS: Record<string, string> = {
   paragraph: "본문",
@@ -130,17 +130,17 @@ export default function MemoToolbar({
   const isQuoteActive =
     selectionState.activeBlock === "blockquote" || activeFormats?.has("quote");
   const blockLabel = BLOCK_LABELS[selectionState.activeBlock] ?? "본문";
-  const keyboardOnly = mode === "keyboardOnly";
+  const restricted = mode === "restricted";
+  const disabledState = { disabled: true };
 
   return (
     <View style={styles.outerWrap}>
-      <View style={[styles.capsule, keyboardOnly && styles.keyboardOnlyCapsule]}>
+      <View style={styles.capsule}>
         {/* ── 스크롤 가능한 버튼 영역 ── */}
-        {!keyboardOnly && (
           <ScrollView
             ref={scrollViewRef}
             horizontal
-            scrollEnabled={aaActive}
+            scrollEnabled={!restricted && aaActive}
             showsHorizontalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
@@ -150,8 +150,12 @@ export default function MemoToolbar({
           {/* 블록 타입 */}
           <ScalePressable
             style={styles.blockTypeBtn}
-            contentStyle={[styles.btnContent, inlineMenuMode === "blockType" && styles.btnActive]}
-            onPress={onFormatPress}
+            contentStyle={[styles.btnContent, restricted && styles.disabledAction, !restricted && inlineMenuMode === "blockType" && styles.btnActive]}
+            onPress={restricted ? undefined : onFormatPress}
+            disabled={restricted}
+            accessibilityRole="button"
+            accessibilityLabel="문단 형식"
+            accessibilityState={restricted ? disabledState : undefined}
             hitSlop={6}
           >
             <Text
@@ -165,8 +169,12 @@ export default function MemoToolbar({
           {/* Aa */}
           <ScalePressable
             style={btn}
-            contentStyle={[styles.btnContent, aaActive && styles.btnActive]}
-            onPress={() => setAaActive((v) => !v)}
+            contentStyle={[styles.btnContent, restricted && styles.disabledAction, !restricted && aaActive && styles.btnActive]}
+            onPress={restricted ? undefined : () => setAaActive((v) => !v)}
+            disabled={restricted}
+            accessibilityRole="button"
+            accessibilityLabel="글자 서식"
+            accessibilityState={restricted ? disabledState : undefined}
             hitSlop={6}
           >
             <Text style={[styles.aaLabel, aaActive && styles.aaLabelActive]}>Aa</Text>
@@ -176,8 +184,12 @@ export default function MemoToolbar({
           <Animated.View style={[styles.expandedGroup, expandedStyle]}>
             <ScalePressable
               style={styles.expandBtn}
-              contentStyle={styles.btnContent}
-              onPress={() => onFormat?.("bold")}
+              contentStyle={[styles.btnContent, restricted && styles.disabledAction]}
+              onPress={restricted ? undefined : () => onFormat?.("bold")}
+              disabled={restricted}
+              accessibilityRole="button"
+              accessibilityLabel="굵게"
+              accessibilityState={restricted ? disabledState : undefined}
               hitSlop={6}
             >
               <View style={[styles.fmtCircle, isBoldActive && styles.fmtCircleActive]}>
@@ -187,8 +199,12 @@ export default function MemoToolbar({
 
             <ScalePressable
               style={styles.expandBtn}
-              contentStyle={styles.btnContent}
-              onPress={() => onFormat?.("italic")}
+              contentStyle={[styles.btnContent, restricted && styles.disabledAction]}
+              onPress={restricted ? undefined : () => onFormat?.("italic")}
+              disabled={restricted}
+              accessibilityRole="button"
+              accessibilityLabel="기울임"
+              accessibilityState={restricted ? disabledState : undefined}
               hitSlop={6}
             >
               <View style={[styles.fmtCircle, isItalicActive && styles.fmtCircleActive]}>
@@ -202,8 +218,12 @@ export default function MemoToolbar({
 
             <ScalePressable
               style={styles.expandBtn}
-              contentStyle={styles.btnContent}
-              onPress={() => onFormat?.("underline")}
+              contentStyle={[styles.btnContent, restricted && styles.disabledAction]}
+              onPress={restricted ? undefined : () => onFormat?.("underline")}
+              disabled={restricted}
+              accessibilityRole="button"
+              accessibilityLabel="밑줄"
+              accessibilityState={restricted ? disabledState : undefined}
               hitSlop={6}
             >
               <View style={[styles.fmtCircle, isUnderlineActive && styles.fmtCircleActive]}>
@@ -214,8 +234,12 @@ export default function MemoToolbar({
             {/* 인용 — 마지막 버튼은 marginRight 없음 (trailing padding으로 대체) */}
             <ScalePressable
               style={styles.expandBtnLast}
-              contentStyle={styles.btnContent}
-              onPress={() => onFormat?.("quote")}
+              contentStyle={[styles.btnContent, restricted && styles.disabledAction]}
+              onPress={restricted ? undefined : () => onFormat?.("quote")}
+              disabled={restricted}
+              accessibilityRole="button"
+              accessibilityLabel="인용"
+              accessibilityState={restricted ? disabledState : undefined}
               hitSlop={6}
             >
               <View style={[styles.fmtCircle, isQuoteActive && styles.fmtCircleActive]}>
@@ -232,8 +256,12 @@ export default function MemoToolbar({
           <View ref={addMenuBtnRef} collapsable={false}>
             <ScalePressable
               style={btn}
-              contentStyle={[styles.btnContent, inlineMenuMode === "addMenu" && styles.btnActive]}
-              onPress={onOpenAddMenu}
+              contentStyle={[styles.btnContent, restricted && styles.disabledAction, !restricted && inlineMenuMode === "addMenu" && styles.btnActive]}
+              onPress={restricted ? undefined : onOpenAddMenu}
+              disabled={restricted}
+              accessibilityRole="button"
+              accessibilityLabel="추가"
+              accessibilityState={restricted ? disabledState : undefined}
               hitSlop={6}
             >
               <Feather
@@ -247,29 +275,41 @@ export default function MemoToolbar({
           {/* undo */}
           <ScalePressable
             style={btn}
-            contentStyle={styles.btnContent}
-            onPress={canUndo ? onUndo : undefined}
+            contentStyle={[styles.btnContent, (restricted || !canUndo) && styles.disabledAction]}
+            onPress={!restricted && canUndo ? onUndo : undefined}
+            disabled={restricted || !canUndo}
+            accessibilityRole="button"
+            accessibilityLabel="실행 취소"
+            accessibilityState={{ disabled: restricted || !canUndo }}
             hitSlop={6}
           >
-            <MaterialCommunityIcons name="undo" size={18} color={canUndo ? "#3f3f46" : "#d4d4d8"} />
+            <MaterialCommunityIcons name="undo" size={18} color={!restricted && canUndo ? "#3f3f46" : "#d4d4d8"} />
           </ScalePressable>
 
           {/* redo */}
           <ScalePressable
             style={btn}
-            contentStyle={styles.btnContent}
-            onPress={canRedo ? onRedo : undefined}
+            contentStyle={[styles.btnContent, (restricted || !canRedo) && styles.disabledAction]}
+            onPress={!restricted && canRedo ? onRedo : undefined}
+            disabled={restricted || !canRedo}
+            accessibilityRole="button"
+            accessibilityLabel="다시 실행"
+            accessibilityState={{ disabled: restricted || !canRedo }}
             hitSlop={6}
           >
-            <MaterialCommunityIcons name="redo" size={18} color={canRedo ? "#3f3f46" : "#d4d4d8"} />
+            <MaterialCommunityIcons name="redo" size={18} color={!restricted && canRedo ? "#3f3f46" : "#d4d4d8"} />
           </ScalePressable>
 
           {/* scissors */}
           {onInsertDivider != null && (
             <ScalePressable
               style={btn}
-              contentStyle={styles.btnContent}
-              onPress={onInsertDivider}
+              contentStyle={[styles.btnContent, restricted && styles.disabledAction]}
+              onPress={restricted ? undefined : onInsertDivider}
+              disabled={restricted}
+              accessibilityRole="button"
+              accessibilityLabel="나누기"
+              accessibilityState={restricted ? disabledState : undefined}
               hitSlop={6}
             >
               <Feather name="scissors" size={15} color="#3f3f46" />
@@ -280,29 +320,24 @@ export default function MemoToolbar({
           {onShiftEnter != null && (
             <ScalePressable
               style={{ width: btnW, height: 36 }}
-              contentStyle={styles.btnContent}
-              onPress={onShiftEnter}
+              contentStyle={[styles.btnContent, restricted && styles.disabledAction]}
+              onPress={restricted ? undefined : onShiftEnter}
+              disabled={restricted}
+              accessibilityRole="button"
+              accessibilityLabel="줄바꿈"
+              accessibilityState={restricted ? disabledState : undefined}
               hitSlop={6}
             >
               <Feather name="corner-down-left" size={15} color="#3f3f46" />
             </ScalePressable>
           )}
           </ScrollView>
-        )}
 
         {/* ── 구분선 + 키보드 해제 버튼 ── */}
-        {!keyboardOnly && <View style={styles.keyboardSeparator} />}
+        <View style={styles.keyboardSeparator} />
         <ScalePressable
-          style={[
-            styles.keyboardBtn,
-            keyboardOnly && styles.keyboardOnlyBtn,
-            keyboardOnly && styles.keyboardOnlySizeGuard,
-          ]}
-          contentStyle={[
-            styles.btnContent,
-            keyboardOnly && styles.keyboardOnlyBtnContent,
-            keyboardOnly && styles.keyboardOnlySizeGuard,
-          ]}
+          style={styles.keyboardBtn}
+          contentStyle={styles.btnContent}
           onPress={onDismissKeyboard}
           hitSlop={8}
           accessibilityRole="button"
@@ -340,11 +375,6 @@ const styles = StyleSheet.create({
       },
       android: { elevation: 6 },
     }),
-  },
-  keyboardOnlyCapsule: {
-    alignSelf: "flex-end",
-    paddingLeft: 4,
-    paddingRight: 4,
   },
   scrollArea: {
     flex: 1,
@@ -398,28 +428,15 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
   },
-  keyboardOnlyBtn: {
-    width: 44,
-    height: 44,
-  },
-  keyboardOnlyBtnContent: {
-    width: 44,
-    height: 44,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  keyboardOnlySizeGuard: {
-    width: 44,
-    height: 44,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
   btnContent: {
     width: "100%",
     height: "100%",
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+  },
+  disabledAction: {
+    opacity: 0.35,
   },
   // Aa / 본문 / + 버튼 활성화 — 빨간 채움
   btnActive: {

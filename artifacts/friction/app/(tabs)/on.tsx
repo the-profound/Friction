@@ -800,7 +800,10 @@ export default function OnScreen() {
 
   const openRecord = useCallback((record: UnifiedRecord) => {
     if (record.kind === "thought") {
-      router.push({ pathname: "/on-01a", params: { id: record.thought.id } });
+      router.push({
+        pathname: "/on-01a",
+        params: { id: record.thought.id, editorContext: "record" },
+      });
     } else if (record.kind === "editing") {
       router.push({ pathname: getScreenForStatus(record.article.status as ArticleStatus), params: { id: record.article.id } });
     } else {
