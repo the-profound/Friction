@@ -7,6 +7,74 @@ const archiveScreen = readFileSync(join(appRoot, "app/(tabs)/archive.tsx"), "utf
 
 const sentenceCard = readFileSync(join(appRoot, "components/StoredSentenceCard.tsx"), "utf8");
 
+describe("archive collection recent-letter previews", () => {
+  it("sorts collection entries by added time and limits previews to three", () => {
+    expect(archiveScreen).toContain("sortRecentCollectionArticles");
+    expect(archiveScreen).toContain(
+      "new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()",
+    );
+    expect(archiveScreen).toContain(".slice(0, COLLECTION_PREVIEW_LIMIT)");
+    expect(archiveScreen).toContain("const COLLECTION_PREVIEW_LIMIT = 3");
+  });
+
+  it("uses the shared canonical cover card and the space-card three-column sizing", () => {
+    expect(archiveScreen).toContain("<CollectionPreviewCards");
+    expect(archiveScreen).toContain("<ArticleCardItem");
+    expect(archiveScreen).toContain('title={entry.article?.title ?? "제목 없음"}');
+    expect(archiveScreen).toContain("cover={entry.article?.cover}");
+    expect(archiveScreen).toContain(
+      "const coverWidth = Math.floor((availableWidth - 16) / 3);",
+    );
+    expect(archiveScreen).not.toContain("Math.min(\n    90,");
+    expect(archiveScreen).toContain("coverWidth * Sizing.cardRatio");
+    expect(archiveScreen).toContain(
+      "const coverRadius = 16 * (coverWidth / Sizing.cardSlotW);",
+    );
+    expect(archiveScreen).toContain("cardWidth={coverWidth}");
+    expect(archiveScreen).toContain("cardRadius={coverRadius}");
+    expect(archiveScreen).not.toContain("<CanonicalCardSlot");
+    const previewStyle = archiveScreen.slice(
+      archiveScreen.indexOf("collectionPreviews:"),
+      archiveScreen.indexOf("cardSpacer:", archiveScreen.indexOf("collectionPreviews:")),
+    );
+    expect(previewStyle).toContain('justifyContent: "flex-start"');
+    expect(previewStyle).not.toContain('justifyContent: "center"');
+  });
+
+  it("omits empty preview rows and keeps the collection card as the only action", () => {
+    expect(archiveScreen).toContain("if (articles.length === 0) return null");
+    expect(archiveScreen).toContain('pointerEvents="none"');
+    expect(archiveScreen).toContain("disabled");
+    expect(archiveScreen).toContain('pathname: "/of-01-detail"');
+    expect(archiveScreen).not.toContain("onPreviewPress");
+  });
+
+  it("rerenders after asynchronous queries and refreshes previews on focus and pull", () => {
+    expect(archiveScreen).toContain("useQueries");
+    expect(archiveScreen).toContain("getListMyCollectionArticlesQueryOptions");
+    expect(archiveScreen).toContain("refetchOnMount: false");
+    expect(archiveScreen).toContain("refetchOnWindowFocus: false");
+    expect(archiveScreen).toContain("recentArticlesByCollectionId");
+    expect(archiveScreen).toContain("extraData={recentArticlesByCollectionId}");
+    expect(archiveScreen).toContain(
+      "...collectionArticleQueries.map((query) => query.refetch())",
+    );
+    expect(archiveScreen).toContain("for (const queryKey of collectionArticleQueryKeys)");
+    expect(archiveScreen).toContain(
+      "void queryClient.refetchQueries({ queryKey, exact: true })",
+    );
+  });
+
+  it("lets collection cards grow around previews without fixed heights or filler slots", () => {
+    const cardStyles = archiveScreen.slice(
+      archiveScreen.indexOf("cardWrapper:"),
+      archiveScreen.indexOf("listContent:", archiveScreen.indexOf("cardWrapper:")),
+    );
+    expect(cardStyles).not.toContain("\n    height:");
+    expect(archiveScreen).not.toContain("collection-preview-filler");
+  });
+});
+
 describe("archive collected sentence list", () => {
   const sentenceFilterAction = archiveScreen.slice(
     archiveScreen.indexOf('{activeSubTab === "personal" ? ('),

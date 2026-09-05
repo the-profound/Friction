@@ -28,6 +28,8 @@ interface ArticleCardItemProps {
   isRead?: boolean;
   isActive?: boolean;
   cardWidth?: number;
+  /** Optional radius override for compact previews that render at native size. */
+  cardRadius?: number;
   letterTypeBadge?: string | null;
   date?: string | null;
   /** When 'RECIPIENT_ONLY', the cover shows a 👥 badge. No badge for 'PUBLIC' or when omitted. */
@@ -107,6 +109,7 @@ function ArticleCardItem({
   isRead = false,
   isActive = true,
   cardWidth,
+  cardRadius,
   letterTypeBadge,
   date,
   visibility,
@@ -117,7 +120,7 @@ function ArticleCardItem({
   const w = cardWidth ?? CARD_W;
   const h = w * Sizing.cardRatio;
   const scale = w / CARD_W;
-  const borderRadius = Math.max(8, Math.round(16 * scale));
+  const borderRadius = cardRadius ?? Math.max(8, Math.round(16 * scale));
 
   return (
     <ScalePressable

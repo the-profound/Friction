@@ -35,20 +35,29 @@ import {
   useCreateMyCollection,
   useDeleteStoredSentence,
   getListMyCollectionsQueryKey,
+  getListMyCollectionArticlesQueryKey,
+  getListMyCollectionArticlesQueryOptions,
   getListStoredSentencesQueryKey,
 } from "@workspace/api-client-react";
-import type { MyCollection, StoredSentence } from "@workspace/api-client-react";
+import type {
+  MyCollection,
+  MyCollectionArticleWithDetails,
+  StoredSentence,
+} from "@workspace/api-client-react";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import { isQueryStale } from "@/lib/useScreenFocused";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import StoredSentenceCard from "@/components/StoredSentenceCard";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 
 type ArchiveSubTab = "personal" | "sentence";
 const FILTER_BUTTON_HEIGHT = 36;
 const SENTENCE_BADGE_OVERFLOW = 12;
+
+const COLLECTION_PREVIEW_LIMIT = 3;
 export default function ArchiveScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -98,6 +107,38 @@ export default function ArchiveScreen() {
   const regularCollections = useMemo(() => {
     return sortedMyCollections.filter((c) => !c.isImpression);
   }, [sortedMyCollections]);
+
+  const collectionArticleQueryKeys = useMemo(
+    () =>
+      sortedMyCollections.map((collection) =>
+        getListMyCollectionArticlesQueryKey(collection.id),
+      ),
+    [sortedMyCollections],
+  );
+  const collectionArticleQueries = useQueries({
+    queries: sortedMyCollections.map((collection) =>
+      getListMyCollectionArticlesQueryOptions(collection.id, {
+        query: {
+          staleTime: 30_000,
+          refetchOnMount: false,
+          refetchOnWindowFocus: false,
+        },
+      }),
+    ),
+  });
+  const recentArticlesByCollectionId = useMemo(
+    () =>
+      new Map(
+        sortedMyCollections.map((collection, index) => [
+          collection.id,
+          sortRecentCollectionArticles(
+            (collectionArticleQueries[index]?.data ??
+              []) as MyCollectionArticleWithDetails[],
+          ),
+        ]),
+      ),
+    [sortedMyCollections, collectionArticleQueries],
+  );
 
   const cardWidth = Math.floor(windowWidth - Spacing.screenPx * 2);
   const sentenceTextSize = readerFontSize(
@@ -224,12 +265,23 @@ export default function ArchiveScreen() {
   const handleRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
     try {
-      if (activeSubTab === "personal") await myCollectionsQuery.refetch();
-      else await sentencesQuery.refetch();
+      if (activeSubTab === "personal") {
+        await Promise.all([
+          myCollectionsQuery.refetch(),
+          ...collectionArticleQueries.map((query) => query.refetch()),
+        ]);
+      } else {
+        await sentencesQuery.refetch();
+      }
     } finally {
       setIsManualRefreshing(false);
     }
-  }, [activeSubTab, myCollectionsQuery, sentencesQuery]);
+  }, [
+    activeSubTab,
+    myCollectionsQuery,
+    collectionArticleQueries,
+    sentencesQuery,
+  ]);
 
   const refetchPersonal = myCollectionsQuery.refetch;
   const refetchSentences = sentencesQuery.refetch;
@@ -241,7 +293,18 @@ export default function ArchiveScreen() {
       if (isQueryStale(queryClient, getListStoredSentencesQueryKey({ userId }))) {
         refetchSentences();
       }
-    }, [refetchPersonal, refetchSentences, queryClient, userId]),
+      for (const queryKey of collectionArticleQueryKeys) {
+        if (isQueryStale(queryClient, queryKey)) {
+          void queryClient.refetchQueries({ queryKey, exact: true });
+        }
+      }
+    }, [
+      refetchPersonal,
+      refetchSentences,
+      queryClient,
+      userId,
+      collectionArticleQueryKeys,
+    ]),
   );
 
   const isLoading =
@@ -273,6 +336,10 @@ export default function ArchiveScreen() {
           {item.description ? (
             <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
           ) : null}
+          <CollectionPreviewCards
+            articles={recentArticlesByCollectionId.get(item.id) ?? []}
+            cardWidth={cardWidth}
+          />
           <View style={styles.cardSpacer} />
           <View style={styles.cardMeta}>
             <Text style={styles.cardMetaText} numberOfLines={1}>{item.articleCount ?? 0}편</Text>
@@ -283,7 +350,7 @@ export default function ArchiveScreen() {
         </View>
       </ScalePressable>
     );
-  }, [cardWidth, router]);
+  }, [cardWidth, recentArticlesByCollectionId, router]);
 
   const renderSentenceItem = useCallback(({ item }: { item: StoredSentence }) => (
     <SwipeableRow
@@ -425,6 +492,7 @@ export default function ArchiveScreen() {
           data={regularCollections}
           keyExtractor={(item) => item.id}
           renderItem={renderPersonalItem}
+           extraData={recentArticlesByCollectionId}
           contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
           refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
           showsVerticalScrollIndicator={false}
@@ -444,6 +512,10 @@ export default function ArchiveScreen() {
                       <Text style={styles.cardName} numberOfLines={1}>{impressionCollection.name}</Text>
                     </View>
                   </View>
+                   <CollectionPreviewCards
+                     articles={recentArticlesByCollectionId.get(impressionCollection.id) ?? []}
+                     cardWidth={cardWidth}
+                   />
                   <View style={styles.cardSpacer} />
                   <View style={styles.cardMeta}>
                     <Text style={styles.cardMetaText} numberOfLines={1}>{impressionCollection.articleCount ?? 0}편</Text>
@@ -793,6 +865,13 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 2,
   },
+  collectionPreviews: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 10,
+  },
   cardSpacer: {
     flex: 1,
     minHeight: 8,
@@ -971,3 +1050,50 @@ const styles = StyleSheet.create({
     color: Colors.primaryActionForeground,
   },
 });
+
+function CollectionPreviewCards({
+  articles,
+  cardWidth,
+}: {
+  articles: MyCollectionArticleWithDetails[];
+  cardWidth: number;
+}) {
+  if (articles.length === 0) return null;
+
+  const availableWidth = cardWidth - 32;
+  const coverWidth = Math.floor((availableWidth - 16) / 3);
+  const coverHeight = coverWidth * Sizing.cardRatio;
+  const coverRadius = 16 * (coverWidth / Sizing.cardSlotW);
+
+  return (
+    <View style={styles.collectionPreviews} pointerEvents="none">
+      {articles.map((entry) => (
+        <View
+          key={entry.articleId}
+          style={{ width: coverWidth, height: coverHeight, borderRadius: coverRadius }}
+        >
+          <ArticleCardItem
+            title={entry.article?.title ?? "제목 없음"}
+            cover={entry.article?.cover}
+            cardWidth={coverWidth}
+            cardRadius={coverRadius}
+            disabled
+            onPress={() => {}}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function sortRecentCollectionArticles(
+  articles: MyCollectionArticleWithDetails[],
+): MyCollectionArticleWithDetails[] {
+  return [...articles]
+    .filter((entry) => entry.article)
+    .sort(
+      (a, b) =>
+        new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime(),
+    )
+    .slice(0, COLLECTION_PREVIEW_LIMIT);
+}

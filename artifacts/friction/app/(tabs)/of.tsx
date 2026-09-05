@@ -19,7 +19,6 @@ import { PageHeader } from "@/components/NavBar/PageHeader";
 import HeaderButton from "@/components/shared/HeaderButton";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
-import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/contexts/UserContext";
@@ -392,6 +391,8 @@ export default function SpacesScreen() {
       },
       enabled: !!userId && !authIsLoading,
       staleTime: 30_000,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
     })),
   });
   const recentLettersBySpaceId = useMemo(
@@ -1031,11 +1032,9 @@ function RecentPostCards({
   if (letters.length === 0) return null;
 
   const availableWidth = cardWidth - 32;
-  const coverWidth = Math.min(
-    90,
-    Math.floor((availableWidth - 16) / 3),
-  );
+  const coverWidth = Math.floor((availableWidth - 16) / 3);
   const coverHeight = coverWidth * Sizing.cardRatio;
+  const coverRadius = 16 * (coverWidth / Sizing.cardSlotW);
 
   return (
     <View style={styles.recentPosts}>
@@ -1046,20 +1045,21 @@ function RecentPostCards({
           space.isAnonymous,
         );
         return (
-          <CanonicalCardSlot
+          <View
             key={letter.id}
-            width={coverWidth}
-            height={coverHeight}
+            style={{ width: coverWidth, height: coverHeight, borderRadius: coverRadius }}
           >
             <ArticleCardItem
               title={letter.articleTitle || "제목 없음"}
               authorName={card.authorName}
               spaceName={card.spaceName}
               cover={card.cover}
+              cardWidth={coverWidth}
+              cardRadius={coverRadius}
               disabled
               onPress={() => {}}
             />
-          </CanonicalCardSlot>
+          </View>
         );
       })}
     </View>

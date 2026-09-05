@@ -92,12 +92,18 @@ describe("space list pending sections", () => {
     expect(source).toContain("<RecentPostCards");
     expect(source).toContain("articleTitle || \"제목 없음\"");
     expect(source).toContain("spaceLetterToViewModel");
-    expect(source).toContain("<CanonicalCardSlot");
     expect(source).toContain("<ArticleCardItem");
     expect(source).toContain(
-      "90,\n    Math.floor((availableWidth - 16) / 3)",
+      "const coverWidth = Math.floor((availableWidth - 16) / 3);",
     );
+    expect(source).not.toContain("Math.min(\n    90,");
     expect(source).toContain("coverWidth * Sizing.cardRatio");
+    expect(source).toContain(
+      "const coverRadius = 16 * (coverWidth / Sizing.cardSlotW);",
+    );
+    expect(source).toContain("cardWidth={coverWidth}");
+    expect(source).toContain("cardRadius={coverRadius}");
+    expect(source).not.toContain("<CanonicalCardSlot");
     expect(source).not.toContain("recentPostExcerpt");
     const recentPostsStyle = source.slice(
       source.indexOf("recentPosts:"),
@@ -112,6 +118,8 @@ describe("space list pending sections", () => {
 
     expect(source).toContain("await prepareAuthSession()");
     expect(source).toContain("enabled: !!userId && !authIsLoading");
+    expect(source).toContain("refetchOnMount: false");
+    expect(source).toContain("refetchOnWindowFocus: false");
     expect(source).toContain("{ userId }");
     expect(source).toContain(
       "[router, cardWidth, recentLettersBySpaceId]",
