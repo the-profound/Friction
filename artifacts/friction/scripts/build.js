@@ -92,7 +92,7 @@ function validateBundleConfiguration(timestamp) {
   const expectedValues = [
     process.env.EXPO_PUBLIC_SUPABASE_URL,
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-    `https://${getDeploymentDomain()}`,
+    getDeploymentDomain(),
   ];
 
   for (const platform of ["ios", "android"]) {
