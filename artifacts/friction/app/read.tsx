@@ -52,7 +52,7 @@ import {
 import { bodyTypographyMetrics, computeBodyLayout } from "@/lib/bodyLayout";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
-import type { StoredSentence } from "@workspace/api-client-react";
+import type { StoredSentence, Thought } from "@workspace/api-client-react";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import { resolveArticleCover } from "@/utils/articleCover";
 import CoverPage from "@/components/CoverPage/CoverPage";
@@ -77,8 +77,15 @@ import {
   getGetUserRecentCollectionQueryKey,
   getListInboxQueryKey,
   getListStoredSentencesQueryKey,
+  getListThoughtsQueryKey,
 } from "@workspace/api-client-react";
-import { invalidateInbox, invalidateMyCollections, invalidateRecentCollection } from "@/lib/queryInvalidation";
+import {
+  invalidateInbox,
+  invalidateMyCollections,
+  invalidateRecentCollection,
+  invalidateThoughtLists,
+  upsertThoughtInRecordCaches,
+} from "@/lib/queryInvalidation";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useUser } from "@/contexts/UserContext";
@@ -571,24 +578,44 @@ export default function ReadScreen() {
 
   // 완료 커밋(보관/건너뛰기/재읽기 종료) 직전에 호출된다. 질문 카드에
   // 한 글자 이상 답한 카드가 있으면, 단상으로 저장한다.
+  const answeredQuestionBatchClaimedRef = useRef(false);
+  useEffect(() => {
+    answeredQuestionBatchClaimedRef.current = false;
+  }, [articleId]);
   const applyAnsweredQuestionCardsToMemo = useCallback(() => {
+    if (answeredQuestionBatchClaimedRef.current) return;
     const answeredCards = questionCardRef.current?.getAnsweredCards() ?? [];
-    answeredCards
-      .filter((card) => card.answer.trim().length > 0)
-      .forEach((card) => {
-        createThought.mutate(
-          {
+    const cardsToSave = answeredCards.filter((card) => card.answer.trim().length > 0);
+    if (cardsToSave.length === 0) return;
+    // Claim synchronously before the first await. Save/skip/reread exit can
+    // overlap, but only one path may create this reading session's answers.
+    answeredQuestionBatchClaimedRef.current = true;
+
+    void (async () => {
+      await queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() });
+      const results = await Promise.allSettled(cardsToSave.map((card) =>
+        createThought.mutateAsync({
             data: {
               content: `> ${card.question}\n\n${card.answer.trim()}`,
               createdFrom: "question",
               sourceArticleId: articleId,
               status: "PRELIMINARY",
             },
-          },
-          { onError: (e) => console.warn("[thought] question creation failed:", e) },
-        );
-      });
-  }, [articleId, createThought]);
+          }) as Promise<Thought>
+      ));
+
+      // Apply successful responses in authored order, not network completion
+      // order, then perform one refresh after the entire creation batch settles.
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          upsertThoughtInRecordCaches(queryClient, result.value);
+        } else {
+          console.warn("[thought] question creation failed:", result.reason);
+        }
+      }
+      await invalidateThoughtLists(queryClient);
+    })();
+  }, [articleId, createThought, queryClient]);
 
   // ── 단상 바텀시트 ────────────────────────────────────────────────────────
   const [isThoughtsOpen, setIsThoughtsOpen] = useState(false);

@@ -36,6 +36,13 @@ export interface RecordCardContent {
 }
 
 export const RECORD_CARD_TITLE_MAX_LINES = 2;
+export type RecordSortKey = {
+  id: string;
+  createdAt?: string | Date;
+  updatedAt: string | Date;
+  thought?: Pick<Thought, "createdAt">;
+  article?: Pick<Article, "createdAt">;
+};
 
 /**
  * Korean glyphs are approximately one title-font em wide. This conservative
@@ -81,9 +88,52 @@ export function getRecordCardBodyLineCount({
  * Keep record rows deterministic: a server can legitimately assign the same
  * timestamp to several writes, so the stable identifier is the final tie-break.
  */
-export function compareRecordsNewestFirst(a: UnifiedRecord, b: UnifiedRecord): number {
-  const timeDiff = new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-  return timeDiff || a.id.localeCompare(b.id);
+export function getRecordOrderAt(record: RecordSortKey): number {
+  const createdAt = record.thought?.createdAt ?? record.article?.createdAt ?? record.createdAt;
+  return new Date(createdAt ?? record.updatedAt).getTime();
+}
+
+export function compareRecordsNewestFirst(a: RecordSortKey, b: RecordSortKey): number {
+  const timeDiff = getRecordOrderAt(b) - getRecordOrderAt(a);
+  return timeDiff || b.id.localeCompare(a.id);
+}
+
+/**
+ * Reconcile a newly fetched snapshot without allowing response timing to
+ * reshuffle rows that have already been placed in this screen session.
+ *
+ * Incoming IDs are authoritative for deletion, incoming snapshots replace the
+ * row contents, and genuinely new rows are prepended using the canonical
+ * record comparator. Repeated IDs are collapsed before placement.
+ */
+export function mergeRecordSession(
+  previous: readonly UnifiedRecord[],
+  incoming: readonly UnifiedRecord[],
+): UnifiedRecord[] {
+  const incomingById = new Map<string, UnifiedRecord>();
+  for (const record of incoming) {
+    const current = incomingById.get(record.id);
+    if (!current || compareRecordsNewestFirst(record, current) < 0) {
+      incomingById.set(record.id, record);
+    }
+  }
+
+  if (previous.length === 0) {
+    return [...incomingById.values()].sort(compareRecordsNewestFirst);
+  }
+
+  const placedIds = new Set<string>();
+  const placed = previous.flatMap((record) => {
+    const latest = incomingById.get(record.id);
+    if (!latest || placedIds.has(record.id)) return [];
+    placedIds.add(record.id);
+    return [latest];
+  });
+  const added = [...incomingById.values()]
+    .filter((record) => !placedIds.has(record.id))
+    .sort(compareRecordsNewestFirst);
+
+  return [...added, ...placed];
 }
 
 export function buildUnifiedRecords(
@@ -104,7 +154,7 @@ export function buildUnifiedRecords(
       article,
     }));
 
-  return [...thoughtRecords, ...articleRecords].sort(compareRecordsNewestFirst);
+  return mergeRecordSession([], [...thoughtRecords, ...articleRecords]);
 }
 
 export function filterRecords(records: UnifiedRecord[], kind: RecordKind): UnifiedRecord[] {
@@ -287,11 +337,19 @@ export function formatRecordDateLabel(dateKey: string): string {
  * Builds the card-only date hierarchy. Records stay deterministically ordered
  * within each KST day and the newest KST day always appears first.
  */
-export function buildRecordDateGroups<T extends UnifiedRecord>(records: T[]): RecordDateGroup<T>[] {
+export function buildRecordDateGroups<T extends UnifiedRecord>(
+  records: T[],
+  options: { preserveRecordOrder?: boolean } = {},
+): RecordDateGroup<T>[] {
   const grouped = new Map<string, T[]>();
+  const orderedRecords = options.preserveRecordOrder
+    ? records
+    : [...records].sort(compareRecordsNewestFirst);
 
-  for (const record of [...records].sort(compareRecordsNewestFirst)) {
-    const dateKey = toKstCalendarDateKey(record.updatedAt);
+  for (const record of orderedRecords) {
+    const dateKey = toKstCalendarDateKey(
+      record.thought?.createdAt ?? record.article?.createdAt ?? record.updatedAt,
+    );
     const dateRecords = grouped.get(dateKey);
     if (dateRecords) dateRecords.push(record);
     else grouped.set(dateKey, [record]);
@@ -370,6 +428,7 @@ export function buildMixedRecordGroups<T extends UnifiedRecord>(
   questionQueue: readonly T[] = [],
   seed = "",
   placementAnchors?: QuestionPlacementAnchors,
+  options: { preserveRecordOrder?: boolean } = {},
 ): RecordDateGroup<T>[] {
   const uniqueQuestions = questionQueue.filter((record, index, source) =>
     source.findIndex((candidate) => candidate.id === record.id) === index,
@@ -377,6 +436,7 @@ export function buildMixedRecordGroups<T extends UnifiedRecord>(
   const queueIds = new Set(uniqueQuestions.map((record) => record.id));
   const dateGroups = buildRecordDateGroups(
     records.filter((record) => !queueIds.has(record.id)),
+    options,
   );
 
   if (uniqueQuestions.length === 0) return dateGroups;

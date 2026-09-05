@@ -17,6 +17,7 @@ import {
   getRecordCardTitleLineCount,
   getThoughtCardContent,
   isPendingQueueQuestionThought,
+  mergeRecordSession,
   normalizePreviewTitle,
   normalizePreviewText,
   resolveQuestionPlacementAnchors,
@@ -174,7 +175,29 @@ describe("record list model", () => {
       { id: "a", kind: "editing", updatedAt: "2026-01-01T00:00:00.000Z", article: {} as never },
       { id: "c", kind: "letter", updatedAt: "2026-01-02T00:00:00.000Z", article: {} as never },
     ];
-    expect([...records].sort(compareRecordsNewestFirst).map((record) => record.id)).toEqual(["c", "a", "b"]);
+    expect([...records].sort(compareRecordsNewestFirst).map((record) => record.id)).toEqual(["c", "b", "a"]);
+  });
+
+  it("uses creation time rather than a later edit time for the canonical order", () => {
+    const olderButEdited: UnifiedRecord = {
+      id: "older",
+      kind: "thought",
+      updatedAt: "2026-01-05T00:00:00.000Z",
+      thought: {
+        createdAt: "2026-01-01T00:00:00.000Z",
+      } as never,
+    };
+    const newer: UnifiedRecord = {
+      id: "newer",
+      kind: "editing",
+      updatedAt: "2026-01-03T00:00:00.000Z",
+      article: {
+        createdAt: "2026-01-02T00:00:00.000Z",
+      } as never,
+    };
+
+    expect([olderButEdited, newer].sort(compareRecordsNewestFirst).map((record) => record.id))
+      .toEqual(["newer", "older"]);
   });
 
   it("maps article status to record kind: non-LETTER articles become editing, LETTER becomes letter", () => {
@@ -186,6 +209,99 @@ describe("record list model", () => {
       ] as never,
     );
     expect(records.map((record) => `${record.kind}:${record.id}`)).toEqual(["letter:letter", "editing:editing"]);
+  });
+
+  it("keeps placed rows stable while prepending new rows deterministically", () => {
+    const previous: UnifiedRecord[] = [
+      { id: "older", kind: "thought", updatedAt: "2026-01-01T00:00:00.000Z", thought: {} as never },
+      { id: "newer", kind: "thought", updatedAt: "2026-01-02T00:00:00.000Z", thought: {} as never },
+    ];
+    const incoming: UnifiedRecord[] = [
+      { ...previous[1], thought: { content: "refreshed" } as never },
+      { id: "new-b", kind: "thought", updatedAt: "2026-01-03T00:00:00.000Z", thought: {} as never },
+      { ...previous[0] },
+      { id: "new-a", kind: "editing", updatedAt: "2026-01-03T00:00:00.000Z", article: {} as never },
+    ];
+
+    const merged = mergeRecordSession(previous, incoming);
+    expect(merged.map((record) => record.id)).toEqual(["new-b", "new-a", "older", "newer"]);
+    expect((merged[3] as Extract<UnifiedRecord, { kind: "thought" }>).thought).toEqual({
+      content: "refreshed",
+    });
+  });
+
+  it("deduplicates late snapshots and removes rows absent from the authoritative response", () => {
+    const previous: UnifiedRecord[] = [
+      { id: "keep", kind: "thought", updatedAt: "2026-01-01T00:00:00.000Z", thought: {} as never },
+      { id: "deleted", kind: "thought", updatedAt: "2026-01-01T00:00:00.000Z", thought: {} as never },
+    ];
+    const olderDuplicate = {
+      id: "keep",
+      kind: "thought" as const,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      thought: { content: "old" } as never,
+    };
+    const newerDuplicate = {
+      ...olderDuplicate,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      thought: { content: "new" } as never,
+    };
+
+    const merged = mergeRecordSession(previous, [olderDuplicate, newerDuplicate]);
+    expect(merged.map((record) => record.id)).toEqual(["keep"]);
+    expect((merged[0] as Extract<UnifiedRecord, { kind: "thought" }>).thought).toEqual({
+      content: "new",
+    });
+  });
+
+  it("does not jump existing rows across consecutive reversed refetches", () => {
+    const record = (id: string, updatedAt: string): UnifiedRecord => ({
+      id,
+      kind: "thought",
+      updatedAt,
+      thought: { id, updatedAt } as never,
+    });
+    const initial = mergeRecordSession([], [
+      record("first", "2026-01-03T00:00:00.000Z"),
+      record("second", "2026-01-02T00:00:00.000Z"),
+    ]);
+    const afterLateResponse = mergeRecordSession(initial, [
+      record("second", "2026-01-05T00:00:00.000Z"),
+      record("first", "2026-01-01T00:00:00.000Z"),
+      record("new", "2026-01-04T00:00:00.000Z"),
+    ]);
+    const afterNextRefetch = mergeRecordSession(afterLateResponse, [
+      record("first", "2026-01-06T00:00:00.000Z"),
+      record("new", "2026-01-04T00:00:00.000Z"),
+      record("second", "2026-01-05T00:00:00.000Z"),
+    ]);
+
+    expect(afterLateResponse.map((item) => item.id)).toEqual(["new", "first", "second"]);
+    expect(afterNextRefetch.map((item) => item.id)).toEqual(["new", "first", "second"]);
+  });
+});
+
+describe("read.tsx thought creation batching", () => {
+  const readScreen = () => readFileSync(join(__dirname, "../../app/read.tsx"), "utf8");
+
+  it("settles every answered-card create before one list refresh", () => {
+    const screen = readScreen();
+    const batchStart = screen.indexOf("const results = await Promise.allSettled");
+    const refresh = screen.indexOf("await invalidateThoughtLists(queryClient)", batchStart);
+
+    expect(batchStart).toBeGreaterThan(-1);
+    expect(refresh).toBeGreaterThan(batchStart);
+    expect(screen.slice(batchStart, refresh).match(/upsertThoughtInRecordCaches/g)).toHaveLength(1);
+  });
+
+  it("claims answered cards synchronously so overlapping completion paths cannot duplicate them", () => {
+    const screen = readScreen();
+    const handlerStart = screen.indexOf("const applyAnsweredQuestionCardsToMemo");
+    const firstAwait = screen.indexOf("await queryClient.cancelQueries", handlerStart);
+    const beforeAwait = screen.slice(handlerStart, firstAwait);
+
+    expect(beforeAwait).toContain("if (answeredQuestionBatchClaimedRef.current) return;");
+    expect(beforeAwait).toContain("answeredQuestionBatchClaimedRef.current = true;");
   });
 });
 
@@ -371,8 +487,20 @@ describe("record card date groups", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].records.map((record) => `${record.kind}:${record.id}`)).toEqual([
       "thought:latest",
-      "editing:a",
       "thought:b",
+      "editing:a",
+    ]);
+  });
+
+  it("can preserve a session-merged order while retaining date groups", () => {
+    const groups = buildRecordDateGroups([
+      thought("placed-first", "2026-02-03T01:00:00.000Z"),
+      thought("placed-second", "2026-02-03T03:00:00.000Z"),
+    ], { preserveRecordOrder: true });
+
+    expect(groups[0].records.map((record) => record.id)).toEqual([
+      "placed-first",
+      "placed-second",
     ]);
   });
 

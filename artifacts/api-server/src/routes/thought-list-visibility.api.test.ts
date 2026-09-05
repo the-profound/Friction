@@ -66,15 +66,15 @@ const state = vi.hoisted(() => {
                       ) &&
                       !promotedThoughtIds.has(row.id as string),
                   )
-                  .sort((a, b) => {
-                    const createdAtDifference =
-                      (b.createdAt as Date).getTime() -
-                      (a.createdAt as Date).getTime();
-                    return (
-                      createdAtDifference ||
-                      (b.id as string).localeCompare(a.id as string)
-                    );
-                  })
+                  .sort(
+                    (a, b) => {
+                      const createdAtDifference =
+                        (b.createdAt as Date).getTime() -
+                        (a.createdAt as Date).getTime();
+                      return createdAtDifference ||
+                        (b.id as string).localeCompare(a.id as string);
+                    },
+                  )
               : [];
           return Promise.resolve(resolved).then(onFulfilled, onRejected);
         },
@@ -87,14 +87,14 @@ const state = vi.hoisted(() => {
     activeUser: "",
     thoughtsById,
     promotedThoughtIds,
+    tables,
+    db,
     get orderByArgumentCount() {
       return orderByArgumentCount;
     },
     resetOrderByArgumentCount() {
       orderByArgumentCount = 0;
     },
-    tables,
-    db,
   };
 });
 
@@ -274,8 +274,8 @@ describe("GET /thoughts visibility", () => {
   });
 
   it("returns a stable newest-first order with id breaking created-at ties", async () => {
-    const older = new Date("2026-01-01T00:00:00.000Z");
-    const newer = new Date("2026-01-02T00:00:00.000Z");
+    const newer = new Date("2026-09-05T00:00:00.000Z");
+    const older = new Date("2026-09-04T00:00:00.000Z");
     state.thoughtsById.set(
       "same-time-a",
       thought("same-time-a", "user-a", { createdAt: newer }),
@@ -291,14 +291,13 @@ describe("GET /thoughts visibility", () => {
 
     await withServer(async (baseUrl) => {
       const first = await getThoughts(baseUrl, "user-a");
-      const second = await getThoughts(baseUrl, "user-a");
-
+      const refetched = await getThoughts(baseUrl, "user-a");
       expect(first.map((item) => item.id)).toEqual([
         "same-time-z",
         "same-time-a",
         "older-z",
       ]);
-      expect(second).toEqual(first);
+      expect(refetched.map((item) => item.id)).toEqual(first.map((item) => item.id));
       expect(state.orderByArgumentCount).toBe(2);
     });
   });

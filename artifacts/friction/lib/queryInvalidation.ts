@@ -20,6 +20,7 @@ import type {
   Thought,
   ThoughtQuestionQueueResponse,
 } from "@workspace/api-client-react";
+import { compareRecordsNewestFirst } from "./recordList";
 
 /**
  * 도메인별로 자주 함께 호출되는 invalidate 시퀀스를 한곳에 모아 두는 헬퍼.
@@ -306,11 +307,7 @@ export function upsertThoughtInRecordCaches(qc: QueryClient, thought: Thought) {
   qc.setQueryData<Thought[]>(getListThoughtsQueryKey(), (previous) => {
     if (!previous) return previous;
     const withoutCurrent = previous.filter((item) => item.id !== thought.id);
-    return [...withoutCurrent, thought].sort(
-      (left, right) =>
-        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-        || left.id.localeCompare(right.id),
-    );
+    return [...withoutCurrent, thought].sort(compareRecordsNewestFirst);
   });
 }
 

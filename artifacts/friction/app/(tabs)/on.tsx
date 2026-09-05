@@ -82,6 +82,7 @@ import {
   getRecordCardContent,
   getRecordCardTitleLineCount,
   isPendingQueueQuestionThought,
+  mergeRecordSession,
   recordMatchesQuery,
   resolveQuestionPlacementAnchors,
   shouldRefetchQuestionQueue,
@@ -372,6 +373,7 @@ export default function OnScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [controlsVisible, setControlsVisible] = useState(true);
   const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
+  const recordSessionRef = useRef<UnifiedRecord[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<ReadonlySet<string>>(() => new Set());
   const deletePendingIdsRef = useRef(new Set<string>());
@@ -545,6 +547,7 @@ export default function OnScreen() {
       // Tab screens stay mounted. Focus is both a placement-session boundary
       // and a recovery path for a queue request that failed while auth loaded.
       if (hasFocusedRecordScreenRef.current) {
+        recordSessionRef.current = [];
         setCardMixSeed(`${Date.now()}-${Math.random()}`);
         const queryState = questionQueryStateRef.current;
         if (shouldRefetchQuestionQueue({
@@ -625,8 +628,8 @@ export default function OnScreen() {
   );
   const listedThoughts = (thoughtsQuery.data ?? []) as Thought[];
   const allRecords = useMemo(
-    () => filterRecords(
-      buildUnifiedRecords(
+    () => {
+      const incoming = buildUnifiedRecords(
         // The queue ID set only exists after a successful queue fetch; a
         // still-queued question must stay hidden from the ordinary list even
         // when that fetch fails, so isPendingQueueQuestionThought is checked
@@ -634,10 +637,15 @@ export default function OnScreen() {
         listedThoughts.filter((thought: Thought) =>
           !queuedIds.has(thought.id) && !isPendingQueueQuestionThought(thought)),
         articlesQuery.data,
-      ),
+      );
+      const merged = mergeRecordSession(recordSessionRef.current, incoming);
+      recordSessionRef.current = merged;
+      return filterRecords(
+        merged,
       kind,
-    ).filter((record) => !pendingDeleteIds.has(record.id)),
-    [articlesQuery.data, kind, listedThoughts, pendingDeleteIds, queuedIds],
+      ).filter((record) => !pendingDeleteIds.has(record.id));
+    },
+    [articlesQuery.data, cardMixSeed, kind, listedThoughts, pendingDeleteIds, queuedIds],
   );
   const records = useMemo(
     () => allRecords.filter((record) => recordMatchesQuery(record, searchQuery)),
@@ -695,6 +703,7 @@ export default function OnScreen() {
       queuedQuestionRecords,
       cardMixSeed,
       questionPlacementAnchors,
+      { preserveRecordOrder: true },
     ),
     [cardMixSeed, cardRecords, questionPlacementAnchors, queuedQuestionRecords],
   );

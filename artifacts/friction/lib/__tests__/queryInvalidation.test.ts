@@ -22,6 +22,7 @@ import {
   stageArticleTransitionSnapshot,
   upsertThoughtInRecordCaches,
 } from "../queryInvalidation";
+import { buildUnifiedRecords, mergeRecordSession } from "../recordList";
 
 describe("question queue cache updates", () => {
   it("removes only the selected question and advances current and next", () => {
@@ -75,6 +76,33 @@ describe("direct thought creation cache invalidation", () => {
       queryKey: getListThoughtsQueryKey(),
     });
     expect(invalidateQueries).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps equal-createdAt order unchanged from cache upsert through refetch", () => {
+    const queryClient = new QueryClient();
+    const createdAt = "2026-09-05T00:00:00.000Z";
+    const thoughtA = {
+      id: "same-time-a",
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const thoughtZ = {
+      id: "same-time-z",
+      createdAt,
+      updatedAt: createdAt,
+    };
+    queryClient.setQueryData(getListThoughtsQueryKey(), [thoughtA]);
+
+    upsertThoughtInRecordCaches(queryClient, thoughtZ as never);
+    const optimistic = buildUnifiedRecords(
+      queryClient.getQueryData(getListThoughtsQueryKey()),
+      [],
+    );
+    const refetched = buildUnifiedRecords([thoughtA, thoughtZ] as never, []);
+    const reconciled = mergeRecordSession(optimistic, refetched);
+
+    expect(optimistic.map((record) => record.id)).toEqual(["same-time-z", "same-time-a"]);
+    expect(reconciled.map((record) => record.id)).toEqual(["same-time-z", "same-time-a"]);
   });
 });
 

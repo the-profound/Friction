@@ -936,6 +936,7 @@ router.post(
         .where(eq(thoughtQuestionQueueTable.id, current.queueId));
       await compactQuestionQueue(tx, userId);
 
+      // Queue count is unchanged after the move (current card was not deleted).
       const { sourceCandidates, needed } = await readCandidates(
         tx,
         userId,
@@ -949,11 +950,13 @@ router.post(
       return;
     }
 
+    // Phase 2: AI calls outside any DB transaction.
     const aiResults = await generateAIQuestions(
       phase1.sourceCandidates,
       phase1.needed,
     );
 
+    // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
     const snapshot = await db.transaction(async (tx) => {
       await lockQuestionQueue(tx, userId);
       const queued = await normalizeQuestionQueue(tx, userId);
@@ -1491,66 +1494,142 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
   const snapshot = snapshotResult?.snapshot ?? null;
 
   try {
-  const result = await db.transaction(async (tx) => {
-    await lockQuestionQueue(tx, userId);
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
-    );
-    const [existing] = await tx
-      .select({
-        id: thoughtsTable.id,
-        authorId: thoughtsTable.authorId,
-        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
-      })
-      .from(thoughtsTable)
-      .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
-      .for("update");
-
-    if (!existing) return "not-found" as const;
-    if (existing.authorId !== userId) return "forbidden" as const;
-
-    const [activePromotion] = await tx
-      .select({ id: thoughtPromotionsTable.id })
-      .from(thoughtPromotionsTable)
-      .where(
-        and(
-          eq(thoughtPromotionsTable.fromThoughtId, id),
-          eq(thoughtPromotionsTable.promotionType, "promote"),
-        ),
-      )
-      .limit(1);
-    if (activePromotion) return "promoted" as const;
-
-    const deletedAt = new Date();
-    const [deleted] = await tx
-      .update(thoughtsTable)
-      .set({ deletedAt })
-      .where(
-        and(
-          eq(thoughtsTable.id, id),
-          eq(thoughtsTable.authorId, userId),
-          isNull(thoughtsTable.deletedAt),
-          existing.migratedFromArticleId
-            ? eq(
-                thoughtsTable.migratedFromArticleId,
-                existing.migratedFromArticleId,
-              )
-            : isNull(thoughtsTable.migratedFromArticleId),
-        ),
-      )
-      .returning({ id: thoughtsTable.id });
-    if (!deleted) return "conflict" as const;
-    await tx
-      .delete(thoughtQuestionQueueTable)
-      .where(
-        and(
-          eq(thoughtQuestionQueueTable.userId, userId),
-          eq(thoughtQuestionQueueTable.thoughtId, id),
-        ),
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${thoughtId}`}))`,
       );
-    await compactQuestionQueue(tx, userId);
-    return "deleted" as const;
-  });
+      const [thought] = await tx
+        .select()
+        .from(thoughtsTable)
+        .where(
+          and(eq(thoughtsTable.id, thoughtId), isNull(thoughtsTable.deletedAt)),
+        )
+        .for("update");
+
+      if (!thought)
+        return { status: 404, body: { error: "Thought not found" } } as const;
+      if (thought.authorId !== userId)
+        return { status: 403, body: { error: "Forbidden" } } as const;
+
+      const [existingPromotion] = await tx
+        .select({
+          articleId: thoughtPromotionsTable.toDraftId,
+          promotionType: thoughtPromotionsTable.promotionType,
+        })
+        .from(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.fromThoughtId, thoughtId))
+        .limit(1);
+      if (existingPromotion) {
+        if (existingPromotion.promotionType !== "promote") {
+          return {
+            status: 409,
+            body: { error: "Thought has already been promoted" },
+          } as const;
+        }
+        const [existingArticle] = await tx
+          .select()
+          .from(articlesTable)
+          .where(
+            and(
+              eq(articlesTable.id, existingPromotion.articleId),
+              eq(articlesTable.authorId, userId),
+              isNull(articlesTable.deletedAt),
+            ),
+          )
+          .limit(1);
+        if (!existingArticle) {
+          return {
+            status: 409,
+            body: { error: "Thought promotion result is unavailable" },
+          } as const;
+        }
+        return { status: 200, body: existingArticle } as const;
+      }
+
+      if (!canPromoteThoughtToArticle(thought)) {
+        return {
+          status: 409,
+          body: {
+            error: "Thought is not in a stage that can be promoted",
+            code: "INVALID_STAGE",
+          },
+        } as const;
+      }
+
+      if (
+        snapshot &&
+        snapshot.expectedUpdatedAt.getTime() !== thought.updatedAt.getTime()
+      ) {
+        return {
+          status: 409,
+          body: {
+            error:
+              "Snapshot is older than the current thought; refresh before promoting",
+            code: "STALE_SNAPSHOT",
+          },
+        } as const;
+      }
+
+      const thoughtContent = snapshot
+        ? formatThoughtMarkdown(snapshot.title, snapshot.content)
+        : (thought.content ?? "");
+      const parsedMarkdown = parseThoughtMarkdown(thoughtContent);
+      if (!parsedMarkdown) {
+        return {
+          status: 400,
+          body: {
+            error:
+              "Thought must start with a non-empty H1 title and contain a non-empty body",
+            code: "INVALID_SNAPSHOT",
+          },
+        } as const;
+      }
+
+      const [article] = await tx
+        .insert(articlesTable)
+        .values({
+          authorId: thought.authorId,
+          title: parsedMarkdown.title,
+          content: parsedMarkdown.body,
+          status: "DIVIDING",
+          sourceArticleId: thought.sourceArticleId,
+        })
+        .returning();
+
+      await tx.insert(thoughtPromotionsTable).values({
+        fromThoughtId: thought.id,
+        toDraftId: article.id,
+        promotionType: "promote",
+      });
+      const [updatedThought] = await tx
+        .update(thoughtsTable)
+        .set({
+          ...(snapshot ? { content: thoughtContent } : {}),
+          status: "NORMAL",
+          migratedFromArticleId: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(thoughtsTable.id, thought.id),
+            eq(thoughtsTable.authorId, userId),
+            isNull(thoughtsTable.deletedAt),
+            eq(thoughtsTable.status, thought.status),
+            thought.migratedFromArticleId
+              ? eq(
+                  thoughtsTable.migratedFromArticleId,
+                  thought.migratedFromArticleId,
+                )
+              : isNull(thoughtsTable.migratedFromArticleId),
+          ),
+        )
+        .returning({ id: thoughtsTable.id });
+      if (!updatedThought) {
+        throw new Error("Thought changed during promotion");
+      }
+
+      return { status: 201, body: article } as const;
+    });
 
     res.status(result.status).json(result.body);
   } catch (error) {
