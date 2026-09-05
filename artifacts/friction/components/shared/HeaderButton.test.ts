@@ -6,30 +6,34 @@ const appRoot = join(__dirname, "../..");
 const read = (path: string) => readFileSync(join(appRoot, path), "utf8");
 
 describe("shared writing header buttons", () => {
-  it("defines one fixed outer/inner contract for both icon variants", () => {
+  it("defines one fixed 36px outer/inner contract for every shared variant", () => {
     const button = read("components/shared/HeaderButton.tsx");
     const tokens = read("constants/tokens.ts");
 
-    expect(button).toContain('export type HeaderButtonVariant = "back" | "menu";');
-    expect(button).toContain('variant === "back" ? "arrow-left" : "more-horizontal"');
+    expect(button).toContain('export type HeaderButtonVariant = "back" | "menu" | "settings";');
+    expect(button).toContain('variant === "settings"');
     expect(button).toContain("label?: string;");
     expect(button).toContain("backgroundColor: Colors.white");
-    expect(button).toContain("backgroundColor: Colors.noticeAccent");
+    expect(button).toContain("borderColor: Colors.noticeAccent");
+    expect(button).toContain("color: Colors.noticeAccent");
+    expect(button).toContain("borderColor: Colors.zinc300");
+    expect(button).not.toContain("overflow: \"hidden\"");
     expect(button).toContain("accessibilityRole=\"button\"");
     expect(button).toContain("accessibilityState={{");
     expect(button).toContain("disabled: unavailable");
     expect(button).toContain("busy,");
     expect(button).toContain("contentStyle={[");
     expect(button).toContain("style={styles.button}");
-    expect(tokens).toContain("headerButtonTouchSize: 44");
-    expect(tokens).toContain("headerButtonSurfaceSize: 44");
-    expect(tokens).toContain("headerButtonIconSize: 20");
+    expect(tokens).toContain("headerButtonTouchSize: 36");
+    expect(tokens).toContain("headerButtonSurfaceSize: 36");
+    expect(tokens).toContain("headerButtonIconSize: 18");
   });
 
   it("uses the shared button in all writing-flow headers", () => {
     const writing = read("app/on-01a.tsx");
     const closing = read("app/on-01c.tsx");
     const stateBar = read("components/WritingStateBar/WritingStateBar.tsx");
+    const pageHeader = read("components/NavBar/PageHeader.tsx");
 
     expect(writing).toContain('import HeaderButton from "@/components/shared/HeaderButton";');
     expect(writing).toContain('<HeaderButton\n            variant="back"');
@@ -43,6 +47,9 @@ describe("shared writing header buttons", () => {
     expect(stateBar).toContain('<HeaderButton\n        testID="writing-stage-menu"');
     expect(stateBar).toContain('variant="menu"');
     expect(stateBar).toContain("<ActionSheetModal");
+    expect(pageHeader).toContain("const rowHeight = Sizing.headerButtonTouchSize;");
+    expect(pageHeader).toContain("variant={profileButtonVariant}");
+    expect(pageHeader).toContain('variant="menu"');
   });
 
   it("uses the shared back button across stack, space, account, and reading headers", () => {
@@ -70,10 +77,17 @@ describe("shared writing header buttons", () => {
 
     for (const path of screenPaths) {
       const screen = read(path);
-      expect(screen, path).toContain(
+      const usesHeaderButtonDirectly = screen.includes(
         'import HeaderButton from "@/components/shared/HeaderButton";',
       );
-      expect(screen, path).toContain('variant="back"');
+      const usesPageHeaderBack =
+        screen.includes('import { PageHeader } from "@/components/NavBar/PageHeader";') &&
+        screen.includes("showBack");
+
+      expect(usesHeaderButtonDirectly || usesPageHeaderBack, path).toBe(true);
+      if (usesHeaderButtonDirectly) {
+        expect(screen, path).toContain('variant="back"');
+      }
       expect(screen, path).not.toMatch(/name="(?:arrow-left|chevron-left)"/);
     }
 

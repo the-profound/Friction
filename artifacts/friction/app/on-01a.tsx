@@ -3047,8 +3047,8 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   headerRight: {
-    width: 44,
-    height: 44,
+    width: Sizing.headerButtonTouchSize,
+    height: Sizing.headerButtonTouchSize,
     alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",

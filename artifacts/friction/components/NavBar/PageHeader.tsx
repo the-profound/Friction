@@ -81,9 +81,8 @@ export function PageHeader({
   const { width: windowWidth } = useWindowDimensions();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
-  // Row height is driven by the tallest child: the back button (44 px) when
-  // shown, otherwise the action buttons / title container (36 px).
-  const rowHeight = showBack ? Sizing.headerButtonTouchSize : Sizing.searchButtonSize;
+  // Shared header controls and the other circular actions use the same 36px row.
+  const rowHeight = Sizing.headerButtonTouchSize;
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>

@@ -27,9 +27,9 @@ const DEFAULT_LABELS: Record<HeaderButtonVariant, string> = {
 };
 
 /**
- * Fixed-size circular controls for writing-flow headers.
+ * Fixed-size circular controls for shared and writing-flow headers.
  *
- * The 44px circular frame is both the layout/touch and visual contract.
+ * The 36px circular frame is both the layout/touch and visual contract.
  * The surface remains a separately styled inner layer because ScalePressable
  * animates that layer on press, but it fills the frame so no halo is exposed.
  */
@@ -50,10 +50,11 @@ export default function HeaderButton({
       : variant === "settings"
         ? "settings"
         : "more-horizontal";
-  const iconColor = unavailable
+  const isRightAction = variant === "menu" || variant === "settings";
+  const foregroundColor = unavailable
     ? Colors.zinc400
-    : variant === "menu" || variant === "settings"
-      ? Colors.white
+    : isRightAction
+      ? Colors.noticeAccent
       : Colors.backButtonIcon;
 
   return (
@@ -62,8 +63,8 @@ export default function HeaderButton({
       style={styles.button}
       contentStyle={[
         styles.surface,
-        variant === "menu" || variant === "settings"
-          ? styles.menuSurface
+        isRightAction
+          ? [styles.rightActionSurface, unavailable && styles.rightActionSurfaceDisabled]
           : styles.backSurface,
       ]}
       onPress={onPress}
@@ -77,7 +78,7 @@ export default function HeaderButton({
       }}
     >
       {busy ? (
-        <ActivityIndicator size="small" color={iconColor} />
+        <ActivityIndicator size="small" color={foregroundColor} />
       ) : variant === "menu" && label ? (
         <Text style={[styles.menuLabel, unavailable && styles.menuLabelDisabled]}>
           {label}
@@ -86,7 +87,7 @@ export default function HeaderButton({
         <Feather
           name={iconName}
           size={Sizing.headerButtonIconSize}
-          color={iconColor}
+          color={foregroundColor}
         />
       )}
     </ScalePressable>
@@ -123,11 +124,16 @@ const styles = StyleSheet.create({
   backSurface: {
     backgroundColor: Colors.white,
   },
-  menuSurface: {
-    backgroundColor: Colors.noticeAccent,
+  rightActionSurface: {
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.noticeAccent,
+  },
+  rightActionSurfaceDisabled: {
+    borderColor: Colors.zinc300,
   },
   menuLabel: {
-    color: Colors.white,
+    color: Colors.noticeAccent,
     fontFamily: "Pretendard-SemiBold",
     fontSize: 12,
     fontWeight: "600",
@@ -135,6 +141,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   menuLabelDisabled: {
-    color: Colors.zinc300,
+    color: Colors.zinc500,
   },
 });
