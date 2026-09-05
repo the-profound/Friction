@@ -486,7 +486,7 @@ describe("useAutoSave pending-content preservation", () => {
   it("fetches the article fallback for a direct on-01a route with a missing mode", () => {
     const screen = readScreen();
     expect(screen).toContain("const detailResolution = resolveDetailEntity");
-    expect(screen).toContain("enabled: !!id && !isLocalDirectDraft,");
+    expect(screen).toContain("enabled: !!id && !isLocalDirectDraft && !authIsLoading,");
     expect(screen).toContain('detailResolution.entity === "article"');
   });
 

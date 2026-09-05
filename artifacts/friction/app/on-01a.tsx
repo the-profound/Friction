@@ -20,7 +20,14 @@ import type { NavigationAction } from "expo-router/build/react-navigation/router
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Shadows, Sizing } from "@/constants/tokens";
 import { useAutoSave, type AutoSaveRestoreContext } from "@/lib/useAutoSave";
-import { resolveDetailEntity } from "@/lib/detailEntityResolution";
+import {
+  resolveDetailEntity,
+  shouldRetryDetailQuery,
+  detailQueryRetryDelayMs,
+  isRetryableDetailError,
+  isConfirmedGoneError,
+  type DetailErrorReason,
+} from "@/lib/detailEntityResolution";
 import { GuardedReturnSession } from "@/lib/guardedReturnSession";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
@@ -77,6 +84,8 @@ import {
   useUpdateThought,
   usePromoteThought,
   useRevertArticleToThought,
+  useActivateThoughtQuestion,
+  getGetThoughtQuestionQueueQueryKey,
   type Article,
   type Thought,
   type ThoughtArticleTransitionBody,
@@ -99,8 +108,11 @@ import {
   stageArticleTransitionSnapshot,
   getProtectedArticleDetailSnapshot,
   snapshotRecordListCaches,
+  upsertThoughtInRecordCaches,
+  setThoughtQuestionQueueCache,
 } from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
 import WritingStateBar, {
@@ -161,20 +173,28 @@ interface PendingStageTransition {
   requestId: string;
 }
 
-/**
- * 작성·분할 통합 화면.
- *
- * URL id 는 PRELIMINARY thought(단상 작성 모드) 또는 DIVIDING article(분할 모드)
- * 중 하나를 가리킨다.  두 쿼리를 모두 안전하게 시도하여 어느 쪽이 활성인지 파악한다.
- *
- * - draft 모드: thought를 통한 단상 작성. 자동저장은 updateThought(완전한 Markdown).
- *   서식 툴바·이미지 업로드.  원본 글 연결은 승격 후 article에서만.
- * - dividing 모드: DIVIDING article 분할. 페이지 칩 스트립·경고 배너·맞춤법 패널.
- *
- * 승격(promoteThought)은 flush 완료 후 1회만 호출하며, 반환된 article id로
- * 캐시를 갱신하고 라우트를 새 id/mode=dividing 으로 교체한다.
- * 승격 이후에는 DIVIDING → draft/thought 전환 없음.
- */
+const DETAIL_ERROR_COPY: Record<DetailErrorReason, { title: string; description: string }> = {
+  "not-found": {
+    title: "글을 찾을 수 없어요",
+    description: "삭제되었거나 존재하지 않는 기록이에요.",
+  },
+  "not-dividing": {
+    title: "글을 찾을 수 없어요",
+    description: "삭제되었거나 존재하지 않는 기록이에요.",
+  },
+  auth: {
+    title: "로그인이 만료됐어요",
+    description: "다시 로그인한 뒤 시도해주세요.",
+  },
+  "not-implemented": {
+    title: "아직 지원하지 않는 기능이에요",
+    description: "앱을 최신 버전으로 업데이트한 뒤 다시 시도해주세요.",
+  },
+  connection: {
+    title: "단상을 열지 못했어요",
+    description: "네트워크 연결을 확인하고 다시 시도해주세요.",
+  },
+};
 export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -194,6 +214,7 @@ export default function WritingScreen() {
   const returnPageIndex = returnPage !== undefined ? parseInt(returnPage, 10) : undefined;
   const returnBlockIndex = returnBlock !== undefined ? parseInt(returnBlock, 10) : undefined;
   const { userId } = useUser();
+  const { isLoading: authIsLoading } = useAuth();
   const { showToast } = useToast();
   const { releaseDirectThoughtDraft } = useThoughtComposer();
   const editorLayout = useEditorLayout();
@@ -216,19 +237,25 @@ export default function WritingScreen() {
   // dividing routes fetch only their article. A direct local draft has neither
   // until its first meaningful save.
 
+  // Auth restoration can take a moment on native (SecureStore session read).
+  // Starting these queries during that window would surface a false failure
+  // screen before the session even had a chance to attach; gate on it so the
+  // request simply waits and fires automatically once auth resolves.
   const thoughtQuery = useGetThought(id ?? "", {
     query: {
       queryKey: getGetThoughtQueryKey(id ?? ""),
-      enabled: !!id && !isLocalDirectDraft && modeParam !== "dividing",
-      retry: false,
+      enabled: !!id && !isLocalDirectDraft && modeParam !== "dividing" && !authIsLoading,
+      retry: shouldRetryDetailQuery,
+      retryDelay: detailQueryRetryDelayMs,
     },
   });
 
   const articleQuery = useGetArticle(id ?? "", {
     query: {
       queryKey: getGetArticleQueryKey(id ?? ""),
-      enabled: !!id && !isLocalDirectDraft,
-      retry: false,
+      enabled: !!id && !isLocalDirectDraft && !authIsLoading,
+      retry: shouldRetryDetailQuery,
+      retryDelay: detailQueryRetryDelayMs,
     },
   });
 
@@ -264,6 +291,20 @@ export default function WritingScreen() {
   const dataLoading = !!id && !isLocalDirectDraft && detailResolution.kind === "loading";
   const isReadingMemo = isThoughtMode && thought?.createdFrom === "reading";
 
+  // A question-queue thought is created with status PRELIMINARY and only the
+  // POST /thoughts/:id/activate route ever moves it to NORMAL; nothing else
+  // produces this exact combination. This lets a direct on-01a entry (deep
+  // link, stale state, etc.) reliably detect "this is still a queued
+  // question" without a separate queue-membership fetch, and route it
+  // through the same activation flow the queue screen already uses instead
+  // of opening it as a plain thought edit.
+  const isUnactivatedQuestion =
+    isThoughtMode
+    && detailResolution.kind === "success"
+    && detailResolution.entity === "thought"
+    && thought?.createdFrom === "question"
+    && thought?.status === "PRELIMINARY";
+
   // Mutations
   const updateArticle = useUpdateArticle();
   const updateThought = useUpdateThought();
@@ -272,6 +313,8 @@ export default function WritingScreen() {
   const promoteThought = usePromoteThought();
   const revertArticleToThought = useRevertArticleToThought();
   const transitionStatus = useTransitionArticleStatus();
+  const activateThoughtQuestion = useActivateThoughtQuestion();
+  const questionActivationRef = useRef<string | null>(null);
 
   const editorRef = useRef<WebViewMarkdownEditorRef>(null);
   const addMenuBtnRef = useRef<View>(null);
@@ -2693,6 +2736,124 @@ export default function WritingScreen() {
     return () => sub.remove();
   }, [handleHeaderBack, exitToPreviousList]);
 
+  // A direct entry into an unactivated queued question is redirected through
+  // the same activation the question-queue screen uses (never opened as a
+  // plain thought edit). The endpoint is idempotent for an already-activated
+  // thought, so a race with the queue screen's own activation is harmless.
+  //
+  // Only a *confirmed* 404/409 from the activate endpoint means the question
+  // genuinely no longer exists / isn't queued anymore — that's the only case
+  // honest enough to tell the user it's gone and send them back to the list.
+  // A network blip, timeout, 5xx, or expired session is not that: those get
+  // a few bounded auto-retries (matching the detail-query policy), and if
+  // still failing, a retry-capable error state instead of a false "it's
+  // gone" message.
+  const runQuestionActivationRef = useRef<() => void>(() => {});
+  const [questionActivationFailed, setQuestionActivationFailed] = useState(false);
+  const isRunningQuestionActivationRef = useRef(false);
+
+  runQuestionActivationRef.current = () => {
+    if (!id || isRunningQuestionActivationRef.current) return;
+    isRunningQuestionActivationRef.current = true;
+    questionActivationRef.current = id;
+    setQuestionActivationFailed(false);
+
+    (async () => {
+      let attempt = 0;
+      for (;;) {
+        const cacheSnapshot = snapshotRecordListCaches(queryClient);
+        try {
+          await Promise.all([
+            queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() }),
+            queryClient.cancelQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() }),
+          ]);
+          const result = await activateThoughtQuestion.mutateAsync({ id });
+          setThoughtQuestionQueueCache(queryClient, result);
+          upsertThoughtInRecordCaches(queryClient, result.activatedThought);
+          queryClient.setQueryData(getGetThoughtQueryKey(id), result.activatedThought);
+          isRunningQuestionActivationRef.current = false;
+          return;
+        } catch (error) {
+          restoreRecordListCaches(queryClient, cacheSnapshot);
+
+          if (isConfirmedGoneError(error)) {
+            isRunningQuestionActivationRef.current = false;
+            showToast({ message: "이미 사라진 질문이에요. 목록으로 돌아갈게요.", type: "error" });
+            if (returnSessionRef.current.begin()) {
+              exitToPreviousList();
+            }
+            return;
+          }
+
+          if (attempt < 2 && isRetryableDetailError(error)) {
+            const delay = detailQueryRetryDelayMs(attempt);
+            attempt += 1;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+
+          // Terminal, but not confirmed-gone (connection problem or expired
+          // session): let the user retry instead of bouncing them away.
+          isRunningQuestionActivationRef.current = false;
+          questionActivationRef.current = null;
+          setQuestionActivationFailed(true);
+          return;
+        }
+      }
+    })();
+  };
+
+  useEffect(() => {
+    if (!isUnactivatedQuestion || !id) return;
+    if (questionActivationRef.current === id) return;
+    runQuestionActivationRef.current();
+  }, [isUnactivatedQuestion, id]);
+
+  if (isUnactivatedQuestion) {
+    return (
+      <>
+        <Stack.Screen options={{ gestureEnabled: true }} />
+        <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
+          <View style={styles.loadingContainer}>
+            {questionActivationFailed ? (
+              <>
+                <Feather name="alert-circle" size={30} color={Colors.zinc500} />
+                <Text style={styles.loadErrorTitle}>질문을 여는 데 문제가 있어요</Text>
+                <Text style={styles.loadErrorDescription}>
+                  네트워크 연결을 확인하거나 로그인 상태를 확인한 뒤 다시 시도해주세요.
+                </Text>
+                <View style={styles.loadErrorActions}>
+                  <ScalePressable
+                    style={styles.loadRetryButton}
+                    contentStyle={styles.loadRetryButtonContent}
+                    onPress={() => runQuestionActivationRef.current()}
+                  >
+                    <Text style={styles.loadRetryButtonText}>다시 시도</Text>
+                  </ScalePressable>
+                  <ScalePressable
+                    style={styles.loadBackButton}
+                    contentStyle={styles.loadBackButtonContent}
+                    onPress={() => {
+                      if (!returnSessionRef.current.begin()) return;
+                      exitToPreviousList();
+                    }}
+                  >
+                    <Text style={styles.loadBackButtonText}>이전 화면</Text>
+                  </ScalePressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <ActivityIndicator size="large" color={Colors.zinc400} />
+                <Text style={styles.loadingText}>질문을 준비하고 있어요</Text>
+              </>
+            )}
+          </View>
+        </View>
+      </>
+    );
+  }
+
   if ((!isLocalDirectDraft && !id) || dataLoading) {
     return (
       <>
@@ -2707,29 +2868,24 @@ export default function WritingScreen() {
     );
   }
 
-  const hasLoadError = !isLocalDirectDraft && (
-    isThoughtMode
-      ? !thought && thoughtQuery.isError
-      : !article && articleQuery.isError
-  );
+  const detailError = !isLocalDirectDraft && detailResolution.kind === "error" ? detailResolution : null;
 
-  if (hasLoadError) {
+  if (detailError) {
+    const errorCopy = DETAIL_ERROR_COPY[detailError.reason];
     return (
       <>
         <Stack.Screen options={{ gestureEnabled: true }} />
         <View style={[styles.container, { paddingTop: Platform.OS === "web" ? 67 : insets.top }]}>
           <View style={styles.loadingContainer}>
             <Feather name="alert-circle" size={30} color={Colors.zinc500} />
-            <Text style={styles.loadErrorTitle}>단상을 열지 못했어요</Text>
-            <Text style={styles.loadErrorDescription}>
-              잠시 후 다시 시도하거나 이전 화면으로 돌아가세요.
-            </Text>
+            <Text style={styles.loadErrorTitle}>{errorCopy.title}</Text>
+            <Text style={styles.loadErrorDescription}>{errorCopy.description}</Text>
             <View style={styles.loadErrorActions}>
               <ScalePressable
                 style={styles.loadRetryButton}
                 contentStyle={styles.loadRetryButtonContent}
                 onPress={() => {
-                  if (isThoughtMode) {
+                  if (detailError.retryEntity === "thought") {
                     thoughtQuery.refetch();
                   } else {
                     articleQuery.refetch();

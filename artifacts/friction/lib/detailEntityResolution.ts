@@ -12,6 +12,27 @@ type DividingArticle = {
   status?: string | null;
 };
 
+/**
+ * Why a detail lookup ended in failure, used to pick user-facing copy and to
+ * decide whether "다시 시도" is worth automating.
+ *
+ * - "not-found": the server confirmed the record itself does not exist
+ *   (structured 404 body, e.g. `{ error: "Thought not found" }`).
+ * - "not-implemented": a 404 with no structured API error body — the route
+ *   itself is missing (older client hitting a server that doesn't expose this
+ *   lookup yet), not a missing record.
+ * - "auth": the session is not authorized (401/403) — likely expired.
+ * - "connection": network/timeout/server errors — plausibly transient.
+ * - "not-dividing": the article exists but isn't in DIVIDING status, so it
+ *   isn't valid for this dividing-mode route.
+ */
+export type DetailErrorReason =
+  | "not-found"
+  | "not-implemented"
+  | "auth"
+  | "connection"
+  | "not-dividing";
+
 export type DetailEntityResolution<TThought, TArticle extends DividingArticle> =
   | {
       kind: "loading";
@@ -31,17 +52,103 @@ export type DetailEntityResolution<TThought, TArticle extends DividingArticle> =
       kind: "error";
       entity: DetailEntity;
       error?: unknown;
-      reason: "not-found" | "request-failed" | "not-dividing";
+      reason: DetailErrorReason;
       retryEntity: DetailEntity;
     };
 
-function isNotFound(error: unknown): boolean {
+// ── error classification ────────────────────────────────────────────────────
+//
+// customFetch throws ApiError (`{ status, data, ... }`) for any non-2xx HTTP
+// response, and plain Errors (TypeError, AbortError/TimeoutError) for
+// failures that never reached the server. This module stays free of any
+// dependency on the api-client package and duck-types both shapes instead.
+
+function hasNumericStatus(error: unknown): error is { status: number; data?: unknown } {
   return (
     typeof error === "object" &&
     error !== null &&
     "status" in error &&
-    (error as { status?: unknown }).status === 404
+    typeof (error as { status?: unknown }).status === "number"
   );
+}
+
+/** True only when the 404 came with a structured (JSON object) API error body. */
+function hasStructuredErrorBody(error: { data?: unknown }): boolean {
+  return typeof error.data === "object" && error.data !== null;
+}
+
+function isTimeoutOrAbort(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+function isNetworkFailure(error: unknown): boolean {
+  if (isTimeoutOrAbort(error)) return true;
+  if (error instanceof TypeError) return true;
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("network") || message.includes("failed to fetch")) return true;
+  }
+  return false;
+}
+
+/** A 404 regardless of body shape — used only to decide routing (try the other entity next). */
+function isNotFound(error: unknown): boolean {
+  return hasNumericStatus(error) && error.status === 404;
+}
+
+/** Classifies a terminal (already-decided-to-be-final) failure for user-facing copy. */
+export function classifyDetailError(error: unknown): DetailErrorReason {
+  if (isNetworkFailure(error)) return "connection";
+  if (hasNumericStatus(error)) {
+    const { status } = error;
+    if (status === 401 || status === 403) return "auth";
+    if (status === 404) {
+      return hasStructuredErrorBody(error) ? "not-found" : "not-implemented";
+    }
+    if (status >= 500) return "connection";
+  }
+  return "connection";
+}
+
+/** Only network/timeout/5xx failures are plausibly transient; everything else won't improve on retry. */
+export function isRetryableDetailError(error: unknown): boolean {
+  if (isNetworkFailure(error)) return true;
+  if (hasNumericStatus(error) && error.status >= 500) return true;
+  return false;
+}
+
+/**
+ * True only for a definitive "this doesn't exist / isn't valid anymore"
+ * response — used by the question-activation flow to decide whether it's
+ * honest to tell the user the item is gone and navigate them away. A
+ * network blip, timeout, 5xx, or expired session is NOT this: those must
+ * leave the user able to retry, not be told something was deleted that may
+ * simply have failed to load.
+ *
+ * Requires a *structured* error body on top of the 404/409 status, for the
+ * same reason `classifyDetailError` does for 404s: an unstructured 404/409
+ * (e.g. a stale client hitting a server build where the activate route
+ * itself no longer exists, or a proxy/gateway response) is a version-skew
+ * or infra problem, not the server confirming the question is gone.
+ */
+export function isConfirmedGoneError(error: unknown): boolean {
+  return (
+    hasNumericStatus(error) &&
+    (error.status === 404 || error.status === 409) &&
+    hasStructuredErrorBody(error)
+  );
+}
+
+const MAX_DETAIL_QUERY_RETRIES = 2;
+
+/** React Query `retry` option: bounded auto-retry for transient failures only. */
+export function shouldRetryDetailQuery(failureCount: number, error: unknown): boolean {
+  return failureCount < MAX_DETAIL_QUERY_RETRIES && isRetryableDetailError(error);
+}
+
+/** React Query `retryDelay` option: short, capped backoff so a stuck screen resolves quickly. */
+export function detailQueryRetryDelayMs(attemptIndex: number): number {
+  return Math.min(400 * 2 ** attemptIndex, 1500);
 }
 
 function resolveArticle<TThought, TArticle extends DividingArticle>(
@@ -51,33 +158,27 @@ function resolveArticle<TThought, TArticle extends DividingArticle>(
     return { kind: "success", entity: "article", article: article.data };
   }
 
-  if (article.isLoading) {
-    return { kind: "loading", entity: "article" };
-  }
-
-  if (article.data) {
+  if (article.isError) {
     return {
       kind: "error",
       entity: "article",
-      reason: "not-dividing",
+      error: article.error,
+      reason: classifyDetailError(article.error),
       retryEntity: "article",
     };
   }
 
-  return {
-    kind: "error",
-    entity: "article",
-    error: article.error,
-    reason: isNotFound(article.error) ? "not-found" : "request-failed",
-    retryEntity: "article",
-  };
+  if (article.data) {
+    return { kind: "error", entity: "article", reason: "not-dividing", retryEntity: "article" };
+  }
+
+  // Not yet resolved: either actively fetching, or not started yet (e.g. the
+  // query is disabled while auth restoration is in progress). Both must
+  // present as "loading" — never guess at a terminal state before the query
+  // has actually run.
+  return { kind: "loading", entity: "article" };
 }
 
-/**
- * Resolves the real detail entity independently from the order in which the
- * two detail requests finish. A thought route treats article 404 as expected;
- * a dividing route always requires a real DIVIDING article.
- */
 export function resolveDetailEntity<TThought, TArticle extends DividingArticle>({
   requestMode,
   thought,
@@ -88,32 +189,35 @@ export function resolveDetailEntity<TThought, TArticle extends DividingArticle>(
   article: DetailQuerySnapshot<TArticle>;
 }): DetailEntityResolution<TThought, TArticle> {
   if (requestMode === "dividing") {
-    return resolveArticle<TThought, TArticle>(article);
+    return resolveArticle(article);
   }
 
   if (thought.data) {
     return { kind: "success", entity: "thought", thought: thought.data };
   }
 
-  if (thought.isLoading) {
-    return { kind: "loading", entity: "thought" };
-  }
-
-  if (thought.isError && !isNotFound(thought.error)) {
+  if (thought.isError) {
+    // Only a *structured* thought 404 ("no thought with this id") is safe to
+    // treat as "try the article instead" — that's the expected shape when a
+    // direct article route reaches this screen without `mode=dividing`. An
+    // unstructured 404 means the `/thoughts/:id` route itself is missing
+    // (server/client version skew), which is a terminal, unrelated failure:
+    // falling through to the article lookup would let a real article 404
+    // masquerade as "not-implemented", or a real "not-implemented" get
+    // overwritten by whatever the article lookup happens to return.
+    if (isNotFound(thought.error) && hasStructuredErrorBody(thought.error as { data?: unknown })) {
+      return resolveArticle(article);
+    }
     return {
       kind: "error",
       entity: "thought",
       error: thought.error,
-      reason: "request-failed",
+      reason: classifyDetailError(thought.error),
       retryEntity: "thought",
     };
   }
 
-  // A thought 404 is the expected result when an older/direct article route
-  // reaches this screen without `mode=dividing`, so resolve the article next.
-  if (thought.isError && isNotFound(thought.error)) {
-    return resolveArticle<TThought, TArticle>(article);
-  }
-
+  // Not yet resolved: either actively fetching, or not started yet (e.g. the
+  // query is disabled while auth restoration is in progress).
   return { kind: "loading", entity: "thought" };
 }
