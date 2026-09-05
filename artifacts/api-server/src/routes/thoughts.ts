@@ -837,34 +837,15 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
 
   if (source.content && process.env.OPENROUTER_API_KEY) {
     try {
-  const candidates = body?.candidates;
+      const candidates = similar
+        .filter((s) => s.content != null)
+        .map((s) => ({ id: s.id, content: s.content! }));
 
-  if (!isNoteObject(targetNote)) {
-    res
-      .status(400)
-      .json({ error: "targetNote must have id and content fields" });
-    return;
-  }
-  if (
-    !Array.isArray(candidates) ||
-    candidates.length === 0 ||
-    !candidates.every(isNoteObject)
-  ) {
-    res.status(400).json({
-      error: "candidates must be a non-empty array of {id, content} objects",
-    });
-    return;
-  }
-
-  if (!process.env.OPENROUTER_API_KEY) {
-    res
-      .status(500)
-      .json({ error: "OPENROUTER_API_KEY is not configured on the server" });
-    return;
-  }
-
-  try {
-    const results = await analyzeThoughtExpansion(targetNote, candidates);
+      if (candidates.length > 0) {
+        const results = await analyzeThoughtExpansion(
+          { id: source.id, content: source.content },
+          candidates,
+        );
         for (const result of results) {
           analysisMap[result.id] = { r: result.r, k: result.k, h: result.h };
         }
