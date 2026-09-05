@@ -12,7 +12,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import { useQueryClient } from "@tanstack/react-query";
-import { AntDesign } from "@expo/vector-icons";
 import {
   getGetStoredSentenceQueryKey,
   getListStoredSentencesQueryKey,
@@ -25,7 +24,7 @@ import HeaderButton from "@/components/shared/HeaderButton";
 import ActionSheetModal, { type ActionSheetAction } from "@/components/ActionSheetModal/ActionSheetModal";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ScalePressable from "@/components/shared/ScalePressable";
-import { Colors, ReaderTokens, Shadows, Spacing, Typography, readerFontSize } from "@/constants/tokens";
+import { Colors, ReaderTokens, Spacing, Typography, readerFontSize } from "@/constants/tokens";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
@@ -34,8 +33,7 @@ import {
   optimisticallySetStoredSentenceFavorite,
   rollbackStoredSentenceFavorite,
 } from "@/lib/storedSentenceFavoriteCache";
-
-const FAVORITE_STAR_COLOR = "#F59E0B";
+import StoredSentenceCard from "@/components/StoredSentenceCard";
 
 function getPage(position: unknown): number | undefined {
   if (!position || typeof position !== "object" || !("page" in position)) return undefined;
@@ -206,22 +204,15 @@ export default function StoredSentenceDetailScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.card, { width: cardWidth }]}>
-          {sentence.isFavorite ? (
-            <View
-              style={styles.favoriteBadge}
-              pointerEvents="none"
-              accessible
-              accessibilityLabel="즐겨찾기한 문장"
-            >
-              <AntDesign name="star" size={16} color={FAVORITE_STAR_COLOR} />
-            </View>
-          ) : null}
-          <Text style={[styles.body, { fontSize: bodySize, lineHeight: bodySize * ReaderTokens.lineHeight.relaxed }]}>
-            {sentence.text}
-          </Text>
-          <Text style={[styles.source, { fontSize: sourceSize, lineHeight: sourceSize * 1.5 }]}>{source}</Text>
-        </View>
+        <StoredSentenceCard
+          style={{ width: cardWidth }}
+          text={sentence.text}
+          source={source}
+          date={new Date(sentence.createdAt).toLocaleDateString("ko-KR")}
+          isFavorite={sentence.isFavorite}
+          bodyFontSize={bodySize}
+          sourceFontSize={sourceSize}
+        />
         {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
       </ScrollView>
     );
@@ -264,30 +255,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { ...Typography.bodySemiBold, fontSize: 17, color: Colors.zinc900 },
   scrollContent: { alignItems: "center", paddingTop: 16, paddingHorizontal: Spacing.screenPx },
-  card: {
-    position: "relative",
-    minHeight: 280,
-    borderRadius: 16,
-    backgroundColor: Colors.white,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 24,
-    justifyContent: "space-between",
-    ...Shadows.card,
-  },
-  favoriteBadge: {
-    position: "absolute",
-    top: -8,
-    left: 10,
-    zIndex: 1,
-  },
-  body: { fontFamily: ReaderTokens.fontFamily.serif, color: Colors.zinc900 },
-  source: {
-    marginTop: 40,
-    fontFamily: ReaderTokens.fontFamily.serifBold,
-    fontWeight: "600",
-    color: Colors.noticeAccent,
-  },
   actionError: { ...Typography.caption, color: Colors.noticeAccent, marginTop: 18, textAlign: "center" },
   state: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: Spacing.screenPx, gap: 10 },
   stateTitle: { ...Typography.bodySemiBold, fontSize: 17, color: Colors.zinc900, textAlign: "center" },

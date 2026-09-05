@@ -14,7 +14,6 @@ import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { AntDesign } from "@expo/vector-icons";
 import {
   Colors,
   ReaderTokens,
@@ -45,23 +44,11 @@ import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/Swip
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useQueryClient } from "@tanstack/react-query";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
+import StoredSentenceCard from "@/components/StoredSentenceCard";
 
 type ArchiveSubTab = "personal" | "sentence";
 const FILTER_BUTTON_HEIGHT = 36;
 const SENTENCE_BADGE_OVERFLOW = 12;
-
-function FavoriteBadge() {
-  return (
-    <View
-      style={styles.favoriteBadge}
-      pointerEvents="none"
-      accessible={false}
-    >
-      <AntDesign name="heart" size={16} color={Colors.noticeAccent} />
-    </View>
-  );
-}
-
 export default function ArchiveScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -323,24 +310,13 @@ export default function ArchiveScreen() {
         accessibilityRole="button"
         accessibilityLabel={`문장 상세 열기${item.isFavorite ? ", 즐겨찾기됨" : ""}`}
       >
-        {item.isFavorite ? <FavoriteBadge /> : null}
-        <View style={styles.sentenceItemContent}>
-          <View style={styles.sentenceMeta}>
-            <Text style={styles.sentenceSource} numberOfLines={1}>
-              {item.sourceText || item.articleTitle || "출처 없음"}
-            </Text>
-            <Text style={styles.sentenceDate}>
-              {new Date(item.createdAt).toLocaleDateString("ko-KR")}
-            </Text>
-          </View>
-          <Text
-            style={[styles.sentenceText, { fontSize: sentenceTextSize, lineHeight: sentenceTextSize * 1.7 }]}
-            numberOfLines={3}
-            ellipsizeMode="tail"
-          >
-            {item.text}
-          </Text>
-        </View>
+        <StoredSentenceCard
+          text={item.text}
+          source={item.sourceText || item.articleTitle || "출처 없음"}
+          date={new Date(item.createdAt).toLocaleDateString("ko-KR")}
+          isFavorite={item.isFavorite}
+          bodyFontSize={sentenceTextSize}
+        />
       </ScalePressable>
     </SwipeableRow>
   ), [closeSentenceOpenRow, handleSentenceSwipeOpen, router, sentenceTextSize]);
@@ -356,29 +332,20 @@ export default function ArchiveScreen() {
         accessibilityLabel={`문장 선택${item.isFavorite ? ", 즐겨찾기됨" : ""}`}
         accessibilityState={{ checked: isSelected }}
       >
-        {item.isFavorite ? <FavoriteBadge /> : null}
-        <View style={styles.checkboxTouchTarget}>
-          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
-          </View>
-        </View>
-        <View style={styles.sentenceItemContent}>
-          <View style={styles.sentenceMeta}>
-            <Text style={styles.sentenceSource} numberOfLines={1}>
-              {item.sourceText || item.articleTitle || "출처 없음"}
-            </Text>
-            <Text style={styles.sentenceDate}>
-              {new Date(item.createdAt).toLocaleDateString("ko-KR")}
-            </Text>
-          </View>
-          <Text
-            style={[styles.sentenceText, { fontSize: sentenceTextSize, lineHeight: sentenceTextSize * 1.7 }]}
-            numberOfLines={3}
-            ellipsizeMode="tail"
-          >
-            {item.text}
-          </Text>
-        </View>
+        <StoredSentenceCard
+          text={item.text}
+          source={item.sourceText || item.articleTitle || "출처 없음"}
+          date={new Date(item.createdAt).toLocaleDateString("ko-KR")}
+          isFavorite={item.isFavorite}
+          bodyFontSize={sentenceTextSize}
+          leading={(
+            <View style={styles.checkboxTouchTarget}>
+              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+              </View>
+            </View>
+          )}
+        />
       </ScalePressable>
     );
   }, [selectedIds, sentenceTextSize, toggleSelect]);
@@ -850,36 +817,6 @@ const styles = StyleSheet.create({
   },
   sentenceItemRow: {
     position: "relative",
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: Colors.white,
-    ...Shadows.card,
-  },
-  sentenceItemContent: {
-    flex: 1,
-    minWidth: 0,
-    gap: 7,
-  },
-  sentenceText: {
-    fontFamily: ReaderTokens.fontFamily.serif,
-    color: Colors.zinc600,
-  },
-  sentenceSource: {
-    ...Typography.caption,
-    color: Colors.zinc500,
-    flex: 1,
-    minWidth: 0,
-    marginRight: 12,
-  },
-  sentenceMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sentenceDate: {
-    ...Typography.caption,
-    color: Colors.zinc500,
-    flexShrink: 0,
   },
   selectionRow: {
     marginHorizontal: Spacing.screenPx,
@@ -887,19 +824,6 @@ const styles = StyleSheet.create({
   },
   selectionRowContent: {
     position: "relative",
-    flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 16,
-    paddingLeft: 10,
-    borderRadius: 16,
-    backgroundColor: Colors.white,
-    ...Shadows.card,
-  },
-  favoriteBadge: {
-    position: "absolute",
-    top: -8,
-    left: 10,
-    zIndex: 1,
   },
   checkboxTouchTarget: {
     width: 44,

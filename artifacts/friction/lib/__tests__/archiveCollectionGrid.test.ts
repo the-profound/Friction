@@ -5,33 +5,7 @@ import { describe, expect, it } from "vitest";
 const appRoot = join(__dirname, "../..");
 const archiveScreen = readFileSync(join(appRoot, "app/(tabs)/archive.tsx"), "utf8");
 
-describe("archive personal collection grid", () => {
-  it("renders every personal collection through the same full-width list renderer", () => {
-    expect(archiveScreen).toContain("data={regularCollections}");
-    expect(archiveScreen).not.toContain("numColumns={2}");
-    expect(archiveScreen).toContain("renderItem={renderPersonalItem}");
-  });
-
-  it("keeps each card at the shared full-width size", () => {
-    expect(archiveScreen).toContain(
-      "const cardWidth = Math.floor(windowWidth - Spacing.screenPx * 2);",
-    );
-    expect(archiveScreen).toContain(
-      "style={[styles.cardWrapper, { width: cardWidth }]}",
-    );
-  });
-
-  it("keeps long names and article counts on one line", () => {
-    expect(archiveScreen).toContain(
-      '<Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>',
-    );
-    expect(archiveScreen).toContain(
-      '<Text style={styles.cardMetaText} numberOfLines={1}>{item.articleCount ?? 0}편</Text>',
-    );
-  });
-});
-
-describe("archive collected sentence list", () => {
+const sentenceCard = readFileSync(join(appRoot, "components/StoredSentenceCard.tsx"), "utf8");
   const sentenceFilterAction = archiveScreen.slice(
     archiveScreen.indexOf('{activeSubTab === "personal" ? ('),
     archiveScreen.indexOf("</View>", archiveScreen.indexOf('{activeSubTab === "personal" ? (')),
@@ -45,32 +19,45 @@ describe("archive collected sentence list", () => {
     archiveScreen.indexOf("const renderEmptyPersonal"),
   );
 
-  it("uses the record-list card surface and metadata layout", () => {
+  it("uses the shared content-sized card surface and metadata layout", () => {
+    expect(regularRenderer).toContain("<StoredSentenceCard");
+    expect(selectionRenderer).toContain("<StoredSentenceCard");
     expect(archiveScreen).toContain("marginHorizontal: Spacing.screenPx");
     expect(archiveScreen).toContain("marginBottom: Spacing.cardGap");
-    expect(archiveScreen).toContain("borderRadius: 16");
-    expect(archiveScreen).toContain("...Shadows.card");
-    expect(archiveScreen).toContain("fontFamily: ReaderTokens.fontFamily.serif");
-    expect(archiveScreen).toContain('justifyContent: "space-between"');
+    expect(sentenceCard).toContain("borderRadius: 16");
+    expect(sentenceCard).toContain("...Shadows.card");
+    expect(sentenceCard).toContain("fontFamily: ReaderTokens.fontFamily.serif");
+    expect(sentenceCard).toContain('textAlign: "justify"');
+    expect(sentenceCard).not.toContain("minHeight");
+    expect(sentenceCard).not.toContain('justifyContent: "space-between"');
     expect(archiveScreen).toContain('item.sourceText || item.articleTitle || "출처 없음"');
   });
 
-  it("keeps source and sentence previews safely truncated", () => {
-    expect(regularRenderer).toContain('style={styles.sentenceSource} numberOfLines={1}');
-    expect(regularRenderer).toContain("numberOfLines={3}");
-    expect(regularRenderer).toContain('ellipsizeMode="tail"');
-    expect(selectionRenderer).toContain('style={styles.sentenceSource} numberOfLines={1}');
-    expect(selectionRenderer).toContain("numberOfLines={3}");
+  it("shows complete sentence and source text without line limits or ellipses", () => {
+    expect(regularRenderer).not.toContain("numberOfLines");
+    expect(regularRenderer).not.toContain("ellipsizeMode");
+    expect(selectionRenderer).not.toContain("numberOfLines");
+    expect(selectionRenderer).not.toContain("ellipsizeMode");
+    expect(sentenceCard).not.toContain("numberOfLines");
+    expect(sentenceCard).not.toContain("ellipsizeMode");
+  });
+
+  it("lets long sources wrap beside a stable bottom-right date", () => {
+    expect(sentenceCard).toContain('alignItems: "flex-end"');
+    expect(sentenceCard).toContain("flex: 1");
+    expect(sentenceCard).toContain("minWidth: 0");
+    expect(sentenceCard).toContain("flexShrink: 0");
+    expect(sentenceCard).toContain('textAlign: "right"');
   });
 
   it("renders non-interactive favorite badges without adding favorite actions", () => {
-    expect(regularRenderer).toContain("<FavoriteBadge />");
+    expect(regularRenderer).toContain("isFavorite={item.isFavorite}");
     expect(regularRenderer).not.toContain("handleSentenceToggleFavorite");
-    expect(selectionRenderer).toContain("<FavoriteBadge />");
-    expect(archiveScreen).toContain('pointerEvents="none"');
+    expect(selectionRenderer).toContain("isFavorite={item.isFavorite}");
+    expect(sentenceCard).toContain('pointerEvents="none"');
     expect(archiveScreen).toContain("즐겨찾기됨");
-    expect(archiveScreen).toContain('<AntDesign name="heart" size={16} color={Colors.noticeAccent} />');
-    expect(archiveScreen).not.toContain('name="star"');
+    expect(sentenceCard).toContain('<AntDesign name="heart" size={16} color={Colors.noticeAccent} />');
+    expect(sentenceCard).not.toContain('name="star"');
   });
 
   it("opens manual sentence creation from the shared outlined add action", () => {
@@ -97,8 +84,8 @@ describe("archive collected sentence list", () => {
   });
 
   it("renders stored text without decorative quotation marks", () => {
-    expect(regularRenderer).toContain("{item.text}");
-    expect(selectionRenderer).toContain("{item.text}");
+    expect(regularRenderer).toContain("text={item.text}");
+    expect(selectionRenderer).toContain("text={item.text}");
     expect(regularRenderer).not.toContain("&ldquo;");
     expect(selectionRenderer).not.toContain("&rdquo;");
   });
@@ -153,28 +140,31 @@ describe("stored sentence detail route", () => {
 
   it("keeps typography, source fallbacks, scrolling, and deletion cache refresh explicit", () => {
     expect(detailScreen).toContain("ReaderTokens.typeScale.bodyCqi");
-    expect(detailScreen).toContain('fontFamily: ReaderTokens.fontFamily.serifBold');
+    expect(detailScreen).toContain("<StoredSentenceCard");
+    expect(sentenceCard).toContain('fontFamily: ReaderTokens.fontFamily.serifBold');
     expect(detailScreen).toContain('"제목 없는 원문"');
     expect(detailScreen).toContain('"저장 위치 없음"');
     expect(detailScreen).toContain('"저자 미상"');
     expect(detailScreen).toContain("sentence.sourceText?.trim()");
     expect(detailScreen).toContain("sentence.articleAuthorName");
     expect(detailScreen).toContain("}, <${sentence.articleTitle");
+    expect(detailScreen).toContain("new Date(sentence.createdAt).toLocaleDateString");
     expect(detailScreen).toContain("<ScrollView");
     expect(detailScreen).toContain("invalidateQueries({ queryKey: getListStoredSentencesQueryKey");
     expect(detailScreen).toContain("router.back()");
   });
 
   it("shows a passive favorite badge and optimistically updates every sentence cache", () => {
-    expect(detailScreen).toContain("<AntDesign");
-    expect(detailScreen).toContain('pointerEvents="none"');
+    expect(detailScreen).toContain("isFavorite={sentence.isFavorite}");
+    expect(sentenceCard).toContain('pointerEvents="none"');
+    expect(sentenceCard).toContain('name="heart"');
     expect(detailScreen).toContain("optimisticallySetStoredSentenceFavorite");
     expect(detailScreen).toContain("applyStoredSentenceFavoriteResponse");
     expect(detailScreen).toContain("rollbackStoredSentenceFavorite");
   });
 
   it("renders sentence text without decorative quotation marks", () => {
-    expect(detailScreen).toContain("{sentence.text}");
+    expect(detailScreen).toContain("text={sentence.text}");
     expect(detailScreen).not.toContain("&ldquo;");
     expect(detailScreen).not.toContain("&rdquo;");
   });
