@@ -38,8 +38,6 @@ import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottom
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
 import HeaderButton from "@/components/shared/HeaderButton";
-import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
-import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
@@ -48,13 +46,35 @@ import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 
 type FolderView = "card" | "content";
-const VIEW_OPTIONS: DropdownOption<FolderView>[] = [
-  { key: "card", label: "카드" },
-  { key: "content", label: "목록" },
-];
+const VIEW_BUTTON_SIZE = 44;
 const GRID_PAD = 12;
 const GRID_GAP = 4;
 const GRID_COLS = 3;
+
+function CollectionViewButton({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <ScalePressable
+      style={styles.viewButton}
+      contentStyle={styles.viewButtonContent}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+    >
+      <Feather name={icon} size={18} color={active ? Colors.noticeAccent : Colors.zinc600} />
+    </ScalePressable>
+  );
+}
 
 export default function PersonalCollectionDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -517,24 +537,20 @@ export default function PersonalCollectionDetailScreen() {
 
       {!selectionMode && (
         <View style={styles.sectionHeader}>
-          <DropdownFilter
-            label="카드"
-            value={view}
-            defaultValue="card"
-            options={VIEW_OPTIONS}
-            onChange={setView}
-            showDefaultOptionLabel
-            activeVariant="outline"
-            accessibilityLabel="보기 방식 필터"
-          />
-          {!isArchive && (
-            <ScalePressable onPress={() => setShowPicker(true)}
-              contentStyle={styles.addArticleButtonContent}
-            >
-              <Feather name="plus" size={16} color={Colors.zinc600} />
-              <Text style={styles.addArticleText}>편지 추가</Text>
-            </ScalePressable>
-          )}
+          <View style={styles.viewButtonGroup}>
+            <CollectionViewButton
+              icon="layers"
+              label="카드형으로 보기"
+              active={view === "card"}
+              onPress={() => setView("card")}
+            />
+            <CollectionViewButton
+              icon="list"
+              label="목록형으로 보기"
+              active={view === "content"}
+              onPress={() => setView("content")}
+            />
+          </View>
         </View>
       )}
 
@@ -726,6 +742,9 @@ export default function PersonalCollectionDetailScreen() {
         title="모음 관리"
         onClose={() => setMoreSheetVisible(false)}
         actions={[
+          ...(!isArchive && !isImpression ? [
+            { label: "편지 추가", onPress: () => { setMoreSheetVisible(false); setShowPicker(true); } },
+          ] : []),
           { label: "선택", onPress: () => { setMoreSheetVisible(false); enterSelectionMode(); } },
           ...(!isImpression ? [
             { label: "모음 이름 변경", onPress: () => { setMoreSheetVisible(false); handleOpenEdit(); } },
@@ -781,24 +800,32 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     paddingHorizontal: Spacing.screenPx,
-    paddingVertical: 14,
+    paddingVertical: 4,
   },
-  addArticleButtonContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: Colors.zinc50,
-    borderRadius: 8,
+  viewButtonGroup: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    flexGrow: 0,
+    flexShrink: 0,
   },
-  addArticleText: {
-    ...Typography.caption,
-    fontSize: 13,
-    color: Colors.zinc600,
-    fontWeight: "600",
+  viewButton: {
+    width: VIEW_BUTTON_SIZE,
+    height: VIEW_BUTTON_SIZE,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  viewButtonContent: {
+    width: VIEW_BUTTON_SIZE,
+    height: VIEW_BUTTON_SIZE,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: VIEW_BUTTON_SIZE / 2,
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
   },
   listContent: {
     paddingBottom: 40,

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const appRoot = join(__dirname, "../..");
 const archiveScreen = readFileSync(join(appRoot, "app/(tabs)/archive.tsx"), "utf8");
+const collectionDetailScreen = readFileSync(join(appRoot, "app/of-01-detail.tsx"), "utf8");
 
 const sentenceCard = readFileSync(join(appRoot, "components/StoredSentenceCard.tsx"), "utf8");
 
@@ -72,6 +73,48 @@ describe("archive collection recent-letter previews", () => {
     );
     expect(cardStyles).not.toContain("\n    height:");
     expect(archiveScreen).not.toContain("collection-preview-filler");
+  });
+});
+
+describe("archive collection detail controls", () => {
+  it("uses fixed icon buttons with accessible selected states for card and list views", () => {
+    expect(collectionDetailScreen).not.toContain("DropdownFilter");
+    expect(collectionDetailScreen).toContain("function CollectionViewButton");
+    expect(collectionDetailScreen).toContain('label="카드형으로 보기"');
+    expect(collectionDetailScreen).toContain('label="목록형으로 보기"');
+    expect(collectionDetailScreen).toContain('icon="layers"');
+    expect(collectionDetailScreen).toContain('icon="list"');
+    expect(collectionDetailScreen).toContain("accessibilityState={{ selected: active }}");
+    expect(collectionDetailScreen).toContain("const VIEW_BUTTON_SIZE = 44");
+    expect(collectionDetailScreen).toContain("width: VIEW_BUTTON_SIZE");
+    expect(collectionDetailScreen).toContain("height: VIEW_BUTTON_SIZE");
+  });
+
+  it("opens the existing letter picker from the regular-collection management menu only", () => {
+    const sectionHeader = collectionDetailScreen.slice(
+      collectionDetailScreen.indexOf("<View style={styles.sectionHeader}>"),
+      collectionDetailScreen.indexOf("</View>", collectionDetailScreen.indexOf("<View style={styles.sectionHeader}>")) + 7,
+    );
+    const managementMenu = collectionDetailScreen.slice(
+      collectionDetailScreen.indexOf("<ActionSheetModal"),
+      collectionDetailScreen.indexOf("</ActionSheetModal>", collectionDetailScreen.indexOf("<ActionSheetModal")),
+    );
+
+    expect(sectionHeader).not.toContain("편지 추가");
+    expect(managementMenu).toContain('label: "편지 추가"');
+    expect(managementMenu).toContain("setShowPicker(true)");
+    expect(managementMenu).toContain("...(!isArchive && !isImpression ? [");
+    expect(collectionDetailScreen).toContain("<MyArticlesPickerBottomSheet");
+    expect(collectionDetailScreen).toContain("onSelect={handleAddArticles}");
+  });
+
+  it("preserves selection, rename, delete, and both content renderers", () => {
+    expect(collectionDetailScreen).toContain('{ label: "선택"');
+    expect(collectionDetailScreen).toContain('{ label: "모음 이름 변경"');
+    expect(collectionDetailScreen).toContain('{ label: "모음 삭제"');
+    expect(collectionDetailScreen).toContain('view === "card"');
+    expect(collectionDetailScreen).toContain("renderItem={renderGridRow}");
+    expect(collectionDetailScreen).toContain("renderItem={renderNormalItem}");
   });
 });
 
