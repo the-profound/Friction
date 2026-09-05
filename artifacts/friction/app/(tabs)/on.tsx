@@ -908,7 +908,7 @@ export default function OnScreen() {
       await addToCollection.mutateAsync({ id: selectedCollectionId, data: { articleId: archiveArticleId } });
       invalidateMyCollections(queryClient);
       invalidateArticleLists(queryClient);
-      const collectionName = sortedCollections.find((collection) => collection.id === selectedCollectionId)?.name ?? "폴더";
+      const collectionName = sortedCollections.find((collection) => collection.id === selectedCollectionId)?.name ?? "모음";
       setArchiveArticleId(null);
       setSelectedCollectionId(null);
       showToast({
@@ -916,7 +916,7 @@ export default function OnScreen() {
         type: "success",
         duration: 4000,
         action: {
-          label: "폴더 보기",
+          label: "모음 보기",
           onPress: () => router.push({ pathname: "/of-01-detail", params: { id: selectedCollectionId, name: collectionName } }),
         },
       });
@@ -1279,12 +1279,12 @@ export default function OnScreen() {
       />
       <BottomSheet visible={Boolean(archiveArticleId)} onClose={() => { setArchiveArticleId(null); setSelectedCollectionId(null); }} snapPoints={[0.6]} enableDragDown dismissable>
         <View style={styles.archive}>
-          <RecordListText style={styles.archiveTitle}>보관할 폴더 선택</RecordListText>
+          <RecordListText style={styles.archiveTitle}>보관할 모음 선택</RecordListText>
           <FlatList
             data={sortedCollections}
             keyExtractor={(collection) => collection.id}
             renderItem={({ item }) => <ScalePressable style={styles.collectionRow} contentStyle={[styles.collectionRowContent, selectedCollectionId === item.id && styles.collectionSelected]} onPress={() => setSelectedCollectionId(item.id)}><RecordListText style={styles.collectionName}>{item.name}</RecordListText>{selectedCollectionId === item.id ? <Feather name="check" size={16} color={Colors.zinc900} /> : null}</ScalePressable>}
-            ListEmptyComponent={<RecordListText style={styles.muted}>보관할 폴더가 없어요</RecordListText>}
+            ListEmptyComponent={<RecordListText style={styles.muted}>보관할 모음이 없어요</RecordListText>}
           />
           <ScalePressable
             style={styles.archiveButton}
