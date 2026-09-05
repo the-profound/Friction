@@ -746,4 +746,130 @@ describe("thought question queue API", () => {
       expect(b.queue).not.toContainEqual(expect.objectContaining({ id: "question-a" }));
     });
   });
+
+  it("GET /question-queue: AI generation does not run inside a DB transaction", async () => {
+    seedCandidates("user-a", 3);
+    let insideTransaction = false;
+    let aiCalledInsideTx = false;
+
+    const origTx = state.db.transaction;
+    try {
+      state.db.transaction = async (cb: (tx: unknown) => unknown) => {
+        insideTransaction = true;
+        try {
+          return await origTx(cb);
+        } finally {
+          insideTransaction = false;
+        }
+      };
+      vi.mocked(generatePreliminaryThoughtQuestion).mockImplementationOnce(async () => {
+        aiCalledInsideTx = insideTransaction;
+        return { title: "생성된 질문?", description: "설명입니다." };
+      });
+
+      await withServer(async (baseUrl) => {
+        const response = await request(baseUrl, "user-a", "/thoughts/question-queue");
+        expect(response.status).toBe(200);
+        expect(aiCalledInsideTx).toBe(false);
+      });
+    } finally {
+      state.db.transaction = origTx;
+    }
+  });
+
+  it("POST /question-queue/refresh: AI generation does not run inside a DB transaction", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+    seedCandidates("user-a", 3);
+    let insideTransaction = false;
+    let aiCalledInsideTx = false;
+
+    const origTx = state.db.transaction;
+    try {
+      state.db.transaction = async (cb: (tx: unknown) => unknown) => {
+        insideTransaction = true;
+        try {
+          return await origTx(cb);
+        } finally {
+          insideTransaction = false;
+        }
+      };
+      vi.mocked(generatePreliminaryThoughtQuestion).mockImplementationOnce(async () => {
+        aiCalledInsideTx = insideTransaction;
+        return { title: "생성된 질문?", description: "설명입니다." };
+      });
+
+      await withServer(async (baseUrl) => {
+        const response = await request(baseUrl, "user-a", "/thoughts/question-queue/refresh", {
+          method: "POST",
+          body: JSON.stringify({ currentThoughtId: "question-a" }),
+        });
+        expect(response.status).toBe(200);
+        expect(aiCalledInsideTx).toBe(false);
+      });
+    } finally {
+      state.db.transaction = origTx;
+    }
+  });
+
+  it("POST /:id/activate: AI generation does not run inside a DB transaction", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+    seedCandidates("user-a", 3);
+    let insideTransaction = false;
+    let aiCalledInsideTx = false;
+
+    const origTx = state.db.transaction;
+    try {
+      state.db.transaction = async (cb: (tx: unknown) => unknown) => {
+        insideTransaction = true;
+        try {
+          return await origTx(cb);
+        } finally {
+          insideTransaction = false;
+        }
+      };
+      vi.mocked(generatePreliminaryThoughtQuestion).mockImplementationOnce(async () => {
+        aiCalledInsideTx = insideTransaction;
+        return { title: "생성된 질문?", description: "설명입니다." };
+      });
+
+      await withServer(async (baseUrl) => {
+        const response = await request(baseUrl, "user-a", "/thoughts/question-a/activate", {
+          method: "POST",
+        });
+        expect(response.status).toBe(200);
+        expect(aiCalledInsideTx).toBe(false);
+      });
+    } finally {
+      state.db.transaction = origTx;
+    }
+  });
+
+  it("discards AI results in the write phase when a concurrent request consumed the same sources", async () => {
+    // Simulate the race: Phase 1 selects sources S1–S3, another request uses
+    // them during Phase 2 (AI), Phase 3 must discard the stale result and fall
+    // back to random questions so no duplicate-source provenance is written.
+    seedCandidates("user-a", 3);
+
+    vi.mocked(generatePreliminaryThoughtQuestion).mockImplementationOnce(async () => {
+      // Simulate a concurrent request marking the same sources as used between
+      // Phase 1 (candidate read) and Phase 3 (write under the advisory lock).
+      state.usedSources.set(
+        "user-a",
+        new Set(["user-a-source-1", "user-a-source-2", "user-a-source-3"]),
+      );
+      return { title: "생성된 질문?", description: "설명입니다." };
+    });
+
+    await withServer(async (baseUrl) => {
+      const body = (await (
+        await request(baseUrl, "user-a", "/thoughts/question-queue")
+      ).json()) as QueueResponse;
+
+      // The AI result is discarded because its sources became used.
+      // The random fallback fills the minimum backlog instead.
+      expect(body.queue).toHaveLength(3);
+      // All three are random fallback (no source-based question inserted).
+      expect(state.generatedCount).toBe(3);
+    });
+  });
 });

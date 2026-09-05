@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  inArray,
   isNotNull,
   isNull,
   ne,
@@ -335,6 +336,273 @@ async function fillQuestionQueue(
   return queued;
 }
 
+// ——— Three-phase queue fill helpers (AI calls outside DB transactions) ———
+
+type SourceCandidate = {
+  id: string;
+  content: string;
+  sourceArticleId: string | null;
+  sourceStoredSentenceId: string | null;
+};
+
+type AIQuestionResult = {
+  generated: { title: string; description: string };
+  selectedSources: SourceCandidate[];
+};
+
+/**
+ * Read source candidates inside a short transaction.
+ * Does not call the AI; purely reads DB state.
+ */
+async function readCandidates(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+  currentQueueLength: number,
+): Promise<{ sourceCandidates: SourceCandidate[]; needed: number }> {
+  const needed = QUESTION_QUEUE_TARGET_SIZE - currentQueueLength;
+  if (needed <= 0) return { sourceCandidates: [], needed: 0 };
+
+  const candidates = await tx
+    .select({
+      id: thoughtsTable.id,
+      content: thoughtsTable.content,
+      sourceArticleId: thoughtsTable.sourceArticleId,
+      sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
+    })
+    .from(thoughtsTable)
+    .where(
+      and(
+        eq(thoughtsTable.authorId, userId),
+        eq(thoughtsTable.status, "NORMAL"),
+        ne(thoughtsTable.createdFrom, "question"),
+        isNull(thoughtsTable.deletedAt),
+        isNotNull(thoughtsTable.content),
+        notExists(
+          tx
+            .select({ id: thoughtQuestionSourcesTable.id })
+            .from(thoughtQuestionSourcesTable)
+            .innerJoin(
+              questionSourceThought,
+              eq(
+                thoughtQuestionSourcesTable.questionThoughtId,
+                questionSourceThought.id,
+              ),
+            )
+            .where(
+              and(
+                eq(
+                  thoughtQuestionSourcesTable.sourceThoughtId,
+                  thoughtsTable.id,
+                ),
+                eq(questionSourceThought.authorId, userId),
+              ),
+            ),
+        ),
+      ),
+    )
+    .orderBy(desc(thoughtsTable.updatedAt))
+    .limit(QUESTION_QUEUE_SOURCE_CANDIDATE_LIMIT);
+
+  const sourceCandidates = candidates.filter(
+    (candidate): candidate is typeof candidate & { content: string } =>
+      !!candidate.content?.trim() &&
+      !isQuestionThoughtMarkdown(candidate.content),
+  );
+
+  return { sourceCandidates, needed };
+}
+
+/**
+ * Normalize the queue and read source candidates in one short transaction.
+ * Used in the GET handler's Phase 1.
+ */
+async function readQueueAndCandidates(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+) {
+  const queued = await normalizeQuestionQueue(tx, userId);
+  const { sourceCandidates, needed } = await readCandidates(
+    tx,
+    userId,
+    queued.length,
+  );
+  return { queued, sourceCandidates, needed };
+}
+
+/**
+ * Run AI question generation with no DB connection held.
+ * Non-fatal on error or null response: returns only successfully generated items.
+ */
+async function generateAIQuestions(
+  sourceCandidates: SourceCandidate[],
+  needed: number,
+): Promise<AIQuestionResult[]> {
+  const sourceGroups = Array.from({ length: needed }, (_, index) =>
+    sourceCandidates.slice(index * 3, index * 3 + 3),
+  ).filter((sources) => sources.length > 0);
+
+  const results: AIQuestionResult[] = [];
+  for (const selectedSources of sourceGroups) {
+    let generated;
+    try {
+      generated = await generatePreliminaryThoughtQuestion(selectedSources);
+    } catch {
+      break;
+    }
+    if (!generated) break;
+    results.push({ generated, selectedSources });
+  }
+  return results;
+}
+
+/**
+ * Write AI-generated and random-fallback questions in a short transaction.
+ * Takes the caller-supplied post-normalize queue state so only as many AI
+ * results as still fit within the target are inserted (guards against
+ * concurrent fills between the read and write transactions).
+ */
+async function writeGeneratedQuestions(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+  aiResults: AIQuestionResult[],
+  queued: Awaited<ReturnType<typeof getQueuedQuestions>>,
+): Promise<void> {
+  const stillNeeded = QUESTION_QUEUE_TARGET_SIZE - queued.length;
+  let resultsToWrite = aiResults.slice(0, stillNeeded);
+
+  // Guard against concurrent fills that happened between Phase 1 and Phase 3:
+  // re-read the provenance table under the advisory lock and discard any AI
+  // result whose sources were already consumed by another request.
+  if (resultsToWrite.length > 0) {
+    const allSourceIds = resultsToWrite.flatMap(({ selectedSources }) =>
+      selectedSources.map((s) => s.id),
+    );
+    if (allSourceIds.length > 0) {
+      const nowUsed = await tx
+        .select({ sourceThoughtId: thoughtQuestionSourcesTable.sourceThoughtId })
+        .from(thoughtQuestionSourcesTable)
+        .innerJoin(
+          questionSourceThought,
+          eq(
+            thoughtQuestionSourcesTable.questionThoughtId,
+            questionSourceThought.id,
+          ),
+        )
+        .where(
+          and(
+            inArray(thoughtQuestionSourcesTable.sourceThoughtId, allSourceIds),
+            eq(questionSourceThought.authorId, userId),
+          ),
+        );
+      const nowUsedSet = new Set(
+        nowUsed
+          .map((r) => r.sourceThoughtId)
+          .filter((id): id is string => id !== null),
+      );
+      resultsToWrite = resultsToWrite.filter(({ selectedSources }) =>
+        selectedSources.every((s) => !nowUsedSet.has(s.id)),
+      );
+    }
+  }
+
+  for (const { generated, selectedSources } of resultsToWrite) {
+    const [question] = await tx
+      .insert(thoughtsTable)
+      .values({
+        authorId: userId,
+        content: formatPreliminaryQuestionMarkdown(
+          generated.title,
+          generated.description,
+        ),
+        createdFrom: "question",
+        status: "PRELIMINARY",
+      })
+      .returning();
+
+    const provenance = [
+      ...selectedSources.map((source) => ({
+        questionThoughtId: question.id,
+        sourceThoughtId: source.id,
+      })),
+      ...Array.from(
+        new Set(
+          selectedSources
+            .map((source) => source.sourceArticleId)
+            .filter(Boolean),
+        ),
+      ).map((sourceArticleId) => ({
+        questionThoughtId: question.id,
+        sourceArticleId: sourceArticleId!,
+      })),
+      ...Array.from(
+        new Set(
+          selectedSources
+            .map((source) => source.sourceStoredSentenceId)
+            .filter(Boolean),
+        ),
+      ).map((sourceStoredSentenceId) => ({
+        questionThoughtId: question.id,
+        sourceStoredSentenceId: sourceStoredSentenceId!,
+      })),
+    ];
+    if (provenance.length > 0)
+      await tx.insert(thoughtQuestionSourcesTable).values(provenance);
+
+    const lastPosition = queued.at(-1)?.position ?? -1;
+    const [queueRow] = await tx
+      .insert(thoughtQuestionQueueTable)
+      .values({ userId, thoughtId: question.id, position: lastPosition + 1 })
+      .returning({
+        id: thoughtQuestionQueueTable.id,
+        position: thoughtQuestionQueueTable.position,
+      });
+    queued = [
+      ...queued,
+      { queueId: queueRow.id, position: queueRow.position, thought: question },
+    ];
+  }
+
+  // Synchronous random fallback: fill up to the minimum backlog without AI.
+  const existingQuestionTitles = new Set(
+    queued
+      .map((entry) => getQuestionTitle(entry.thought.content))
+      .filter((title): title is string => Boolean(title)),
+  );
+  while (queued.length < QUESTION_QUEUE_MIN_SIZE) {
+    const generated = generateRandomPreliminaryThoughtQuestion(
+      existingQuestionTitles,
+    );
+    if (!generated) break;
+
+    const [question] = await tx
+      .insert(thoughtsTable)
+      .values({
+        authorId: userId,
+        content: formatPreliminaryQuestionMarkdown(
+          generated.title,
+          generated.description,
+        ),
+        createdFrom: "question",
+        status: "PRELIMINARY",
+      })
+      .returning();
+
+    const lastPosition = queued.at(-1)?.position ?? -1;
+    const [queueRow] = await tx
+      .insert(thoughtQuestionQueueTable)
+      .values({ userId, thoughtId: question.id, position: lastPosition + 1 })
+      .returning({
+        id: thoughtQuestionQueueTable.id,
+        position: thoughtQuestionQueueTable.position,
+      });
+    queued = [
+      ...queued,
+      { queueId: queueRow.id, position: queueRow.position, thought: question },
+    ];
+    existingQuestionTitles.add(generated.title);
+  }
+}
+
 async function compactQuestionQueue(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   userId: string,
@@ -632,11 +900,25 @@ router.get("/thoughts/:id/similar", requireAuth, async (req, res) => {
 router.get("/thoughts/question-queue", requireAuth, async (req, res) => {
   const userId = req.user!.id;
 
+  // Phase 1: Short transaction — acquire advisory lock, normalize queue, read candidates.
+  const { sourceCandidates, needed } = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    return readQueueAndCandidates(tx, userId);
+  });
+
+  // Phase 2: AI calls outside any DB transaction. These can take up to ~72 s and
+  // must not hold a connection that would trigger idle_in_transaction_session_timeout.
+  const aiResults = await generateAIQuestions(sourceCandidates, needed);
+
+  // Phase 3: Short transaction — re-acquire lock, re-normalize (handles any concurrent
+  // fills between phases), write AI results and random fallback, return snapshot.
   const snapshot = await db.transaction(async (tx) => {
     await lockQuestionQueue(tx, userId);
-    await fillQuestionQueue(tx, userId);
+    const queued = await normalizeQuestionQueue(tx, userId);
+    await writeGeneratedQuestions(tx, userId, aiResults, queued);
     return queueSnapshot(tx, userId);
   });
+
   res.json(snapshot);
 });
 
@@ -652,12 +934,21 @@ router.post(
       return;
     }
 
-    const result = await db.transaction(async (tx) => {
+    // Phase 1: Short transaction — lock, normalize, requeue the current card,
+    // compact positions, and read source candidates for the AI phase.
+    type Phase1Result =
+      | { requeued: false; snapshot: Awaited<ReturnType<typeof queueSnapshot>> }
+      | { requeued: true; sourceCandidates: SourceCandidate[]; needed: number };
+
+    const phase1: Phase1Result = await db.transaction(async (tx) => {
       await lockQuestionQueue(tx, userId);
       const before = await normalizeQuestionQueue(tx, userId);
       const current = before[0];
       if (!current || current.thought.id !== currentThoughtId) {
-        return { ...(await queueSnapshot(tx, userId)), requeued: false };
+        return {
+          requeued: false as const,
+          snapshot: await queueSnapshot(tx, userId),
+        };
       }
 
       await cleanupQuestionQueue(tx, userId);
@@ -667,11 +958,36 @@ router.post(
         .set({ position: lastPosition + 1 })
         .where(eq(thoughtQuestionQueueTable.id, current.queueId));
       await compactQuestionQueue(tx, userId);
-      await fillQuestionQueue(tx, userId);
-      return { ...(await queueSnapshot(tx, userId)), requeued: true };
+
+      // Queue count is unchanged after the move (current card was not deleted).
+      const { sourceCandidates, needed } = await readCandidates(
+        tx,
+        userId,
+        before.length,
+      );
+      return { requeued: true as const, sourceCandidates, needed };
     });
 
-    res.json(result);
+    if (!phase1.requeued) {
+      res.json({ ...phase1.snapshot, requeued: false });
+      return;
+    }
+
+    // Phase 2: AI calls outside any DB transaction.
+    const aiResults = await generateAIQuestions(
+      phase1.sourceCandidates,
+      phase1.needed,
+    );
+
+    // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
+    const snapshot = await db.transaction(async (tx) => {
+      await lockQuestionQueue(tx, userId);
+      const queued = await normalizeQuestionQueue(tx, userId);
+      await writeGeneratedQuestions(tx, userId, aiResults, queued);
+      return queueSnapshot(tx, userId);
+    });
+
+    res.json({ ...snapshot, requeued: true });
   },
 );
 
@@ -679,9 +995,23 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const thoughtId = req.params.id;
 
-  const result = await db.transaction(async (tx) => {
+  // Phase 1: Short transaction — lock, normalize, validate, activate the thought,
+  // remove it from the queue, compact, and read source candidates.
+  type ActivatePhase1 =
+    | { kind: "not_found" }
+    | { kind: "not_queued" }
+    | { kind: "retry"; body: Record<string, unknown> }
+    | {
+        kind: "activated";
+        activatedThought: ThoughtRow;
+        sourceCandidates: SourceCandidate[];
+        needed: number;
+      };
+
+  const phase1: ActivatePhase1 = await db.transaction(async (tx) => {
     await lockQuestionQueue(tx, userId);
-    await normalizeQuestionQueue(tx, userId);
+    const normalizedQueue = await normalizeQuestionQueue(tx, userId);
+
     const [thought] = await tx
       .select()
       .from(thoughtsTable)
@@ -694,8 +1024,7 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
       )
       .limit(1);
 
-    if (!thought)
-      return { status: 404, body: { error: "Thought not found" } } as const;
+    if (!thought) return { kind: "not_found" as const };
 
     const [queued] = await tx
       .select({ id: thoughtQuestionQueueTable.id })
@@ -716,18 +1045,15 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
       thought.createdFrom === "question"
     ) {
       return {
-        status: 200,
+        kind: "retry" as const,
         body: {
           activatedThought: thought,
           ...(await queueSnapshot(tx, userId)),
         },
-      } as const;
+      };
     }
     if (!queued || thought.status !== "PRELIMINARY") {
-      return {
-        status: 409,
-        body: { error: "Thought is not an active queued question" },
-      } as const;
+      return { kind: "not_queued" as const };
     }
 
     const [activatedThought] = await tx
@@ -739,15 +1065,45 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
       .delete(thoughtQuestionQueueTable)
       .where(eq(thoughtQuestionQueueTable.id, queued.id));
     await compactQuestionQueue(tx, userId);
-    await fillQuestionQueue(tx, userId);
 
-    return {
-      status: 200,
-      body: { activatedThought, ...(await queueSnapshot(tx, userId)) },
-    } as const;
+    // Queue count after removing the activated thought.
+    const postCompactLength = Math.max(0, normalizedQueue.length - 1);
+    const { sourceCandidates, needed } = await readCandidates(
+      tx,
+      userId,
+      postCompactLength,
+    );
+    return { kind: "activated" as const, activatedThought, sourceCandidates, needed };
   });
 
-  res.status(result.status).json(result.body);
+  if (phase1.kind === "not_found") {
+    res.status(404).json({ error: "Thought not found" });
+    return;
+  }
+  if (phase1.kind === "not_queued") {
+    res.status(409).json({ error: "Thought is not an active queued question" });
+    return;
+  }
+  if (phase1.kind === "retry") {
+    res.status(200).json(phase1.body);
+    return;
+  }
+
+  // Phase 2: AI calls outside any DB transaction.
+  const aiResults = await generateAIQuestions(
+    phase1.sourceCandidates,
+    phase1.needed,
+  );
+
+  // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
+  const snapshot = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    const queued = await normalizeQuestionQueue(tx, userId);
+    await writeGeneratedQuestions(tx, userId, aiResults, queued);
+    return queueSnapshot(tx, userId);
+  });
+
+  res.status(200).json({ activatedThought: phase1.activatedThought, ...snapshot });
 });
 
 router.get("/thoughts", requireAuth, async (req, res) => {
