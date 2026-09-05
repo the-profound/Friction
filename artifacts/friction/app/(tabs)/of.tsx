@@ -16,6 +16,7 @@ import { keepPreviousData, useQueries, useQueryClient } from "@tanstack/react-qu
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
+import HeaderButton from "@/components/shared/HeaderButton";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
@@ -578,19 +579,11 @@ export default function SpacesScreen() {
         centeredBrandTitle
       />
       <View style={styles.headerActionRow}>
-        <ScalePressable
-          style={styles.headerMenuButton}
-          contentStyle={styles.headerMenuButtonContent}
+        <HeaderButton
+          variant="menu"
           onPress={() => setShowMenuSheet(true)}
-          accessibilityRole="button"
           accessibilityLabel="공간 메뉴 열기"
-        >
-          <Feather
-            name="more-horizontal"
-            size={Sizing.searchIconSize}
-            color={Colors.zinc700}
-          />
-        </ScalePressable>
+        />
       </View>
       <ActionSheetModal
         visible={showMenuSheet}
@@ -741,22 +734,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
-  },
-  headerMenuButton: {
-    width: Sizing.searchButtonSize,
-    height: Sizing.searchButtonSize,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  headerMenuButtonContent: {
-    width: Sizing.searchButtonSize,
-    height: Sizing.searchButtonSize,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: Sizing.searchButtonSize / 2,
-    backgroundColor: Colors.searchBgInactive,
-    alignItems: "center",
-    justifyContent: "center",
   },
   gridTopSpacer: {
     height: 4,

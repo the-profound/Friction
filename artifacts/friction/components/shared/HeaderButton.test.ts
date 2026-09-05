@@ -10,8 +10,12 @@ describe("shared writing header buttons", () => {
     const button = read("components/shared/HeaderButton.tsx");
     const tokens = read("constants/tokens.ts");
 
-    expect(button).toContain('export type HeaderButtonVariant = "back" | "menu" | "settings";');
+    expect(button).toContain(
+      'export type HeaderButtonVariant = "back" | "menu" | "settings" | "add";',
+    );
     expect(button).toContain('variant === "settings"');
+    expect(button).toContain('variant === "add"');
+    expect(button).toContain('? "plus"');
     expect(button).toContain("label?: string;");
     expect(button).toContain("backgroundColor: Colors.white");
     expect(button).toContain("borderColor: Colors.noticeAccent");
@@ -27,6 +31,31 @@ describe("shared writing header buttons", () => {
     expect(tokens).toContain("headerButtonTouchSize: 36");
     expect(tokens).toContain("headerButtonSurfaceSize: 36");
     expect(tokens).toContain("headerButtonIconSize: 18");
+  });
+
+  it("uses the shared outlined action button for space menu and collection add", () => {
+    const spaces = read("app/(tabs)/of.tsx");
+    const archive = read("app/(tabs)/archive.tsx");
+
+    expect(spaces).toContain(
+      'import HeaderButton from "@/components/shared/HeaderButton";',
+    );
+    expect(spaces).toContain('<HeaderButton\n          variant="menu"');
+    expect(spaces).toContain('accessibilityLabel="공간 메뉴 열기"');
+    expect(spaces).not.toContain("styles.headerMenuButton");
+    expect(spaces).not.toContain("styles.headerMenuButtonContent");
+
+    const collectionAction = archive.slice(
+      archive.indexOf('{activeSubTab === "personal" ? ('),
+      archive.indexOf(") : !selectionMode ? ("),
+    );
+    expect(archive).toContain(
+      'import HeaderButton from "@/components/shared/HeaderButton";',
+    );
+    expect(collectionAction).toContain('<HeaderButton\n            variant="add"');
+    expect(collectionAction).toContain('accessibilityLabel="새 모음 만들기"');
+    expect(collectionAction).not.toContain("styles.addButton");
+    expect(collectionAction).not.toContain("styles.addButtonContent");
   });
 
   it("uses the shared button in all writing-flow headers", () => {

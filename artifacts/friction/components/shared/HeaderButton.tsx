@@ -10,7 +10,7 @@ import { Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Shadows, Sizing } from "@/constants/tokens";
 
-export type HeaderButtonVariant = "back" | "menu" | "settings";
+export type HeaderButtonVariant = "back" | "menu" | "settings" | "add";
 
 export interface HeaderButtonProps
   extends Omit<PressableProps, "children" | "style" | "accessibilityLabel"> {
@@ -24,6 +24,7 @@ const DEFAULT_LABELS: Record<HeaderButtonVariant, string> = {
   back: "뒤로가기",
   menu: "메뉴",
   settings: "설정 열기",
+  add: "추가",
 };
 
 /**
@@ -49,8 +50,11 @@ export default function HeaderButton({
       ? "arrow-left"
       : variant === "settings"
         ? "settings"
+        : variant === "add"
+          ? "plus"
         : "more-horizontal";
-  const isRightAction = variant === "menu" || variant === "settings";
+  const isRightAction =
+    variant === "menu" || variant === "settings" || variant === "add";
   const foregroundColor = unavailable
     ? Colors.zinc400
     : isRightAction

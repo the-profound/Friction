@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -576,15 +577,11 @@ export default function ArchiveScreen() {
           </ScalePressable>
         </View>
         {activeSubTab === "personal" ? (
-          <ScalePressable
-            style={styles.addButton}
-            contentStyle={styles.addButtonContent}
+          <HeaderButton
+            variant="add"
             onPress={handleAdd}
-            accessibilityRole="button"
             accessibilityLabel="새 모음 만들기"
-          >
-            <Feather name="plus" size={Sizing.plusIconSize} color={Colors.primaryActionForeground} />
-          </ScalePressable>
+          />
         ) : !selectionMode ? (
           <ScalePressable
             style={styles.addButton}
