@@ -583,12 +583,10 @@ export default function ArchiveScreen() {
             accessibilityLabel="새 모음 만들기"
           />
         ) : !selectionMode ? (
-          <ScalePressable
-            style={styles.addButton}
-            contentStyle={styles.addButtonContent}
+          <HeaderButton
+            variant="add"
             onPress={handleAdd}
             onLongPress={enterSelectionMode}
-            accessibilityRole="button"
             accessibilityLabel="문장 추가"
             accessibilityHint="새 문장 추가 화면으로 이동합니다. 길게 누르면 문장 선택 모드가 열립니다"
             accessibilityActions={[
@@ -602,9 +600,7 @@ export default function ArchiveScreen() {
                 handleAdd();
               }
             }}
-          >
-            <Feather name="plus" size={Sizing.plusIconSize} color={Colors.primaryActionForeground} />
-          </ScalePressable>
+          />
         ) : null}
       </View>
 
@@ -767,23 +763,6 @@ const styles = StyleSheet.create({
   },
   filterButtonTextActive: {
     color: Colors.white,
-  },
-  addButton: {
-    width: FILTER_BUTTON_HEIGHT,
-    height: FILTER_BUTTON_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  addButtonContent: {
-    width: FILTER_BUTTON_HEIGHT,
-    height: FILTER_BUTTON_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: FILTER_BUTTON_HEIGHT / 2,
-    backgroundColor: Colors.primaryAction,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.navBar,
   },
   // ─── Card ────────────────────────────────────────────────────────────────────
   listTopSpacer: {

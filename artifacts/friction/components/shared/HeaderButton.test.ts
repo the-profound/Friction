@@ -33,7 +33,7 @@ describe("shared writing header buttons", () => {
     expect(tokens).toContain("headerButtonIconSize: 18");
   });
 
-  it("uses the shared outlined action button for space menu and collection add", () => {
+  it("uses the shared outlined action button for space menu and archive add actions", () => {
     const spaces = read("app/(tabs)/of.tsx");
     const archive = read("app/(tabs)/archive.tsx");
 
@@ -56,6 +56,15 @@ describe("shared writing header buttons", () => {
     expect(collectionAction).toContain('accessibilityLabel="새 모음 만들기"');
     expect(collectionAction).not.toContain("styles.addButton");
     expect(collectionAction).not.toContain("styles.addButtonContent");
+
+    const sentenceAction = archive.slice(
+      archive.indexOf(") : !selectionMode ? ("),
+      archive.indexOf(") : null}", archive.indexOf(") : !selectionMode ? (")),
+    );
+    expect(sentenceAction).toContain('<HeaderButton\n            variant="add"');
+    expect(sentenceAction).toContain('accessibilityLabel="문장 추가"');
+    expect(sentenceAction).not.toContain("styles.addButton");
+    expect(sentenceAction).not.toContain("styles.addButtonContent");
   });
 
   it("uses the shared button in all writing-flow headers", () => {

@@ -73,15 +73,19 @@ describe("archive collected sentence list", () => {
     expect(archiveScreen).not.toContain('name="star"');
   });
 
-  it("opens manual sentence creation from a fixed-size plus action", () => {
-    expect(sentenceFilterAction).toContain("style={styles.addButton}");
-    expect(sentenceFilterAction).toContain("contentStyle={styles.addButtonContent}");
+  it("opens manual sentence creation from the shared outlined add action", () => {
+    expect(sentenceFilterAction).toContain("<HeaderButton");
+    expect(sentenceFilterAction).toContain('variant="add"');
+    expect(sentenceFilterAction).not.toContain("styles.addButton");
+    expect(sentenceFilterAction).not.toContain("styles.addButtonContent");
     expect(sentenceFilterAction).toContain("onPress={handleAdd}");
     expect(sentenceFilterAction).toContain("onLongPress={enterSelectionMode}");
     expect(sentenceFilterAction).toContain('accessibilityLabel="문장 추가"');
     expect(sentenceFilterAction).toContain('accessibilityHint="새 문장 추가 화면으로 이동합니다. 길게 누르면 문장 선택 모드가 열립니다"');
+    expect(sentenceFilterAction).toContain('{ name: "activate", label: "문장 추가" }');
     expect(sentenceFilterAction).toContain('{ name: "longpress", label: "문장 선택 모드 열기" }');
-    expect(sentenceFilterAction).toContain('name="plus"');
+    expect(sentenceFilterAction).toContain('nativeEvent.actionName === "longpress"');
+    expect(sentenceFilterAction).toContain('nativeEvent.actionName === "activate"');
     expect(archiveScreen).toContain('router.push("/stored-sentence-create")');
   });
 
