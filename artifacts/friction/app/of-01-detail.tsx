@@ -226,7 +226,7 @@ export default function PersonalCollectionDetailScreen() {
       setDeleteConfirmVisible(false);
       invalidateMyCollections(queryClient);
       router.back();
-      showToast({ message: "폴더를 삭제했어요.", type: "success" });
+      showToast({ message: "모음을 삭제했어요.", type: "success" });
     } catch (e: unknown) {
       setDeleteConfirmVisible(false);
       const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
@@ -487,7 +487,7 @@ export default function PersonalCollectionDetailScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>폴더를 찾을 수 없어요</Text>
+          <Text style={styles.emptyTitle}>모음을 찾을 수 없어요</Text>
         </View>
       </View>
     );
@@ -511,16 +511,16 @@ export default function PersonalCollectionDetailScreen() {
             <HeaderButton
               variant="back"
               onPress={() => router.back()}
-              accessibilityLabel="폴더에서 돌아가기"
+              accessibilityLabel="모음에서 돌아가기"
             />
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {collection?.name ?? initialName ?? "폴더"}
+              {collection?.name ?? initialName ?? "모음"}
             </Text>
             <View style={styles.headerRight}>
               <HeaderButton
                 variant="menu"
                 onPress={isArchive ? enterSelectionMode : handleMorePress}
-                accessibilityLabel={isArchive ? "보관된 편지 선택 모드 열기" : "폴더 메뉴 열기"}
+                accessibilityLabel={isArchive ? "보관된 편지 선택 모드 열기" : "모음 메뉴 열기"}
               />
             </View>
           </>
@@ -568,7 +568,7 @@ export default function PersonalCollectionDetailScreen() {
         <View style={[styles.emptyContainer, { paddingBottom: Spacing.navBarPaddingBottom + insets.bottom }]}>
           <Feather name="file-text" size={36} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>아직 추가된 편지가 없어요</Text>
-          <Text style={styles.emptySubtitle}>완성된 편지를 이 폴더에 추가해보세요</Text>
+          <Text style={styles.emptySubtitle}>완성된 편지를 이 모음에 추가해보세요</Text>
         </View>
       ) : selectionMode ? (
         <FlatList
@@ -639,14 +639,14 @@ export default function PersonalCollectionDetailScreen() {
       <BottomSheet
         visible={editSheetVisible}
         onClose={() => setEditSheetVisible(false)}
-        title="폴더 수정"
+        title="모음 수정"
         snapPoints={[0.45]}
         keyboardAware
       >
         <View style={styles.editForm}>
           <TextInput
             style={styles.editInput}
-            placeholder="폴더 이름"
+            placeholder="모음 이름"
             placeholderTextColor={Colors.zinc400}
             cursorColor={Colors.cursorAccent}
             value={editName}
@@ -714,9 +714,9 @@ export default function PersonalCollectionDetailScreen() {
 
       <ConfirmModal
         visible={deleteConfirmVisible}
-        title="폴더 삭제"
+        title="모음 삭제"
         description={`'${collection?.name ?? ""}'을(를) 삭제할까요?
-폴더 안의 편지는 삭제되지 않아요.`}
+모음 안의 편지는 삭제되지 않아요.`}
         confirmLabel={isDeletingCollection ? "삭제 중..." : "삭제"}
         cancelLabel="취소"
         destructive
@@ -741,13 +741,13 @@ export default function PersonalCollectionDetailScreen() {
 
       <ActionSheetModal
         visible={moreSheetVisible}
-        title="폴더 관리"
+        title="모음 관리"
         onClose={() => setMoreSheetVisible(false)}
         actions={[
           { label: "선택", onPress: () => { setMoreSheetVisible(false); enterSelectionMode(); } },
           ...(!isImpression ? [
-            { label: "폴더 이름 변경", onPress: () => { setMoreSheetVisible(false); handleOpenEdit(); } },
-            { label: "폴더 삭제", style: "destructive" as const, onPress: () => { setMoreSheetVisible(false); setDeleteConfirmVisible(true); } },
+            { label: "모음 이름 변경", onPress: () => { setMoreSheetVisible(false); handleOpenEdit(); } },
+            { label: "모음 삭제", style: "destructive" as const, onPress: () => { setMoreSheetVisible(false); setDeleteConfirmVisible(true); } },
           ] : []),
           { label: "취소", style: "cancel" as const, onPress: () => setMoreSheetVisible(false) },
         ]}
