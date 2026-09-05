@@ -32,7 +32,12 @@ export type RNToWebViewCommand =
   | { type: "init"; payload: EditorInitPayload }
   | { type: "undo" }
   | { type: "redo" }
-  | { type: "setMarkdown"; markdown: string; ensureTrailingParagraph?: boolean }
+  | {
+      type: "setMarkdown";
+      markdown: string;
+      ensureTrailingParagraph?: boolean;
+      focusAtStart?: boolean;
+    }
   | { type: "setTitle"; title: string }
   | { type: "requestExportMarkdown"; requestId: string }
   | { type: "setEditable"; isEditable: boolean }
@@ -105,7 +110,7 @@ export type WebViewToRNEvent =
   | { type: "onOverflowSplit"; payload: { beforeMarkdown: string; afterMarkdown: string } };
 
 export interface WebViewMarkdownEditorRef {
-  setMarkdown: (markdown: string) => void;
+  setMarkdown: (markdown: string, options?: { focusAtStart?: boolean }) => void;
   requestExportMarkdown: (requestId: string) => void;
   setEditable: (isEditable: boolean) => void;
   setTitle: (title: string) => void;

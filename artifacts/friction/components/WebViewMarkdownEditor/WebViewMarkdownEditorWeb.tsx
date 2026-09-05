@@ -356,21 +356,20 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
     );
 
     useImperativeHandle(ref, () => ({
-      setMarkdown(markdown: string) {
+      setMarkdown(markdown: string, options?: { focusAtStart?: boolean }) {
         if (editor && !editor.isDestroyed) {
           try {
-             const html = markdownToHtml(markdown, ensureTrailingParagraph);
-            editor.commands.setContent(html);
+            const html = markdownToHtml(markdown, ensureTrailingParagraph);
+            editor.commands.setContent(html, { emitUpdate: false });
             if (!overflowAutoSplitRef.current) {
               requestAnimationFrame(() => {
                 measureAndHighlightWebOverflow(editor, overflowHeightRef.current);
               });
             }
-            // 인용구/리스트/헤딩 등으로 끝나는 메모를 주입할 때, 마지막 빈
-            // 단락에 커서를 자동 배치해 사용자가 별도 탭 없이 바로 본문을
-            // 이어서 입력할 수 있게 한다.
             try {
-              editor.commands.focus("end");
+              editor.commands.focus(options?.focusAtStart ? "start" : "end", {
+                scrollIntoView: false,
+              });
             } catch {}
           } catch (e: unknown) {
             onError?.({ code: "MARKDOWN_PARSE_FAIL", message: e instanceof Error ? e.message : String(e) });

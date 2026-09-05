@@ -342,6 +342,7 @@ export default function WritingScreen() {
   const [editorReady, setEditorReady] = useState(false);
   const editorReadyRef = useRef(false);
   const shouldFocusInitialH1Ref = useRef(isLocalDirectDraft);
+  const initialH1FocusedSessionRef = useRef<string | undefined>(undefined);
   const [initialized, setInitialized] = useState(false);
   const [selectionState, setSelectionState] = useState<OnSelectionUpdatePayload>(DEFAULT_SELECTION);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -541,11 +542,13 @@ export default function WritingScreen() {
       setModeBoth(initialMode);
       if (editorReady) {
         serverInjectionPendingRef.current = true;
-        editorRef.current?.setMarkdown(c);
+        const shouldFocusAtStart =
+          shouldFocusInitialH1Ref.current
+          && currentEditorSessionIdRef.current !== initialH1FocusedSessionRef.current;
+        editorRef.current?.setMarkdown(c, { focusAtStart: shouldFocusAtStart });
         editorRef.current?.setTitle(t);
-        if (shouldFocusInitialH1Ref.current) {
-          shouldFocusInitialH1Ref.current = false;
-          setTimeout(() => editorRef.current?.focusStart(), 0);
+        if (shouldFocusAtStart) {
+          initialH1FocusedSessionRef.current = currentEditorSessionIdRef.current;
         }
       }
       console.log("[on-01 init] cached?=true dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
@@ -614,6 +617,8 @@ export default function WritingScreen() {
       return;
     }
     if (editorSessionId) currentEditorSessionIdRef.current = editorSessionId;
+    const focusSessionId =
+      editorSessionId ?? currentEditorSessionIdRef.current ?? "editor-ready";
     lastSeenDocVersionRef.current = -1;
     editorReadyRef.current = true;
     setEditorReady(true);
@@ -622,12 +627,17 @@ export default function WritingScreen() {
       serverInjectionPendingRef.current = true;
       // A reload must hydrate from the newest snapshot acknowledged by RN,
       // not from the older server snapshot that originally opened the screen.
-      editorRef.current?.setMarkdown(contentRef.current || articleContentRef.current);
+      const shouldFocusAtStart =
+        shouldFocusInitialH1Ref.current
+        && focusSessionId !== initialH1FocusedSessionRef.current;
+      editorRef.current?.setMarkdown(
+        contentRef.current || articleContentRef.current,
+        { focusAtStart: shouldFocusAtStart },
+      );
       editorRef.current?.setTitle(titleRef.current);
-    }
-    if (shouldFocusInitialH1Ref.current) {
-      shouldFocusInitialH1Ref.current = false;
-      setTimeout(() => editorRef.current?.focusStart(), 0);
+      if (shouldFocusAtStart) {
+        initialH1FocusedSessionRef.current = focusSessionId;
+      }
     }
   }, []);
 
@@ -1078,6 +1088,7 @@ export default function WritingScreen() {
   const handleEditorChange = useCallback(
     (_payload: OnChangePayload) => {
       if (!_payload.isDirty) return;
+      shouldFocusInitialH1Ref.current = false;
 
       if (_payload.markdown !== undefined) {
         const markdown = acceptEditorSnapshot({

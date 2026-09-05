@@ -889,6 +889,7 @@ interface Command {
   payload?: InitPayload;
   markdown?: string;
   ensureTrailingParagraph?: boolean;
+  focusAtStart?: boolean;
   title?: string;
   requestId?: string;
   isEditable?: boolean;
@@ -1397,6 +1398,13 @@ function spellFindRange(
     } catch {}
   }
 
+  function focusEditorAtDocumentStart() {
+    if (!editor || editor.isDestroyed) return;
+    try {
+      editor.commands.focus("start", { scrollIntoView: false });
+    } catch {}
+  }
+
   function handleTitleKeydown(event: KeyboardEvent) {
     handleTitleEnter(
       event,
@@ -1663,7 +1671,7 @@ function spellFindRange(
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-              const html = editor.getHTML();
+            const html = markdownToHtml(initialMarkdown, ensureTrailingParagraph);
             editor.commands.setContent(html);
           }
           // setupEditor / setContent 직후 캐시를 정합 상태로 맞춘다.
@@ -1679,15 +1687,12 @@ function spellFindRange(
         }
         case "setMarkdown": {
           if (editor && !editor.isDestroyed) {
-            const next = insertTitleSoftBreak(
-              titleInput.value,
-              titleInput.selectionStart,
-              titleInput.selectionEnd,
-            );
+            const next = cmd.markdown || "";
             const ensureTrailingParagraph = cmd.ensureTrailingParagraph ?? true;
             // 동일한 markdown 이 다시 들어오면 markdown→HTML 변환과
             // ProseMirror 전체 setContent 를 모두 생략한다 (no-op).
             if (lastAppliedMarkdown !== null && next === lastAppliedMarkdown) {
+              if (cmd.focusAtStart) focusEditorAtDocumentStart();
               break;
             }
             // setContent 는 기존 문서를 완전히 교체하는 트랜잭션이라, 포커스된
@@ -1702,9 +1707,11 @@ function spellFindRange(
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-              const html = editor.getHTML();
+            const html = markdownToHtml(next, ensureTrailingParagraph);
             editor.commands.setContent(html);
-            if (wasFocused) {
+            if (cmd.focusAtStart) {
+              focusEditorAtDocumentStart();
+            } else if (wasFocused) {
               // 새 페이지 콘텐츠의 끝으로 커서를 옮기며 동기적으로 재포커스한다.
               editor.commands.focus("end", { scrollIntoView: false });
             }

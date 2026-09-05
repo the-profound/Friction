@@ -127,6 +127,44 @@ describe("on-01a editor hydration and initialization", () => {
     expect(screen).toContain("ensureTrailingParagraph={!isLocalDirectDraft}");
   });
 
+  it("focuses a new direct thought at the H1 start after hydration only", () => {
+    const screen = readScreen();
+    const nativeEditor = readEditorNative();
+    const webEditor = readEditorWeb();
+    const editorSource = readEditorSource();
+
+    expect(screen).toContain(
+      "const shouldFocusInitialH1Ref = useRef(isLocalDirectDraft);",
+    );
+    expect(screen).toContain(
+      "currentEditorSessionIdRef.current !== initialH1FocusedSessionRef.current",
+    );
+    expect(screen).toContain("{ focusAtStart: shouldFocusAtStart }");
+    expect(screen).toContain("shouldFocusInitialH1Ref.current = false;");
+    expect(screen).not.toContain(
+      "setTimeout(() => editorRef.current?.focusStart(), 0)",
+    );
+
+    expect(nativeEditor).toContain("focusAtStart: options?.focusAtStart");
+    expect(webEditor).toContain(
+      'editor.commands.focus(options?.focusAtStart ? "start" : "end"',
+    );
+    expect(editorSource).toContain(
+      "if (cmd.focusAtStart) focusEditorAtDocumentStart();",
+    );
+    expect(editorSource).toContain(
+      "if (cmd.focusAtStart) {\n              focusEditorAtDocumentStart();",
+    );
+  });
+
+  it("does not report programmatic web hydration as a user edit", () => {
+    const webEditor = readEditorWeb();
+
+    expect(webEditor).toContain(
+      "editor.commands.setContent(html, { emitUpdate: false });",
+    );
+  });
+
   it("combines native keyboard events with WebView focus", () => {
     const screen = readScreen();
     const keyboardTracking = screen.slice(

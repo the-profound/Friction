@@ -102,8 +102,13 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     );
 
     useImperativeHandle(ref, () => ({
-      setMarkdown(markdown: string) {
-        sendCommand({ type: "setMarkdown", markdown, ensureTrailingParagraph });
+      setMarkdown(markdown: string, options?: { focusAtStart?: boolean }) {
+        sendCommand({
+          type: "setMarkdown",
+          markdown,
+          ensureTrailingParagraph,
+          focusAtStart: options?.focusAtStart,
+        });
       },
       requestExportMarkdown(requestId: string) {
         // requestExportMarkdown 은 호환을 위해 기존 typed-event 패턴을 유지한다
