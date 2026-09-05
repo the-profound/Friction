@@ -4,14 +4,6 @@ set -e
 EAS="${EAS_BIN:-/home/runner/workspace/.config/npm/node_global/bin/eas}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
-EAS_BUILD_LOCK="/tmp/friction-eas-build.lock"
-
-exec 9>"$EAS_BUILD_LOCK"
-if ! flock -n 9; then
-  echo "❌ 다른 iOS/Android EAS 빌드가 이미 실행 중입니다."
-  echo "   기존 빌드가 끝난 뒤 다시 실행해 주세요."
-  exit 1
-fi
 
 echo "========================================"
 echo "  Friction iOS Publish (EAS)"
