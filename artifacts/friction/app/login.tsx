@@ -234,7 +234,12 @@ export default function LoginScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.subtitle}>읽고, 나누고, 연결하세요</Text>
+          <Image
+            source={require("../assets/images/wordmark_maroon.png")}
+            style={styles.wordmark}
+            resizeMode="contain"
+            accessibilityLabel="Friction"
+          />
         </View>
 
         <View style={styles.tabRow}>
@@ -626,11 +631,9 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
   },
-  subtitle: {
-    ...Typography.body,
-    fontSize: 16,
-    color: Colors.zinc500,
-    textAlign: "center",
+  wordmark: {
+    width: 108,
+    height: 36,
   },
   tabRow: {
     flexDirection: "row",
