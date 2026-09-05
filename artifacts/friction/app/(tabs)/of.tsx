@@ -20,7 +20,6 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
-import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
@@ -30,7 +29,6 @@ import {
   useListMySpaceInvitations,
   useListMySpaceCodeRequests,
   useListOperatorPendingSpaceCodeRequests,
-  listOperatorPendingSpaceCodeRequests,
   getListSpacesQueryKey,
   getListSpaceLettersQueryKey,
   listSpaceLetters,
@@ -316,13 +314,6 @@ export default function SpacesScreen() {
     query: {
       enabled: !!userId,
       queryKey: operatorPendingQueryKey,
-      queryFn: async ({ signal }) => {
-        const session = await prepareAuthSession();
-        if (!session) {
-          throw new Error("로그인 상태를 확인할 수 없어요.");
-        }
-        return listOperatorPendingSpaceCodeRequests({ signal });
-      },
     },
   });
 

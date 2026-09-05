@@ -195,7 +195,7 @@ describe("space list pending sections", () => {
     );
   });
 
-  it("waits for the authenticated session before the initial supplemental request", () => {
+  it("gates the supplemental request on userId and delegates auth to customFetch", () => {
     const source = readAppFile("app/(tabs)/of.tsx");
     const queryStart = source.indexOf(
       "const operatorPendingQuery = useListOperatorPendingSpaceCodeRequests",
@@ -203,9 +203,13 @@ describe("space list pending sections", () => {
     const queryEnd = source.indexOf("const allSpaces", queryStart);
     const query = source.slice(queryStart, queryEnd);
 
-    expect(query.indexOf("await prepareAuthSession()")).toBeLessThan(
-      query.indexOf("return listOperatorPendingSpaceCodeRequests"),
-    );
+    // Auth is delegated to the generated hook's default queryFn (customFetch +
+    // _authRefreshCallback). There must be no bespoke prepareAuthSession call.
+    expect(query).not.toContain("queryFn");
+    expect(query).not.toContain("prepareAuthSession");
+    // The query must be disabled until a userId is present.
+    expect(query).toContain("enabled: !!userId");
+    // Fetching-state tracking is still in place for optimistic refresh.
     expect(source).toContain("operatorPendingIsFetching");
     expect(source).toContain('fetchStatus ===\n        "fetching"');
   });
