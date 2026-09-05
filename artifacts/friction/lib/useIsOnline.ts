@@ -2,8 +2,8 @@ import { useCallback, useSyncExternalStore } from "react";
 import { onlineManager } from "@tanstack/react-query";
 
 /**
- * React-subscribed view of the app-wide `onlineManager` (wired to NetInfo in
- * app/_layout.tsx). Use this to gate or explain network-dependent user
+ * React-subscribed view of the app-wide `onlineManager` (wired through the
+ * startup-safe NetInfo adapter in app/_layout.tsx). Use this to gate or explain network-dependent user
  * actions — manual refresh, "다시 시도" retry buttons — with a clear offline
  * notice, instead of silently calling `refetch()` on a query that React
  * Query will simply pause until connectivity returns.

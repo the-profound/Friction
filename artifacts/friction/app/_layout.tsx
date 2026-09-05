@@ -7,10 +7,10 @@ import {
 } from "@expo-google-fonts/noto-serif-kr";
 import { QueryClient, onlineManager } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import NetInfo from "@react-native-community/netinfo";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { getNotificationsModule } from "@/lib/safeNotifications";
+import { subscribeToNetInfo } from "@/lib/safeNetInfo";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -53,18 +53,11 @@ import { offlineQueryPersistOptions } from "@/lib/offlineQueryPersistence";
 
 setBaseUrl(runtimeConfig.apiBaseUrl);
 
-// React Native has no browser-style navigator.onLine/online/offline events,
-// so React Query's default online detection never fires here. Wire the
-// device's real connectivity state in explicitly: offline pauses queries
-// (keeping whatever is cached, no error) and reconnecting triggers the
-// `refetchOnReconnect: "always"` refetch configured below. Works on web too
-// (NetInfo falls back to browser online/offline events there), so this
-// replaces rather than supplements the default listener.
-onlineManager.setEventListener((setOnline) => {
-  return NetInfo.addEventListener((state) => {
-    setOnline(!!state.isConnected);
-  });
-});
+// React Native has no browser-style navigator.onLine events, so use NetInfo
+// when the installed binary provides it. Older development clients may not
+// include RNCNetInfo; the safe adapter then preserves React Query's online
+// default so startup and normal network use continue without offline sensing.
+onlineManager.setEventListener(subscribeToNetInfo);
 
 // Best-effort: if the previous launch crashed with a fatal JS error, upload
 // the diagnostic captured for it (see lib/crashDiagnostics.ts) now that the
