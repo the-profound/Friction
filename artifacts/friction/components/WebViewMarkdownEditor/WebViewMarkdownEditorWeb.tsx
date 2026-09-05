@@ -452,7 +452,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       },
       insertDivider() {
         if (editor && !editor.isDestroyed) {
-          editor.commands.setHorizontalRule();
+          editor.chain().focus().clearNodes().setHorizontalRule().run();
         }
       },
       insertHardBreak() {

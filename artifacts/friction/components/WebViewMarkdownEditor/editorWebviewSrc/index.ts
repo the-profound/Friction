@@ -1671,7 +1671,7 @@ function spellFindRange(
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-            const html = markdownToHtml(initialMarkdown, ensureTrailingParagraph);
+              const html = editor.getHTML();
             editor.commands.setContent(html);
           }
           // setupEditor / setContent 직후 캐시를 정합 상태로 맞춘다.
@@ -1687,7 +1687,11 @@ function spellFindRange(
         }
         case "setMarkdown": {
           if (editor && !editor.isDestroyed) {
-            const next = cmd.markdown || "";
+            const next = insertTitleSoftBreak(
+              titleInput.value,
+              titleInput.selectionStart,
+              titleInput.selectionEnd,
+            );
             const ensureTrailingParagraph = cmd.ensureTrailingParagraph ?? true;
             // 동일한 markdown 이 다시 들어오면 markdown→HTML 변환과
             // ProseMirror 전체 setContent 를 모두 생략한다 (no-op).
@@ -1707,7 +1711,7 @@ function spellFindRange(
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
-            const html = markdownToHtml(next, ensureTrailingParagraph);
+              const html = editor.getHTML();
             editor.commands.setContent(html);
             if (cmd.focusAtStart) {
               focusEditorAtDocumentStart();
@@ -1949,7 +1953,7 @@ function spellFindRange(
         }
         case "insertDivider": {
           if (editor && !editor.isDestroyed) {
-            editor.chain().focus().setHorizontalRule().run();
+            editor.chain().focus().clearNodes().setHorizontalRule().run();
           }
           break;
         }

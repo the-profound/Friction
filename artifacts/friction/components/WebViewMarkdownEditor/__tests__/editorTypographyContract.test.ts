@@ -69,6 +69,31 @@ describe("native writing editor typography contract", () => {
     }
   });
 
+  it("normalizes the active block before inserting a divider everywhere", () => {
+    const webEditor = read(
+      "components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx",
+    );
+    const nativeEditor = read(
+      "components/WebViewMarkdownEditor/editorWebviewSrc/index.ts",
+    );
+    const generated = read("components/WebViewMarkdownEditor/editorHtml.ts");
+    const dividerCommand = "clearNodes().setHorizontalRule().run()";
+
+    for (const source of [webEditor, nativeEditor, generated]) {
+      const normalizeIndex = source.indexOf("clearNodes()");
+      const dividerIndex = source.indexOf("setHorizontalRule()");
+
+      expect(normalizeIndex).toBeGreaterThanOrEqual(0);
+      expect(dividerIndex).toBeGreaterThan(normalizeIndex);
+    }
+    expect(webEditor).toContain(
+      `editor.chain().focus().${dividerCommand}`,
+    );
+    expect(nativeEditor).toContain(
+      `editor.chain().focus().${dividerCommand}`,
+    );
+  });
+
   it("reports effective metrics and line boundaries for mixed writing samples", () => {
     const source = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
     const sample = [
