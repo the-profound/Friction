@@ -1456,6 +1456,18 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   res.status(result.status).json(result.body);
 });
 
+export function canPromoteThoughtToArticle(thought: {
+  status: string;
+  createdFrom: string | null;
+  migratedFromArticleId: string | null;
+}): boolean {
+  return (
+    thought.status === "NORMAL" ||
+    thought.migratedFromArticleId !== null ||
+    (thought.status === "PRELIMINARY" && thought.createdFrom === "reading")
+  );
+}
+
 router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const thoughtId = req.params.id;
@@ -1527,10 +1539,7 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
         return { status: 200, body: existingArticle } as const;
       }
 
-      if (
-        thought.status !== "NORMAL" &&
-        thought.migratedFromArticleId === null
-      ) {
+      if (!canPromoteThoughtToArticle(thought)) {
         return {
           status: 409,
           body: {

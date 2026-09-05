@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PromoteThoughtBody, RevertArticleToThoughtBody } from "@workspace/api-zod";
-import { validateTransitionSnapshot } from "./thoughts";
+import {
+  canPromoteThoughtToArticle,
+  validateTransitionSnapshot,
+} from "./thoughts";
 
 const routesRoot = __dirname;
 const readRoute = (name: string) => readFileSync(join(routesRoot, name), "utf8");
@@ -15,6 +18,47 @@ const validSnapshot = {
 };
 
 describe("thought/review atomic transition contract", () => {
+  it("allows only reading-origin preliminary thoughts through the new promotion path", () => {
+    expect(
+      canPromoteThoughtToArticle({
+        status: "PRELIMINARY",
+        createdFrom: "reading",
+        migratedFromArticleId: null,
+      }),
+    ).toBe(true);
+    expect(
+      canPromoteThoughtToArticle({
+        status: "PRELIMINARY",
+        createdFrom: "question",
+        migratedFromArticleId: null,
+      }),
+    ).toBe(false);
+    expect(
+      canPromoteThoughtToArticle({
+        status: "PRELIMINARY",
+        createdFrom: "direct",
+        migratedFromArticleId: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("preserves normal and migrated-thought promotion eligibility", () => {
+    expect(
+      canPromoteThoughtToArticle({
+        status: "NORMAL",
+        createdFrom: "direct",
+        migratedFromArticleId: null,
+      }),
+    ).toBe(true);
+    expect(
+      canPromoteThoughtToArticle({
+        status: "PRELIMINARY",
+        createdFrom: "direct",
+        migratedFromArticleId: "article-before-revert",
+      }),
+    ).toBe(true);
+  });
+
   it("accepts the same optional snapshot shape for promotion and return", () => {
     expect(PromoteThoughtBody.safeParse(validSnapshot).success).toBe(true);
     expect(RevertArticleToThoughtBody.safeParse(validSnapshot).success).toBe(true);
@@ -68,9 +112,12 @@ describe("thought/review atomic transition contract", () => {
     expect(promoteHandler).toContain("db.transaction(async (tx)");
     expect(promoteHandler).toContain("expectedUpdatedAt.getTime()");
     expect(promoteHandler).toContain("existingPromotion");
-    expect(promoteHandler).toContain('thought.status !== "NORMAL"');
-    expect(promoteHandler).toContain("thought.migratedFromArticleId === null");
+    expect(promoteHandler).toContain("canPromoteThoughtToArticle(thought)");
     expect(promoteHandler).toContain("return { status: 200, body: existingArticle }");
+    expect(promoteHandler).toContain("snapshot.expectedUpdatedAt.getTime()");
+    expect(promoteHandler).toContain("formatThoughtMarkdown(snapshot.title, snapshot.content)");
+    expect(promoteHandler).toContain("promotionType: \"promote\"");
+    expect(promoteHandler).toContain('status: "NORMAL"');
     expect(revertHandler).toContain("db.transaction(async (tx)");
     expect(revertHandler).toContain("expectedUpdatedAt.getTime()");
     expect(revertHandler).toContain("set({ title, content, deletedAt: now, updatedAt: now })");
