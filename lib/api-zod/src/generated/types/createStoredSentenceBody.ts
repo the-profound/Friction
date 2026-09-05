@@ -9,8 +9,10 @@ import type { CreateStoredSentenceBodyPosition } from "./createStoredSentenceBod
 
 export interface CreateStoredSentenceBody {
   userId: string;
-  articleId: string;
+  articleId?: string | null;
   /** @minLength 1 */
   text: string;
+  /** User-entered source label for a manually collected sentence. */
+  sourceText?: string | null;
   position?: CreateStoredSentenceBodyPosition;
 }

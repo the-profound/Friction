@@ -17,4 +17,15 @@ describe("stored sentence source contract", () => {
     expect(schema).toContain("articleAuthorName:");
     expect(schema).toContain("articleAuthorName,");
   });
+
+  it("accepts manual sentences without an article and returns their custom source", () => {
+    const responseSchema = spec.slice(spec.indexOf("    StoredSentence:"), spec.indexOf("    CreateStoredSentenceBody:"));
+    const createSchema = spec.slice(spec.indexOf("    CreateStoredSentenceBody:"), spec.indexOf("    # ─── Reading"));
+    expect(route).toContain("sourceText: storedSentencesTable.sourceText");
+    expect(route).toContain("articleId: articleId ?? null");
+    expect(route).toContain("sourceText: sourceText?.trim() || null");
+    expect(responseSchema).toContain("sourceText:");
+    expect(responseSchema).toContain("sourceText,");
+    expect(createSchema).toContain("required: [userId, text]");
+  });
 });

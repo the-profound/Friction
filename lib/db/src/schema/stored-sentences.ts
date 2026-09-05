@@ -8,8 +8,9 @@ import { usersTable } from "./users";
 export const storedSentencesTable = pgTable("stored_sentences", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").notNull().references(() => usersTable.id),
-  articleId: uuid("article_id").notNull().references(() => articlesTable.id),
+  articleId: uuid("article_id").references(() => articlesTable.id),
   text: text("text").notNull(),
+  sourceText: text("source_text"),
   position: jsonb("position"),
   isFavorite: boolean("is_favorite").notNull().default(false),
   favoritedAt: timestamp("favorited_at", { withTimezone: true }),

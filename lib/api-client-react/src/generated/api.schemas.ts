@@ -324,8 +324,10 @@ export type StoredSentencePosition = { [key: string]: unknown } | null;
 export interface StoredSentence {
   id: string;
   userId: string;
-  articleId: string;
+  articleId: string | null;
   text: string;
+  /** User-entered source label for manually collected sentences. */
+  sourceText: string | null;
   position?: StoredSentencePosition;
   isFavorite: boolean;
   /** Timestamp when the sentence was last marked as favorite. Null if not favorited. */
@@ -343,9 +345,11 @@ export type CreateStoredSentenceBodyPosition = {
 
 export interface CreateStoredSentenceBody {
   userId: string;
-  articleId: string;
+  articleId?: string | null;
   /** @minLength 1 */
   text: string;
+  /** User-entered source label for a manually collected sentence. */
+  sourceText?: string | null;
   position?: CreateStoredSentenceBodyPosition;
 }
 

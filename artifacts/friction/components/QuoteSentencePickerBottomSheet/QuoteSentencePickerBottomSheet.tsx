@@ -68,9 +68,9 @@ export default function QuoteSentencePickerBottomSheet({
               <Text style={styles.itemText} numberOfLines={3}>
                 {item.text}
               </Text>
-              {item.articleTitle ? (
+              {item.sourceText || item.articleTitle ? (
                 <Text style={styles.itemSource} numberOfLines={1}>
-                  {item.articleTitle}
+                  {item.sourceText || item.articleTitle}
                 </Text>
               ) : null}
             </ScalePressable>

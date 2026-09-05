@@ -155,9 +155,9 @@ export default function InlineMenuPanel({
                 <Text style={styles.sentenceText} numberOfLines={3}>
                   {item.text}
                 </Text>
-                {item.articleTitle ? (
+                {item.sourceText || item.articleTitle ? (
                   <Text style={styles.sentenceSource} numberOfLines={1}>
-                    {item.articleTitle}
+                    {item.sourceText || item.articleTitle}
                   </Text>
                 ) : null}
               </ScalePressable>

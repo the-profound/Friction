@@ -10,8 +10,10 @@ import type { StoredSentencePosition } from "./storedSentencePosition";
 export interface StoredSentence {
   id: string;
   userId: string;
-  articleId: string;
+  articleId: string | null;
   text: string;
+  /** User-entered source label for manually collected sentences. */
+  sourceText: string | null;
   position?: StoredSentencePosition;
   isFavorite: boolean;
   /** Timestamp when the sentence was last marked as favorite. Null if not favorited. */

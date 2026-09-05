@@ -190,8 +190,10 @@ export default function SentenceCollectionScreen() {
   const handleQuoteAsMemo = useCallback(
     async (sentence: StoredSentence) => {
       const page = getSentencePage(sentence);
-      const quoteBlock = sentence.articleTitle
-        ? `> ${sentence.text.trim()}\n>\n> <${sentence.articleTitle}>${page !== undefined ? `, ${page + 1}면` : ""}`
+      const sourceLabel = sentence.sourceText?.trim()
+        || (sentence.articleTitle ? `<${sentence.articleTitle}>${page !== undefined ? `, ${page + 1}면` : ""}` : "");
+      const quoteBlock = sourceLabel
+        ? `> ${sentence.text.trim()}\n>\n> ${sourceLabel}`
         : `> ${sentence.text.trim()}\n`;
       try {
         const thought = await createThought.mutateAsync({

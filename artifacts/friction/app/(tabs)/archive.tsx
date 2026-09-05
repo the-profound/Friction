@@ -47,7 +47,7 @@ import { LIST_PERF_PRESET } from "@/lib/listPerf";
 
 type ArchiveSubTab = "personal" | "sentence";
 const FILTER_BUTTON_HEIGHT = 36;
-const FAVORITE_STAR_COLOR = "#F59E0B";
+const SENTENCE_BADGE_OVERFLOW = 12;
 
 function FavoriteBadge() {
   return (
@@ -56,7 +56,7 @@ function FavoriteBadge() {
       pointerEvents="none"
       accessible={false}
     >
-      <AntDesign name="star" size={16} color={FAVORITE_STAR_COLOR} />
+      <AntDesign name="heart" size={16} color={Colors.noticeAccent} />
     </View>
   );
 }
@@ -186,13 +186,13 @@ export default function ArchiveScreen() {
 
   const handleAdd = useCallback(() => {
     if (activeSubTab === "sentence") {
-      showToast({ message: "읽기 화면에서 문장을 길게 눌러 수집할 수 있어요", type: "info" });
+      router.push("/stored-sentence-create");
       return;
     }
     setNewName("");
     setNewDescription("");
     setCreateSheetVisible(true);
-  }, [activeSubTab, showToast]);
+  }, [activeSubTab, router]);
 
   const isCreating = createMyCollection.isPending;
 
@@ -310,7 +310,7 @@ export default function ArchiveScreen() {
       }}
       onSwipeOpen={() => handleSentenceSwipeOpen(item.id)}
       onScrollLock={(locked) => setSentenceScrollEnabled(!locked)}
-      overflowTop={8}
+      overflowTop={SENTENCE_BADGE_OVERFLOW}
     >
       <ScalePressable
         style={styles.sentenceItem}
@@ -326,7 +326,7 @@ export default function ArchiveScreen() {
         <View style={styles.sentenceItemContent}>
           <View style={styles.sentenceMeta}>
             <Text style={styles.sentenceSource} numberOfLines={1}>
-              {item.articleTitle || "출처 없음"}
+              {item.sourceText || item.articleTitle || "출처 없음"}
             </Text>
             <Text style={styles.sentenceDate}>
               {new Date(item.createdAt).toLocaleDateString("ko-KR")}
@@ -364,7 +364,7 @@ export default function ArchiveScreen() {
         <View style={styles.sentenceItemContent}>
           <View style={styles.sentenceMeta}>
             <Text style={styles.sentenceSource} numberOfLines={1}>
-              {item.articleTitle || "출처 없음"}
+              {item.sourceText || item.articleTitle || "출처 없음"}
             </Text>
             <Text style={styles.sentenceDate}>
               {new Date(item.createdAt).toLocaleDateString("ko-KR")}
@@ -498,6 +498,7 @@ export default function ArchiveScreen() {
         renderItem={selectionMode ? renderSentenceSelectionItem : renderSentenceItem}
         contentContainerStyle={[
           styles.listContent,
+          styles.sentenceListContent,
           { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom },
         ]}
         refreshControl={
@@ -586,13 +587,26 @@ export default function ArchiveScreen() {
           </ScalePressable>
         ) : !selectionMode ? (
           <ScalePressable
-            style={styles.menuButton}
-            contentStyle={styles.menuButtonContent}
-            onPress={enterSelectionMode}
+            style={styles.addButton}
+            contentStyle={styles.addButtonContent}
+            onPress={handleAdd}
+            onLongPress={enterSelectionMode}
             accessibilityRole="button"
-            accessibilityLabel="문장 선택 모드 열기"
+            accessibilityLabel="문장 추가"
+            accessibilityHint="새 문장 추가 화면으로 이동합니다. 길게 누르면 문장 선택 모드가 열립니다"
+            accessibilityActions={[
+              { name: "activate", label: "문장 추가" },
+              { name: "longpress", label: "문장 선택 모드 열기" },
+            ]}
+            onAccessibilityAction={({ nativeEvent }) => {
+              if (nativeEvent.actionName === "longpress") {
+                enterSelectionMode();
+              } else if (nativeEvent.actionName === "activate") {
+                handleAdd();
+              }
+            }}
           >
-            <Feather name="more-horizontal" size={Sizing.searchIconSize} color={Colors.zinc700} />
+            <Feather name="plus" size={Sizing.plusIconSize} color={Colors.primaryActionForeground} />
           </ScalePressable>
         ) : null}
       </View>
@@ -774,22 +788,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...Shadows.navBar,
   },
-  menuButton: {
-    width: FILTER_BUTTON_HEIGHT,
-    height: FILTER_BUTTON_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  menuButtonContent: {
-    width: FILTER_BUTTON_HEIGHT,
-    height: FILTER_BUTTON_HEIGHT,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: FILTER_BUTTON_HEIGHT / 2,
-    backgroundColor: Colors.searchBgInactive,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   // ─── Card ────────────────────────────────────────────────────────────────────
   listTopSpacer: {
     height: 4,
@@ -866,6 +864,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: 4,
+  },
+  sentenceListContent: {
+    paddingTop: SENTENCE_BADGE_OVERFLOW,
   },
   sentenceItem: {
     marginHorizontal: Spacing.screenPx,

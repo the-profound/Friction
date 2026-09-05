@@ -70,7 +70,7 @@ export default function StoredSentenceDetailScreen() {
   const sourceSize = readerFontSize(ReaderTokens.typeScale.captionCqi, cardWidth);
   const page = getPage(sentence?.position);
   const source = sentence
-    ? [
+    ? sentence.sourceText?.trim() || [
         `${sentence.articleAuthorName?.trim() || "저자 미상"}, <${sentence.articleTitle?.trim() || "제목 없는 원문"}>`,
         page === undefined ? "저장 위치 없음" : `${page + 1}면`,
       ].join(" · ")
@@ -131,8 +131,10 @@ export default function StoredSentenceDetailScreen() {
   const handleQuote = useCallback(() => {
     if (!sentence) return;
     void runAction(async () => {
-      const quote = sentence.articleTitle
-        ? `> ${sentence.text.trim()}\n>\n> <${sentence.articleTitle}>${page === undefined ? "" : `, ${page + 1}면`}`
+      const quoteSource = sentence.sourceText?.trim()
+        || (sentence.articleTitle ? `<${sentence.articleTitle}>${page === undefined ? "" : `, ${page + 1}면`}` : "");
+      const quote = quoteSource
+        ? `> ${sentence.text.trim()}\n>\n> ${quoteSource}`
         : `> ${sentence.text.trim()}\n`;
       try {
         const thought = await createThought.mutateAsync({

@@ -1606,8 +1606,12 @@ export const ListStoredSentencesQueryParams = zod.object({
 export const ListStoredSentencesResponseItem = zod.object({
   id: zod.string().uuid(),
   userId: zod.string().uuid(),
-  articleId: zod.string().uuid(),
+  articleId: zod.string().uuid().nullable(),
   text: zod.string(),
+  sourceText: zod
+    .string()
+    .nullable()
+    .describe("User-entered source label for manually collected sentences."),
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
   favoritedAt: zod
@@ -1640,8 +1644,12 @@ export const ListStoredSentencesResponse = zod.array(
 
 export const CreateStoredSentenceBody = zod.object({
   userId: zod.string().uuid(),
-  articleId: zod.string().uuid(),
+  articleId: zod.string().uuid().nullish(),
   text: zod.string().min(1),
+  sourceText: zod
+    .string()
+    .nullish()
+    .describe("User-entered source label for a manually collected sentence."),
   position: zod.object({}).passthrough().nullish(),
 });
 
@@ -1655,8 +1663,12 @@ export const GetStoredSentenceParams = zod.object({
 export const GetStoredSentenceResponse = zod.object({
   id: zod.string().uuid(),
   userId: zod.string().uuid(),
-  articleId: zod.string().uuid(),
+  articleId: zod.string().uuid().nullable(),
   text: zod.string(),
+  sourceText: zod
+    .string()
+    .nullable()
+    .describe("User-entered source label for manually collected sentences."),
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
   favoritedAt: zod
@@ -1701,8 +1713,12 @@ export const ToggleStoredSentenceFavoriteBody = zod.object({
 export const ToggleStoredSentenceFavoriteResponse = zod.object({
   id: zod.string().uuid(),
   userId: zod.string().uuid(),
-  articleId: zod.string().uuid(),
+  articleId: zod.string().uuid().nullable(),
   text: zod.string(),
+  sourceText: zod
+    .string()
+    .nullable()
+    .describe("User-entered source label for manually collected sentences."),
   position: zod.object({}).passthrough().nullish(),
   isFavorite: zod.boolean(),
   favoritedAt: zod

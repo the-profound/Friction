@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, storedSentencesTable, articlesTable, usersTable, thoughtQuestionSourcesTable, thoughtsTable } from "@workspace/db";
 import { CreateStoredSentenceBody, ToggleStoredSentenceFavoriteBody } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
@@ -10,6 +11,7 @@ const sentenceSelect = {
   userId: storedSentencesTable.userId,
   articleId: storedSentencesTable.articleId,
   text: storedSentencesTable.text,
+  sourceText: storedSentencesTable.sourceText,
   position: storedSentencesTable.position,
   isFavorite: storedSentencesTable.isFavorite,
   favoritedAt: storedSentencesTable.favoritedAt,
@@ -26,10 +28,14 @@ function selectSentences() {
     .leftJoin(usersTable, eq(articlesTable.authorId, usersTable.id));
 }
 
-router.get("/stored-sentences", async (req, res) => {
+router.get("/stored-sentences", requireAuth, async (req, res) => {
   const { userId, favorite } = req.query;
   if (!userId || typeof userId !== "string") {
     res.status(400).json({ error: "userId is required" });
+    return;
+  }
+  if (userId !== req.user!.id) {
+    res.status(403).json({ error: "Stored sentences belong to another user", code: "STORED_SENTENCE_USER_MISMATCH" });
     return;
   }
 
@@ -49,18 +55,23 @@ router.get("/stored-sentences", async (req, res) => {
   res.json(sentences);
 });
 
-router.post("/stored-sentences", async (req, res) => {
+router.post("/stored-sentences", requireAuth, async (req, res) => {
   const parsed = CreateStoredSentenceBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
     return;
   }
-  const { userId, articleId, text, position } = parsed.data;
+  const { userId, articleId, text, sourceText, position } = parsed.data;
+  if (userId !== req.user!.id) {
+    res.status(403).json({ error: "Cannot create a stored sentence for another user", code: "STORED_SENTENCE_USER_MISMATCH" });
+    return;
+  }
 
   const [inserted] = await db.insert(storedSentencesTable).values({
-    userId,
-    articleId,
+    userId: req.user!.id,
+    articleId: articleId ?? null,
     text,
+    sourceText: sourceText?.trim() || null,
     position: position ?? null,
   }).returning({ id: storedSentencesTable.id });
 
@@ -70,14 +81,20 @@ router.post("/stored-sentences", async (req, res) => {
   }
 
   const [sentence] = await selectSentences()
-    .where(eq(storedSentencesTable.id, inserted.id));
+    .where(and(
+      eq(storedSentencesTable.id, inserted.id),
+      eq(storedSentencesTable.userId, req.user!.id),
+    ));
 
   res.status(201).json(sentence);
 });
 
-router.get("/stored-sentences/:id", async (req, res) => {
+router.get("/stored-sentences/:id", requireAuth, async (req, res) => {
   const [sentence] = await selectSentences()
-    .where(eq(storedSentencesTable.id, req.params.id));
+    .where(and(
+      eq(storedSentencesTable.id, req.params.id),
+      eq(storedSentencesTable.userId, req.user!.id),
+    ));
 
   if (!sentence) {
     res.status(404).json({ error: "Sentence not found" });
@@ -86,8 +103,19 @@ router.get("/stored-sentences/:id", async (req, res) => {
   res.json(sentence);
 });
 
-router.delete("/stored-sentences/:id", async (req, res) => {
+router.delete("/stored-sentences/:id", requireAuth, async (req, res) => {
   const sentenceId = req.params.id;
+  const [ownedSentence] = await db
+    .select({ id: storedSentencesTable.id })
+    .from(storedSentencesTable)
+    .where(and(
+      eq(storedSentencesTable.id, sentenceId),
+      eq(storedSentencesTable.userId, req.user!.id),
+    ));
+  if (!ownedSentence) {
+    res.status(404).json({ error: "Sentence not found" });
+    return;
+  }
   const [thoughtReference, questionReference] = await Promise.all([
     db
       .select({ id: thoughtsTable.id })
@@ -108,7 +136,10 @@ router.delete("/stored-sentences/:id", async (req, res) => {
     return;
   }
 
-  const [deleted] = await db.delete(storedSentencesTable).where(eq(storedSentencesTable.id, sentenceId)).returning();
+  const [deleted] = await db.delete(storedSentencesTable).where(and(
+    eq(storedSentencesTable.id, sentenceId),
+    eq(storedSentencesTable.userId, req.user!.id),
+  )).returning();
   if (!deleted) {
     res.status(404).json({ error: "Sentence not found" });
     return;
@@ -116,7 +147,7 @@ router.delete("/stored-sentences/:id", async (req, res) => {
   res.status(204).send();
 });
 
-router.patch("/stored-sentences/:id/favorite", async (req, res) => {
+router.patch("/stored-sentences/:id/favorite", requireAuth, async (req, res) => {
   const parsed = ToggleStoredSentenceFavoriteBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
@@ -128,7 +159,10 @@ router.patch("/stored-sentences/:id/favorite", async (req, res) => {
       isFavorite: parsed.data.isFavorite,
       favoritedAt: parsed.data.isFavorite ? new Date() : null,
     })
-    .where(eq(storedSentencesTable.id, req.params.id))
+    .where(and(
+      eq(storedSentencesTable.id, req.params.id),
+      eq(storedSentencesTable.userId, req.user!.id),
+    ))
     .returning({ id: storedSentencesTable.id });
 
   if (!updated) {
@@ -137,7 +171,10 @@ router.patch("/stored-sentences/:id/favorite", async (req, res) => {
   }
 
   const [sentence] = await selectSentences()
-    .where(eq(storedSentencesTable.id, updated.id));
+    .where(and(
+      eq(storedSentencesTable.id, updated.id),
+      eq(storedSentencesTable.userId, req.user!.id),
+    ));
 
   res.json(sentence);
 });

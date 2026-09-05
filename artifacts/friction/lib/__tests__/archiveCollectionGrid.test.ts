@@ -32,6 +32,10 @@ describe("archive personal collection grid", () => {
 });
 
 describe("archive collected sentence list", () => {
+  const sentenceFilterAction = archiveScreen.slice(
+    archiveScreen.indexOf('{activeSubTab === "personal" ? ('),
+    archiveScreen.indexOf("</View>", archiveScreen.indexOf('{activeSubTab === "personal" ? (')),
+  );
   const regularRenderer = archiveScreen.slice(
     archiveScreen.indexOf("const renderSentenceItem"),
     archiveScreen.indexOf("const renderSentenceSelectionItem"),
@@ -48,6 +52,7 @@ describe("archive collected sentence list", () => {
     expect(archiveScreen).toContain("...Shadows.card");
     expect(archiveScreen).toContain("fontFamily: ReaderTokens.fontFamily.serif");
     expect(archiveScreen).toContain('justifyContent: "space-between"');
+    expect(archiveScreen).toContain('item.sourceText || item.articleTitle || "출처 없음"');
   });
 
   it("keeps source and sentence previews safely truncated", () => {
@@ -64,7 +69,27 @@ describe("archive collected sentence list", () => {
     expect(selectionRenderer).toContain("<FavoriteBadge />");
     expect(archiveScreen).toContain('pointerEvents="none"');
     expect(archiveScreen).toContain("즐겨찾기됨");
-    expect(archiveScreen).toContain("overflowTop={8}");
+    expect(archiveScreen).toContain('<AntDesign name="heart" size={16} color={Colors.noticeAccent} />');
+    expect(archiveScreen).not.toContain('name="star"');
+  });
+
+  it("opens manual sentence creation from a fixed-size plus action", () => {
+    expect(sentenceFilterAction).toContain("style={styles.addButton}");
+    expect(sentenceFilterAction).toContain("contentStyle={styles.addButtonContent}");
+    expect(sentenceFilterAction).toContain("onPress={handleAdd}");
+    expect(sentenceFilterAction).toContain("onLongPress={enterSelectionMode}");
+    expect(sentenceFilterAction).toContain('accessibilityLabel="문장 추가"');
+    expect(sentenceFilterAction).toContain('accessibilityHint="새 문장 추가 화면으로 이동합니다. 길게 누르면 문장 선택 모드가 열립니다"');
+    expect(sentenceFilterAction).toContain('{ name: "longpress", label: "문장 선택 모드 열기" }');
+    expect(sentenceFilterAction).toContain('name="plus"');
+    expect(archiveScreen).toContain('router.push("/stored-sentence-create")');
+  });
+
+  it("reserves matching list and swipe overflow space for raised hearts", () => {
+    expect(archiveScreen).toContain("const SENTENCE_BADGE_OVERFLOW = 12");
+    expect(regularRenderer).toContain("overflowTop={SENTENCE_BADGE_OVERFLOW}");
+    expect(archiveScreen).toContain("styles.sentenceListContent");
+    expect(archiveScreen).toContain("paddingTop: SENTENCE_BADGE_OVERFLOW");
   });
 
   it("renders stored text without decorative quotation marks", () => {
@@ -82,6 +107,30 @@ describe("archive collected sentence list", () => {
     expect(selectionRenderer).toContain("accessibilityState={{ checked: isSelected }}");
     expect(selectionRenderer).toContain("toggleSelect(item.id)");
     expect(archiveScreen).not.toContain("selectedSentence");
+  });
+});
+
+describe("manual stored sentence creation", () => {
+  const createScreen = readFileSync(join(appRoot, "app/stored-sentence-create.tsx"), "utf8");
+
+  it("uses the standard back and menu header around the editable detail card", () => {
+    expect(createScreen).toContain('<HeaderButton variant="back"');
+    expect(createScreen).toContain('<HeaderButton variant="menu"');
+    expect(createScreen).toContain("<TextInput");
+    expect(createScreen).toContain('accessibilityLabel="문장 본문"');
+    expect(createScreen).toContain('accessibilityLabel="문장 출처"');
+    expect(createScreen).toContain('placeholder="저자, <제목>, 면 수"');
+    expect(createScreen).toContain("multiline");
+    expect(createScreen).toContain("minHeight: 280");
+  });
+
+  it("saves the body and optional custom source, then refreshes the archive", () => {
+    expect(createScreen).toContain("useCreateStoredSentence()");
+    expect(createScreen).toContain("text: bodyText.trim()");
+    expect(createScreen).toContain("sourceText: sourceText.trim() || null");
+    expect(createScreen).not.toContain('articleId: "custom"');
+    expect(createScreen).toContain("getListStoredSentencesQueryKey({ userId })");
+    expect(createScreen).toContain("router.back()");
   });
 });
 
@@ -104,6 +153,7 @@ describe("stored sentence detail route", () => {
     expect(detailScreen).toContain('"제목 없는 원문"');
     expect(detailScreen).toContain('"저장 위치 없음"');
     expect(detailScreen).toContain('"저자 미상"');
+    expect(detailScreen).toContain("sentence.sourceText?.trim()");
     expect(detailScreen).toContain("sentence.articleAuthorName");
     expect(detailScreen).toContain("}, <${sentence.articleTitle");
     expect(detailScreen).toContain("<ScrollView");

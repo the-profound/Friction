@@ -3871,8 +3871,13 @@ components:
         articleId:
           type: string
           format: uuid
+          nullable: true
         text:
           type: string
+        sourceText:
+          type: string
+          nullable: true
+          description: User-entered source label for manually collected sentences.
         position:
           type: object
           nullable: true
@@ -3900,6 +3905,7 @@ components:
           userId,
           articleId,
           text,
+          sourceText,
           isFavorite,
           favoritedAt,
           createdAt,
@@ -3916,13 +3922,18 @@ components:
         articleId:
           type: string
           format: uuid
+          nullable: true
         text:
           type: string
           minLength: 1
+        sourceText:
+          type: string
+          nullable: true
+          description: User-entered source label for a manually collected sentence.
         position:
           type: object
           nullable: true
-      required: [userId, articleId, text]
+      required: [userId, text]
 
     # ─── Reading ────────────────────────────────────
     ReadingRecord:
