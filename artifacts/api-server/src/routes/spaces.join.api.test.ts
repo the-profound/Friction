@@ -117,7 +117,7 @@ vi.mock("../middlewares/requireAuth", () => ({
 const { default: router } = await import("./spaces");
 
 const recruitingSpace = (overrides: Partial<Space> = {}): Space => ({
-  id: "space-a",
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   inviteCode: "봄바람",
   isAnonymous: false,
   status: "RECRUITING",
@@ -186,7 +186,7 @@ describe("space join API contract", () => {
         [recruitingSpace({ isAnonymous: true })], [recruitingSpace({ isAnonymous: true })], [], [], [{ value: 0 }], [], [],
       );
 
-      const realNameResponse = await request(baseUrl, "user-a", "/spaces/space-a/code-requests", {
+      const realNameResponse = await request(baseUrl, "user-a", "/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/code-requests", {
         code: "봄바람",
       });
       expect(realNameResponse.status).toBe(201);
@@ -196,7 +196,7 @@ describe("space join API contract", () => {
       });
       expect(state.inserts[0]?.values).not.toHaveProperty("spaceNickname");
 
-      const anonymousResponse = await request(baseUrl, "user-b", "/spaces/space-a/code-requests", {
+      const anonymousResponse = await request(baseUrl, "user-b", "/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/code-requests", {
         code: "봄바람",
         spaceNickname: "달빛",
       });
@@ -220,7 +220,7 @@ describe("space join API contract", () => {
   ])("returns %s as a distinct recovery code", async (_name, rows, body, status, code) => {
     await withServer(async (baseUrl) => {
       queueRows(...rows);
-      const response = await request(baseUrl, "user-a", "/spaces/space-a/code-requests", body);
+      const response = await request(baseUrl, "user-a", "/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/code-requests", body);
       expect(response.status).toBe(status);
       await expect(response.json()).resolves.toMatchObject({ code });
     });
@@ -229,10 +229,10 @@ describe("space join API contract", () => {
   it("blocks invitation acceptance once recruitment closes and creates a participation when it remains open", async () => {
     await withServer(async (baseUrl) => {
       const closedSpace = recruitingSpace({ status: "ACTIVE" });
-      const invitation = { id: "invite-a", spaceId: "space-a", invitedUserId: "user-a", status: "PENDING" };
+      const invitation = { id: "invite-a", spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", invitedUserId: "user-a", status: "PENDING" };
       queueRows([invitation], [closedSpace], [closedSpace], [invitation], []);
 
-      const closedResponse = await patch(baseUrl, "user-a", "/spaces/space-a/invitations/invite-a", {
+      const closedResponse = await patch(baseUrl, "user-a", "/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/invitations/invite-a", {
         status: "ACCEPTED",
       });
       expect(closedResponse.status).toBe(409);
@@ -240,12 +240,12 @@ describe("space join API contract", () => {
 
       const openSpace = recruitingSpace();
       queueRows([invitation], [openSpace], [openSpace], [invitation], [], [{ value: 0 }]);
-      const acceptedResponse = await patch(baseUrl, "user-a", "/spaces/space-a/invitations/invite-a", {
+      const acceptedResponse = await patch(baseUrl, "user-a", "/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/invitations/invite-a", {
         status: "ACCEPTED",
       });
       expect(acceptedResponse.status).toBe(200);
       expect(state.inserts.at(-1)?.values).toMatchObject({
-        spaceId: "space-a",
+        spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         userId: "user-a",
         joinPath: "INVITATION",
         status: "APPROVED",
@@ -258,13 +258,13 @@ describe("space join API contract", () => {
       const anonymousSpace = recruitingSpace({ isAnonymous: true });
       const handledInvitation = {
         id: "invite-a",
-        spaceId: "space-a",
+        spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         invitedUserId: "user-a",
         status: "ACCEPTED",
       };
       queueRows([handledInvitation], [anonymousSpace], [anonymousSpace], [handledInvitation]);
 
-      const response = await patch(baseUrl, "user-a", "/spaces/space-a/invitations/invite-a", {
+      const response = await patch(baseUrl, "user-a", "/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/invitations/invite-a", {
         status: "ACCEPTED",
       });
 
@@ -275,8 +275,45 @@ describe("space join API contract", () => {
 
   it("requires authentication before exposing participation-specific join context", async () => {
     await withServer(async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/spaces/space-a/join-context?userId=another-user`);
+      const response = await fetch(`${baseUrl}/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/join-context?userId=another-user`);
       expect(response.status).toBe(401);
+    });
+  });
+});
+
+describe("non-UUID space identifiers", () => {
+  it("returns a JSON 404 instead of a 500 for GET /spaces/:id", async () => {
+    await withServer(async (baseUrl) => {
+      const response = await get(baseUrl, "/spaces/zzz-not-a-real-route");
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({ error: expect.any(String) });
+    });
+  });
+
+  it("returns a JSON 404 for an unregistered sub-route that falls through to /spaces/:id", async () => {
+    // Simulates a client calling an endpoint that doesn't exist on the running
+    // server build: the request falls through to /spaces/:id with the whole
+    // unmatched segment as the id, which must not throw inside the DB query.
+    await withServer(async (baseUrl) => {
+      const response = await get(baseUrl, "/spaces/operator-pending-code-requests-v2");
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({ error: expect.any(String) });
+    });
+  });
+
+  it("returns a JSON 404 for a non-UUID id on an authenticated sub-route, before auth even runs", async () => {
+    await withServer(async (baseUrl) => {
+      const response = await get(baseUrl, "/spaces/not-a-uuid/basic-settings");
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({ error: expect.any(String) });
+    });
+  });
+
+  it("still returns 404 (not 500) for a well-formed but non-existent UUID", async () => {
+    await withServer(async (baseUrl) => {
+      queueRows([]);
+      const response = await get(baseUrl, "/spaces/00000000-0000-4000-8000-000000000000");
+      expect(response.status).toBe(404);
     });
   });
 });
@@ -289,17 +326,31 @@ describe("operator pending code request summary", () => {
     });
   });
 
+  it("is registered as its own route rather than falling through to /spaces/:id", async () => {
+    // If this endpoint were missing from a deployed build, the request would
+    // fall through to GET /spaces/:id and 404 (see "non-UUID space
+    // identifiers" above) instead of hitting requireAuth and returning 401.
+    // Asserting 401 here — not 404 — is what proves the route itself exists.
+    await withServer(async (baseUrl) => {
+      const response = await get(baseUrl, "/spaces/operator-pending-code-requests");
+      expect(response.status).toBe(401);
+      await expect(response.json()).resolves.not.toMatchObject({
+        error: "Space not found",
+      });
+    });
+  });
+
   it("returns one sorted row per operated space and omits unmatched spaces", async () => {
     await withServer(async (baseUrl) => {
       queueRows(
-        [{ spaceId: "space-b" }, { spaceId: "space-a" }],
+        [{ spaceId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }, { spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
         [
-          { id: "space-b", name: "베타 공간", status: "RECRUITING" },
-          { id: "space-a", name: "가나다 공간", status: "ACTIVE" },
+          { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "베타 공간", status: "RECRUITING" },
+          { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "가나다 공간", status: "ACTIVE" },
         ],
         [
-          { spaceId: "space-b", pendingCount: "1" },
-          { spaceId: "space-a", pendingCount: 2 },
+          { spaceId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", pendingCount: "1" },
+          { spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", pendingCount: 2 },
           { spaceId: "another-operator-space", pendingCount: 4 },
         ],
       );
@@ -313,11 +364,11 @@ describe("operator pending code request summary", () => {
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual([
         {
-          space: { id: "space-a", name: "가나다 공간", status: "ACTIVE" },
+          space: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "가나다 공간", status: "ACTIVE" },
           pendingCount: 2,
         },
         {
-          space: { id: "space-b", name: "베타 공간", status: "RECRUITING" },
+          space: { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "베타 공간", status: "RECRUITING" },
           pendingCount: 1,
         },
       ]);

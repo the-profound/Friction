@@ -27,7 +27,7 @@ const state = vi.hoisted(() => {
   };
 
   const space = {
-    id: "space-a",
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     name: "예약 공간",
     isAnonymous: false,
     roundCount: 1,
@@ -204,7 +204,7 @@ let server: Server;
 
 async function request(userId?: string) {
   const headers = userId ? { "x-test-user-id": userId } : undefined;
-  return fetch("http://127.0.0.1:" + (server.address() as AddressInfo).port + "/spaces/space-a/scheduled-sends", {
+  return fetch("http://127.0.0.1:" + (server.address() as AddressInfo).port + "/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/scheduled-sends", {
     headers,
   });
 }

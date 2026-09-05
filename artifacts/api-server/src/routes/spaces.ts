@@ -58,6 +58,23 @@ import {
 
 const router: IRouter = Router();
 
+// A `:id` on this router always denotes a space identifier, which is always a
+// UUID. Deployed clients sometimes call routes that don't exist on the
+// server build currently running (e.g. a new endpoint that shipped in the
+// client ahead of the API deploy); those requests fall through to
+// `/spaces/:id` with the unmatched path segment as a non-UUID value, which
+// previously threw inside the DB query and surfaced as an HTML 500. Validate
+// the shape here — before auth or any route handler runs — so unknown or
+// malformed identifiers cleanly 404 with a JSON body instead.
+const SPACE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+router.param("id", (req, res, next, value) => {
+  if (typeof value !== "string" || !SPACE_ID_PATTERN.test(value)) {
+    res.status(404).json({ error: "Space not found" });
+    return;
+  }
+  next();
+});
+
 router.use((_req, res, next) => {
   const originalJson = res.json.bind(res);
   res.json = ((body: unknown) => originalJson(redactSpaceCreationKeys(body))) as typeof res.json;

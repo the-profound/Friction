@@ -46,7 +46,7 @@ const state = vi.hoisted(() => {
   const letters = [
     {
       id: "letter-author",
-      spaceId: "space-a",
+      spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       spaceRoundId: "round-a",
       authorId: "author-a",
       sourceArticleId: "article-a",
@@ -71,7 +71,7 @@ const state = vi.hoisted(() => {
 
   const rowsFor = (source: string, _selection: unknown): unknown[] => {
     if (source === "spaces") {
-      return [{ id: "space-a", name: "Test Space", isAnonymous: false, creatorId: "operator-a" }];
+      return [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Test Space", isAnonymous: false, creatorId: "operator-a" }];
     }
     if (source === "space_participations") {
       const m = members[activeUser];
@@ -173,7 +173,7 @@ let server: Server;
 
 async function getLetters(userId: string) {
   return fetch(
-    `http://127.0.0.1:${(server.address() as AddressInfo).port}/spaces/space-a/letters`,
+    `http://127.0.0.1:${(server.address() as AddressInfo).port}/spaces/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/letters`,
     { headers: { "x-test-user-id": userId } },
   );
 }
