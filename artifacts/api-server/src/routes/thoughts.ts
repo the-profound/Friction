@@ -8,6 +8,7 @@ import {
   isNotNull,
   isNull,
   ne,
+  not,
   notExists,
   sql,
 } from "drizzle-orm";
@@ -1090,10 +1091,16 @@ router.get("/thoughts", requireAuth, async (req, res) => {
   const conditions = [
     eq(thoughtsTable.authorId, userId),
     isNull(thoughtsTable.deletedAt),
-    // Preliminary question-queue entries are not activated thoughts yet; they
-    // must only be reachable through the question-queue endpoints, never leak
-    // into the general archive list regardless of client state.
-    ne(thoughtsTable.status, "PRELIMINARY"),
+    // Only unanswered entries still owned by the question queue stay hidden.
+    // Direct and reading-context thoughts are first-class archive records even
+    // while their status remains PRELIMINARY.
+    not(
+      and(
+        eq(thoughtsTable.createdFrom, "question"),
+        eq(thoughtsTable.status, "PRELIMINARY"),
+        isNull(thoughtsTable.sourceArticleId),
+      ),
+    ),
     // After promotion, the article is the sole record shown in the archive.
     // Keeping the source thought out of this list prevents one write from
     // appearing once as a thought and again as an editing article.

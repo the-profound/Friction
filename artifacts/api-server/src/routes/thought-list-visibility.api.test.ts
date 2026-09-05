@@ -30,6 +30,7 @@ const state = vi.hoisted(() => {
   };
 
   const thoughtsById = new Map<string, Record<string, unknown>>();
+  const promotedThoughtIds = new Set<string>();
 
   const db: any = {
     select: (_fields?: Record<string, unknown>) => {
@@ -56,7 +57,12 @@ const state = vi.hoisted(() => {
                     (row) =>
                       row.authorId === state.activeUser &&
                       row.deletedAt === null &&
-                      row.status !== "PRELIMINARY",
+                      !(
+                        row.createdFrom === "question" &&
+                        row.status === "PRELIMINARY" &&
+                        row.sourceArticleId == null
+                      ) &&
+                      !promotedThoughtIds.has(row.id as string),
                   )
                   .sort(
                     (a, b) =>
@@ -71,7 +77,7 @@ const state = vi.hoisted(() => {
     },
   };
 
-  return { activeUser: "", thoughtsById, tables, db };
+  return { activeUser: "", thoughtsById, promotedThoughtIds, tables, db };
 });
 
 vi.mock("@workspace/db", () => ({
@@ -167,13 +173,34 @@ async function getThoughts(baseUrl: string, userId: string) {
 beforeEach(() => {
   state.activeUser = "";
   state.thoughtsById.clear();
+  state.promotedThoughtIds.clear();
 });
 
 afterAll(() => vi.restoreAllMocks());
 
 describe("GET /thoughts visibility", () => {
-  it("excludes preliminary question-queue entries mixed in with normal thoughts", async () => {
+  it("returns preliminary direct and reading thoughts but hides only inactive queue entries", async () => {
     state.thoughtsById.set("normal-1", thought("normal-1", "user-a"));
+    state.thoughtsById.set(
+      "direct-preliminary",
+      thought("direct-preliminary", "user-a", { status: "PRELIMINARY" }),
+    );
+    state.thoughtsById.set(
+      "reading-preliminary",
+      thought("reading-preliminary", "user-a", {
+        status: "PRELIMINARY",
+        createdFrom: "reading",
+        sourceArticleId: "article-reading",
+      }),
+    );
+    state.thoughtsById.set(
+      "answered-question",
+      thought("answered-question", "user-a", {
+        status: "PRELIMINARY",
+        createdFrom: "question",
+        sourceArticleId: "article-question",
+      }),
+    );
     state.thoughtsById.set(
       "queued-1",
       thought("queued-1", "user-a", { status: "PRELIMINARY", createdFrom: "question" }),
@@ -181,8 +208,12 @@ describe("GET /thoughts visibility", () => {
 
     await withServer(async (baseUrl) => {
       const body = await getThoughts(baseUrl, "user-a");
-      expect(body.map((item) => item.id)).toEqual(["normal-1"]);
-      expect(body.some((item) => item.status === "PRELIMINARY")).toBe(false);
+      expect(body.map((item) => item.id).sort()).toEqual([
+        "answered-question",
+        "direct-preliminary",
+        "normal-1",
+        "reading-preliminary",
+      ]);
     });
   });
 
@@ -196,18 +227,29 @@ describe("GET /thoughts visibility", () => {
     });
   });
 
-  it("keeps the preliminary filter scoped per-user alongside existing author isolation", async () => {
-    state.thoughtsById.set("a-normal", thought("a-normal", "user-a"));
+  it("keeps author, deletion, and promotion rules while a newly created direct thought survives refetch", async () => {
+    state.thoughtsById.set(
+      "a-direct-new",
+      thought("a-direct-new", "user-a", { status: "PRELIMINARY" }),
+    );
     state.thoughtsById.set(
       "a-queued",
       thought("a-queued", "user-a", { status: "PRELIMINARY", createdFrom: "question" }),
     );
+    state.thoughtsById.set(
+      "a-deleted",
+      thought("a-deleted", "user-a", { deletedAt: new Date() }),
+    );
+    state.thoughtsById.set("a-promoted", thought("a-promoted", "user-a"));
+    state.promotedThoughtIds.add("a-promoted");
     state.thoughtsById.set("b-normal", thought("b-normal", "user-b"));
 
     await withServer(async (baseUrl) => {
       const a = await getThoughts(baseUrl, "user-a");
+      const aAfterRefetch = await getThoughts(baseUrl, "user-a");
       const b = await getThoughts(baseUrl, "user-b");
-      expect(a.map((item) => item.id)).toEqual(["a-normal"]);
+      expect(a.map((item) => item.id)).toEqual(["a-direct-new"]);
+      expect(aAfterRefetch.map((item) => item.id)).toEqual(["a-direct-new"]);
       expect(b.map((item) => item.id)).toEqual(["b-normal"]);
     });
   });
