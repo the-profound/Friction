@@ -114,6 +114,12 @@ import {
   exportEditorTransitionSnapshot,
   type EditorTransitionSnapshot,
 } from "@/lib/editorTransitionSnapshot";
+import {
+  dismissEditorKeyboard,
+  INITIAL_EDITOR_KEYBOARD_STATE,
+  reduceEditorKeyboardState,
+  resolveMemoToolbarRenderContract,
+} from "@/lib/readingMemoToolbar";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
@@ -286,6 +292,9 @@ export default function WritingScreen() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [editorKeyboardState, setEditorKeyboardState] = useState(
+    INITIAL_EDITOR_KEYBOARD_STATE,
+  );
   const [editorReady, setEditorReady] = useState(false);
   const editorReadyRef = useRef(false);
   const shouldFocusInitialH1Ref = useRef(isLocalDirectDraft);
@@ -312,6 +321,9 @@ export default function WritingScreen() {
       lastKeyboardHeightRef.current = h;
       setKeyboardHeight(h);
       setKeyboardVisible(true);
+      setEditorKeyboardState((current) =>
+        reduceEditorKeyboardState(current, { type: "nativeKeyboard", visible: true }),
+      );
       setKeyboardRestorePending(false); // 키보드가 실제로 올라오면 플래그 해제
       if (addMenuPendingRef.current) {
         addMenuPendingRef.current = false;
@@ -321,6 +333,9 @@ export default function WritingScreen() {
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
       setKeyboardVisible(false);
+      setEditorKeyboardState((current) =>
+        reduceEditorKeyboardState(current, { type: "nativeKeyboard", visible: false }),
+      );
     });
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
@@ -2255,8 +2270,10 @@ export default function WritingScreen() {
   }, []);
 
   const handleDismissKeyboard = useCallback(() => {
-    editorRef.current?.blur();
-    Keyboard.dismiss();
+    dismissEditorKeyboard({
+      blurEditor: () => editorRef.current?.blur(),
+      dismissNativeKeyboard: () => Keyboard.dismiss(),
+    });
     if (
       isThoughtModeRef.current
       && modeRef.current === "draft"
@@ -2268,9 +2285,12 @@ export default function WritingScreen() {
   }, [flushLatestEditorSnapshot]);
 
   const handleKeyboardVisibilityChange = useCallback((visible: boolean) => {
-    // WebView focus is an autosave signal only. Native keyboard events above
-    // own layout/toolbar visibility so a transient focusout during WKWebView
-    // reflow cannot remove the spacer before the keyboard actually closes.
+    setEditorKeyboardState((current) =>
+      reduceEditorKeyboardState(current, { type: "editorFocus", focused: visible }),
+    );
+    // Native keyboard events above remain authoritative for closing. A
+    // transient WKWebView focusout must not hide a toolbar while the keyboard
+    // is still visible.
     if (
       !visible
       && isThoughtModeRef.current
@@ -2736,6 +2756,35 @@ export default function WritingScreen() {
   }
 
   const isDividing = mode === "dividing";
+  const toolbarContract = resolveMemoToolbarRenderContract({
+    platform: Platform.OS,
+    isNavigating,
+    isReadingMemo: !!isReadingMemo,
+    selectionIsHorizontalRule: selectionState.activeBlock === "horizontalRule",
+    keyboard: editorKeyboardState,
+    inlineMenuOpen: inlineMenuMode !== null,
+    keyboardRestorePending,
+  });
+
+  const memoToolbar = (
+    <MemoToolbar
+      mode={toolbarContract.mode}
+      onDismissKeyboard={handleDismissKeyboard}
+      onFormat={handleOnFormat}
+      onOpenAddMenu={handleOpenAddMenu}
+      onUndo={() => editorRef.current?.undo()}
+      onRedo={() => editorRef.current?.redo()}
+      canUndo={selectionState.canUndo ?? true}
+      canRedo={selectionState.canRedo ?? true}
+      selectionState={selectionState}
+      onFormatPress={handleToolbarFormat}
+      onInsertDivider={handleInsertDivider}
+      onShiftEnter={handleShiftEnter}
+      inlineMenuMode={inlineMenuMode}
+      keyboardVisible={keyboardVisible}
+      addMenuBtnRef={addMenuBtnRef}
+    />
+  );
 
   return (
     <>
@@ -2791,6 +2840,12 @@ export default function WritingScreen() {
               />
             </View>
           </View>
+            {toolbarContract.visible &&
+              toolbarContract.placement === "keyboardAvoidingFlow" && (
+                <View style={styles.readingMemoToolbarWrap} pointerEvents="box-none">
+                  {memoToolbar}
+                </View>
+              )}
 
         </KeyboardAvoidingView>
 
@@ -2803,8 +2858,7 @@ export default function WritingScreen() {
         )}
 
         {/* ── 서식 툴바 — 키보드/인라인 패널 위 floating (read.tsx와 동일) ── */}
-        {!isNavigating && Platform.OS !== "web" && selectionState.activeBlock !== "horizontalRule" &&
-          (isReadingMemo ? keyboardVisible : keyboardVisible || inlineMenuMode !== null || keyboardRestorePending) && (
+        {toolbarContract.visible && toolbarContract.placement === "floating" && (
           <View
             style={[
               styles.memoToolbarWrap,
@@ -2812,25 +2866,7 @@ export default function WritingScreen() {
             ]}
             pointerEvents="box-none"
           >
-            <MemoToolbar
-              mode={isReadingMemo ? "keyboardOnly" : "full"}
-              onDismissKeyboard={() => {
-                handleDismissKeyboard();
-              }}
-              onFormat={handleOnFormat}
-              onOpenAddMenu={handleOpenAddMenu}
-              onUndo={() => editorRef.current?.undo()}
-              onRedo={() => editorRef.current?.redo()}
-              canUndo={selectionState.canUndo ?? true}
-              canRedo={selectionState.canRedo ?? true}
-              selectionState={selectionState}
-              onFormatPress={handleToolbarFormat}
-              onInsertDivider={handleInsertDivider}
-              onShiftEnter={handleShiftEnter}
-              inlineMenuMode={inlineMenuMode}
-              keyboardVisible={keyboardVisible}
-              addMenuBtnRef={addMenuBtnRef}
-            />
+            {memoToolbar}
           </View>
         )}
 
@@ -3065,6 +3101,12 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     zIndex: 53,
     ...Platform.select({ android: { elevation: 8 } }),
+  },
+  readingMemoToolbarWrap: {
+    width: "100%",
+    backgroundColor: "transparent",
+    zIndex: 53,
+    ...Platform.select({ android: { elevation: 8 }, default: {} }),
   },
   editorInner: {
     flex: 1,

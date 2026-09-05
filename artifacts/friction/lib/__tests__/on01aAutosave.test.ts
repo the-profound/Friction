@@ -16,6 +16,12 @@ import {
   hashAutoSaveContent,
   type PendingPayload,
 } from "../useAutoSave";
+import {
+  dismissEditorKeyboard,
+  INITIAL_EDITOR_KEYBOARD_STATE,
+  reduceEditorKeyboardState,
+  resolveMemoToolbarRenderContract,
+} from "../readingMemoToolbar";
 
 const appRoot = join(__dirname, "../..");
 const readScreen = () => readFileSync(join(appRoot, "app/on-01a.tsx"), "utf8");
@@ -42,7 +48,7 @@ const readEditorTypes = () =>
   );
 
 describe("on-01a editor hydration and initialization", () => {
-  it("shows only the keyboard dismiss action for loaded reading memos", () => {
+  it("renders loaded reading memos in keyboard-avoiding flow with only dismiss", () => {
     const screen = readScreen();
     const toolbar = readFileSync(
       join(appRoot, "components/MemoToolbar/MemoToolbar.tsx"),
@@ -55,10 +61,9 @@ describe("on-01a editor hydration and initialization", () => {
     expect(screen.indexOf("if ((!isLocalDirectDraft && !id) || dataLoading)")).toBeLessThan(
       screen.indexOf("<MemoToolbar"),
     );
-    expect(screen).toContain('mode={isReadingMemo ? "keyboardOnly" : "full"}');
-    expect(screen).toContain(
-      "(isReadingMemo ? keyboardVisible : keyboardVisible || inlineMenuMode !== null || keyboardRestorePending)",
-    );
+    expect(screen).toContain("const toolbarContract = resolveMemoToolbarRenderContract");
+    expect(screen).toContain('toolbarContract.placement === "keyboardAvoidingFlow"');
+    expect(screen).toContain('toolbarContract.placement === "floating"');
     expect(screen).toContain(
       '!isNavigating && !isReadingMemo && inlineMenuMode === "addMenu"',
     );
@@ -87,7 +92,7 @@ describe("on-01a editor hydration and initialization", () => {
     expect(toolbar).toContain("onOpenAddMenu");
     expect(toolbar).toContain("onInsertDivider");
     expect(toolbar).toContain("onShiftEnter");
-    expect(screen).toContain('mode={isReadingMemo ? "keyboardOnly" : "full"}');
+    expect(screen).toContain("mode={toolbarContract.mode}");
   });
 
   it("ignores only the export caused by unchanged server hydration", () => {
@@ -109,7 +114,7 @@ describe("on-01a editor hydration and initialization", () => {
     expect(screen).toContain("ensureTrailingParagraph={!isLocalDirectDraft}");
   });
 
-  it("uses native keyboard events as the writing viewport source of truth", () => {
+  it("combines native keyboard events with WebView focus", () => {
     const screen = readScreen();
     const keyboardTracking = screen.slice(
       screen.indexOf("// 키보드 높이 추적"),
@@ -122,11 +127,92 @@ describe("on-01a editor hydration and initialization", () => {
 
     expect(keyboardTracking).toContain("setKeyboardVisible(true)");
     expect(keyboardTracking).toContain("setKeyboardVisible(false)");
-    expect(webViewFocusHandler).not.toContain("setKeyboardVisible(visible)");
+    expect(webViewFocusHandler).toContain('type: "editorFocus"');
     expect(screen).not.toContain('Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true))');
     expect(screen).toContain(
       "contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}",
     );
+  });
+
+  it("keeps the reading toolbar through iOS and Android event ordering", () => {
+    const focused = reduceEditorKeyboardState(INITIAL_EDITOR_KEYBOARD_STATE, {
+      type: "editorFocus",
+      focused: true,
+    });
+    expect(resolveMemoToolbarRenderContract({
+      platform: "ios",
+      isNavigating: false,
+      isReadingMemo: true,
+      selectionIsHorizontalRule: true,
+      keyboard: focused,
+      inlineMenuOpen: false,
+      keyboardRestorePending: false,
+    })).toEqual({
+      visible: true,
+      mode: "keyboardOnly",
+      placement: "keyboardAvoidingFlow",
+    });
+
+    const shown = reduceEditorKeyboardState(focused, {
+      type: "nativeKeyboard",
+      visible: true,
+    });
+    const transientBlur = reduceEditorKeyboardState(shown, {
+      type: "editorFocus",
+      focused: false,
+    });
+    expect(resolveMemoToolbarRenderContract({
+      platform: "android",
+      isNavigating: false,
+      isReadingMemo: true,
+      selectionIsHorizontalRule: false,
+      keyboard: transientBlur,
+      inlineMenuOpen: false,
+      keyboardRestorePending: false,
+    }).visible).toBe(true);
+
+    const hidden = reduceEditorKeyboardState(transientBlur, {
+      type: "nativeKeyboard",
+      visible: false,
+    });
+    expect(resolveMemoToolbarRenderContract({
+      platform: "android",
+      isNavigating: false,
+      isReadingMemo: true,
+      selectionIsHorizontalRule: false,
+      keyboard: hidden,
+      inlineMenuOpen: false,
+      keyboardRestorePending: false,
+    }).visible).toBe(false);
+  });
+
+  it("keeps normal thought and dividing toolbars full and floating", () => {
+    const shown = reduceEditorKeyboardState(INITIAL_EDITOR_KEYBOARD_STATE, {
+      type: "nativeKeyboard",
+      visible: true,
+    });
+    expect(resolveMemoToolbarRenderContract({
+      platform: "ios",
+      isNavigating: false,
+      isReadingMemo: false,
+      selectionIsHorizontalRule: false,
+      keyboard: shown,
+      inlineMenuOpen: false,
+      keyboardRestorePending: false,
+    })).toEqual({
+      visible: true,
+      mode: "full",
+      placement: "floating",
+    });
+  });
+
+  it("dismisses both the focused WebView editor and native keyboard", () => {
+    const calls: string[] = [];
+    dismissEditorKeyboard({
+      blurEditor: () => calls.push("blur"),
+      dismissNativeKeyboard: () => calls.push("dismiss"),
+    });
+    expect(calls).toEqual(["blur", "dismiss"]);
   });
 });
 
@@ -583,7 +669,7 @@ describe("on-01a guarded return navigation", () => {
     expect(header).toContain("<WritingStateBar");
     expect(header).not.toContain("ActivityIndicator");
     expect(header).not.toContain("keyboard-off-outline");
-    expect(screen).toContain("onDismissKeyboard={() =>");
+    expect(screen).toContain("onDismissKeyboard={handleDismissKeyboard}");
   });
 
   it("keeps the shared stage menu in a body-colored fixed-height header", () => {

@@ -293,8 +293,16 @@ export default function MemoToolbar({
         {/* ── 구분선 + 키보드 해제 버튼 ── */}
         {!keyboardOnly && <View style={styles.keyboardSeparator} />}
         <ScalePressable
-          style={[styles.keyboardBtn, keyboardOnly && styles.keyboardOnlyBtn]}
-          contentStyle={[styles.btnContent, keyboardOnly && styles.keyboardOnlyBtnContent]}
+          style={[
+            styles.keyboardBtn,
+            keyboardOnly && styles.keyboardOnlyBtn,
+            keyboardOnly && styles.keyboardOnlySizeGuard,
+          ]}
+          contentStyle={[
+            styles.btnContent,
+            keyboardOnly && styles.keyboardOnlyBtnContent,
+            keyboardOnly && styles.keyboardOnlySizeGuard,
+          ]}
           onPress={onDismissKeyboard}
           hitSlop={8}
           accessibilityRole="button"
@@ -395,6 +403,12 @@ const styles = StyleSheet.create({
     height: 44,
   },
   keyboardOnlyBtnContent: {
+    width: 44,
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  keyboardOnlySizeGuard: {
     width: 44,
     height: 44,
     flexGrow: 0,
