@@ -12,7 +12,7 @@ import type { ReleaseDiagnosticContext } from "./releaseDiagnosticContext";
 
  */
 export interface ClientLogBody {
-  /** Where this log came from, e.g. "fatal-js-error" */
+  /** Where this log came from, e.g. "fatal-js-error" or "render-error" */
   source: string;
   message: string;
   name?: string | null;
@@ -29,5 +29,10 @@ export interface ClientLogBody {
    * @pattern ^req_[a-z0-9]{20,32}$
    */
   requestId?: string | null;
+  /**
+   * Allowlisted support code shown on the production render-error fallback.
+   * @pattern ^RND-(ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$
+   */
+  diagnosticCode?: string | null;
   release?: ReleaseDiagnosticContext;
 }

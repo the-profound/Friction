@@ -66,6 +66,26 @@ const AUTH_ERROR_CLASSES = new Set([
 ]);
 const SAFE_HOSTNAME =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+const RENDER_ERROR_CLASSES = new Set([
+  "Error",
+  "TypeError",
+  "ReferenceError",
+  "SyntaxError",
+  "RangeError",
+  "URIError",
+  "EvalError",
+  "UnknownError",
+]);
+const RENDER_DIAGNOSTIC_CODE_BY_CLASS = new Map([
+  ["Error", "RND-ERROR"],
+  ["TypeError", "RND-TYPE"],
+  ["ReferenceError", "RND-REFERENCE"],
+  ["SyntaxError", "RND-SYNTAX"],
+  ["RangeError", "RND-RANGE"],
+  ["URIError", "RND-URI"],
+  ["EvalError", "RND-EVAL"],
+  ["UnknownError", "RND-UNKNOWN"],
+]);
 function recordFatalCrashSignal(
   diagnostic: ReturnType<typeof safeDiagnosticLog>,
 ): void {
@@ -168,6 +188,54 @@ export function getSafeAuthFlowDiagnostic(input: {
     platform: input.platform === "ios" || input.platform === "android"
       ? input.platform
       : null,
+    release: getSafeReleaseDiagnostic(input.release),
+  };
+}
+
+export function getSafeRenderErrorDiagnostic(input: {
+  message?: unknown;
+  name?: unknown;
+  stack?: unknown;
+  diagnosticCode?: unknown;
+  platform?: unknown;
+  appVersion?: unknown;
+  buildNumber?: unknown;
+  requestId?: unknown;
+  release?: unknown;
+}) {
+  if (
+    input.message !== "render-error" ||
+    input.stack != null ||
+    typeof input.name !== "string" ||
+    !RENDER_ERROR_CLASSES.has(input.name) ||
+    typeof input.diagnosticCode !== "string" ||
+    RENDER_DIAGNOSTIC_CODE_BY_CLASS.get(input.name) !== input.diagnosticCode
+  ) {
+    return null;
+  }
+
+  return {
+    errorClass: input.name,
+    diagnosticCode: input.diagnosticCode,
+    platform:
+      input.platform === "ios" || input.platform === "android"
+        ? input.platform
+        : null,
+    appVersion:
+      typeof input.appVersion === "string" &&
+      /^[0-9A-Za-z._-]+$/.test(input.appVersion)
+        ? input.appVersion
+        : null,
+    buildNumber:
+      typeof input.buildNumber === "string" &&
+      /^[0-9]+$/.test(input.buildNumber)
+        ? input.buildNumber
+        : null,
+    requestId:
+      typeof input.requestId === "string" &&
+      /^req_[a-z0-9]{20,32}$/.test(input.requestId)
+        ? input.requestId
+        : null,
     release: getSafeReleaseDiagnostic(input.release),
   };
 }
@@ -283,6 +351,21 @@ router.post("/client-logs", (req, res) => {
     logger.info(
       { authFlow },
       "client-logs: auth-flow diagnostic reported",
+    );
+    res.status(204).send();
+    return;
+  }
+
+  if (parsed.data.source === "render-error") {
+    const diagnostic = getSafeRenderErrorDiagnostic(parsed.data);
+    if (!diagnostic) {
+      logger.warn("client-logs: discarded malformed render-error diagnostic");
+      res.status(204).send();
+      return;
+    }
+    logger.error(
+      { renderError: diagnostic },
+      "client-logs: render error reported by client",
     );
     res.status(204).send();
     return;

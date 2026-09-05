@@ -12,13 +12,19 @@ import {
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { RenderDiagnosticCode } from "@/lib/renderErrorDiagnostics";
 
 export type ErrorFallbackProps = {
   error: Error;
+  diagnosticCode?: RenderDiagnosticCode | null;
   resetError: () => void;
 };
 
-export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
+export function ErrorFallback({
+  error,
+  diagnosticCode,
+  resetError,
+}: ErrorFallbackProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
@@ -82,6 +88,16 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
         <Text style={[styles.message, { color: theme.textSecondary }]}>
           Please reload the app to continue.
         </Text>
+
+        {!__DEV__ && diagnosticCode ? (
+          <Text
+            accessibilityLabel={`Diagnostic code ${diagnosticCode}`}
+            style={[styles.diagnosticCode, { color: theme.textSecondary }]}
+            selectable
+          >
+            Diagnostic code: {diagnosticCode}
+          </Text>
+        ) : null}
 
         <ScalePressable
           onPress={handleRestart}
@@ -194,6 +210,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     lineHeight: 24,
+  },
+  diagnosticCode: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
   },
   topButton: {
     position: "absolute",

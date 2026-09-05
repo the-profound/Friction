@@ -3241,10 +3241,10 @@ paths:
       summary: Report a client-side diagnostic event
       description: >
         Best-effort, unauthenticated endpoint for the mobile app to report diagnostic
-        events (currently: fatal JS errors captured just before an app crash) that were
-        persisted on-device and are uploaded on the next launch. No auth is required
-        because a crash can happen before the user is signed in. Never rejects on bad
-        input; always returns 204.
+        events, including fatal JS errors uploaded on the next launch and privacy-safe
+        render errors captured by the root error boundary. No auth is required because
+        an error can happen before the user is signed in. Never rejects on bad input;
+        always returns 204.
       requestBody:
         required: true
         content:
@@ -5829,7 +5829,7 @@ components:
       properties:
         source:
           type: string
-          description: Where this log came from, e.g. "fatal-js-error"
+          description: Where this log came from, e.g. "fatal-js-error" or "render-error"
         message:
           type: string
         name:
@@ -5862,6 +5862,11 @@ components:
           nullable: true
           pattern: "^req_[a-z0-9]{20,32}$"
           description: Last API request correlation ID observed before the client diagnostic.
+        diagnosticCode:
+          type: string
+          nullable: true
+          pattern: "^RND-(ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$"
+          description: Allowlisted support code shown on the production render-error fallback.
         release:
           $ref: "#/components/schemas/ReleaseDiagnosticContext"
       required: [source, message]

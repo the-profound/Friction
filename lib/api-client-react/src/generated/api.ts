@@ -11273,7 +11273,7 @@ export const useExpandThoughts = <
 };
 
 /**
- * Best-effort, unauthenticated endpoint for the mobile app to report diagnostic events (currently: fatal JS errors captured just before an app crash) that were persisted on-device and are uploaded on the next launch. No auth is required because a crash can happen before the user is signed in. Never rejects on bad input; always returns 204.
+ * Best-effort, unauthenticated endpoint for the mobile app to report diagnostic events, including fatal JS errors uploaded on the next launch and privacy-safe render errors captured by the root error boundary. No auth is required because an error can happen before the user is signed in. Never rejects on bad input; always returns 204.
 
  * @summary Report a client-side diagnostic event
  */

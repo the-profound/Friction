@@ -46,6 +46,7 @@ export const GetServerVersionResponse = zod
   .describe(
     "Lightweight, unauthenticated build\/capability probe. Contains no user data, credentials, or other sensitive information.",
   );
+
 /**
  * @summary Upload a verified inline article image
  */
@@ -5020,12 +5021,15 @@ export const ExpandThoughtsResponse = zod.object({
 });
 
 /**
- * Best-effort, unauthenticated endpoint for the mobile app to report diagnostic events (currently: fatal JS errors captured just before an app crash) that were persisted on-device and are uploaded on the next launch. No auth is required because a crash can happen before the user is signed in. Never rejects on bad input; always returns 204.
+ * Best-effort, unauthenticated endpoint for the mobile app to report diagnostic events, including fatal JS errors uploaded on the next launch and privacy-safe render errors captured by the root error boundary. No auth is required because an error can happen before the user is signed in. Never rejects on bad input; always returns 204.
 
  * @summary Report a client-side diagnostic event
  */
 export const reportClientLogBodyRequestIdRegExp = new RegExp(
   "^req_[a-z0-9]{20,32}$",
+);
+export const reportClientLogBodyDiagnosticCodeRegExp = new RegExp(
+  "^RND-(ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$",
 );
 export const reportClientLogBodyReleaseConfigurationFingerprintRegExp =
   new RegExp("^[a-f0-9]{16}$");
@@ -5037,7 +5041,9 @@ export const ReportClientLogBody = zod
   .object({
     source: zod
       .string()
-      .describe('Where this log came from, e.g. \"fatal-js-error\"'),
+      .describe(
+        'Where this log came from, e.g. \"fatal-js-error\" or \"render-error\"',
+      ),
     message: zod.string(),
     name: zod.string().nullish(),
     stack: zod.string().nullish(),
@@ -5056,6 +5062,13 @@ export const ReportClientLogBody = zod
       .nullish()
       .describe(
         "Last API request correlation ID observed before the client diagnostic.",
+      ),
+    diagnosticCode: zod
+      .string()
+      .regex(reportClientLogBodyDiagnosticCodeRegExp)
+      .nullish()
+      .describe(
+        "Allowlisted support code shown on the production render-error fallback.",
       ),
     release: zod
       .object({

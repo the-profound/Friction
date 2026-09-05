@@ -1,6 +1,13 @@
 import React, { Component, ComponentType, PropsWithChildren } from "react";
 
 import { ErrorFallback, ErrorFallbackProps } from "@/components/ErrorFallback";
+import {
+  reportRenderError,
+} from "@/lib/crashDiagnostics";
+import {
+  getRenderDiagnostic,
+  type RenderDiagnosticCode,
+} from "@/lib/renderErrorDiagnostics";
 import { captureException } from "@/lib/posthog";
 
 export type ErrorBoundaryProps = PropsWithChildren<{
@@ -8,7 +15,10 @@ export type ErrorBoundaryProps = PropsWithChildren<{
   onError?: (error: Error, stackTrace: string) => void;
 }>;
 
-type ErrorBoundaryState = { error: Error | null };
+type ErrorBoundaryState = {
+  error: Error | null;
+  diagnosticCode: RenderDiagnosticCode | null;
+};
 
 /**
  * This is a special case for for using the class components. Error boundaries must be class components because React only provides error boundary functionality through lifecycle methods (componentDidCatch and getDerivedStateFromError) which are not available in functional components.
@@ -18,7 +28,7 @@ export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { error: null };
+  state: ErrorBoundaryState = { error: null, diagnosticCode: null };
 
   static defaultProps: {
     FallbackComponent: ComponentType<ErrorFallbackProps>;
@@ -27,18 +37,22 @@ export class ErrorBoundary extends Component<
   };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { error };
+    return {
+      error,
+      diagnosticCode: getRenderDiagnostic(error).diagnosticCode,
+    };
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
     captureException(error);
+    reportRenderError(error);
     if (typeof this.props.onError === "function") {
       this.props.onError(error, info.componentStack);
     }
   }
 
   resetError = (): void => {
-    this.setState({ error: null });
+    this.setState({ error: null, diagnosticCode: null });
   };
 
   render() {
@@ -47,6 +61,7 @@ export class ErrorBoundary extends Component<
     return this.state.error && FallbackComponent ? (
       <FallbackComponent
         error={this.state.error}
+        diagnosticCode={this.state.diagnosticCode}
         resetError={this.resetError}
       />
     ) : (

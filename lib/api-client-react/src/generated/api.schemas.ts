@@ -19,6 +19,24 @@ export interface HealthStatus {
  * Stable operationId of an endpoint that may not exist yet on an older deployed server build. Clients compare this list against the operations they depend on to detect a stale deployment instead of guessing from scattered per-feature failures.
  */
 export type ServerFeature = (typeof ServerFeature)[keyof typeof ServerFeature];
+
+export const ServerFeature = {
+  getThoughtQuestionQueue: "getThoughtQuestionQueue",
+  refreshThoughtQuestionQueue: "refreshThoughtQuestionQueue",
+  activateThoughtQuestion: "activateThoughtQuestion",
+  getThought: "getThought",
+} as const;
+
+/**
+ * Lightweight, unauthenticated build/capability probe. Contains no user data, credentials, or other sensitive information.
+ */
+export interface ServerVersion {
+  /** Opaque identifier for the running server process (not a semantic version). Only meaningful for equality/diagnostic purposes; never parse or order it. */
+  buildId: string;
+  /** Operations this server build supports. A client-required operation missing from this list means the deployed server is stale. */
+  features: ServerFeature[];
+}
+
 export interface User {
   id: string;
   email: string;
@@ -1633,7 +1651,7 @@ export interface ReleaseDiagnosticContext {
 
  */
 export interface ClientLogBody {
-  /** Where this log came from, e.g. "fatal-js-error" */
+  /** Where this log came from, e.g. "fatal-js-error" or "render-error" */
   source: string;
   message: string;
   name?: string | null;
@@ -1650,6 +1668,11 @@ export interface ClientLogBody {
    * @pattern ^req_[a-z0-9]{20,32}$
    */
   requestId?: string | null;
+  /**
+   * Allowlisted support code shown on the production render-error fallback.
+   * @pattern ^RND-(ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$
+   */
+  diagnosticCode?: string | null;
   release?: ReleaseDiagnosticContext;
 }
 
@@ -1798,20 +1821,3 @@ export type ListThoughtsParams = {
    */
   sourceArticleId?: string;
 };
-
-export const ServerFeature = {
-  getThoughtQuestionQueue: "getThoughtQuestionQueue",
-  refreshThoughtQuestionQueue: "refreshThoughtQuestionQueue",
-  activateThoughtQuestion: "activateThoughtQuestion",
-  getThought: "getThought",
-} as const;
-
-/**
- * Lightweight, unauthenticated build/capability probe. Contains no user data, credentials, or other sensitive information.
- */
-export interface ServerVersion {
-  /** Opaque identifier for the running server process (not a semantic version). Only meaningful for equality/diagnostic purposes; never parse or order it. */
-  buildId: string;
-  /** Operations this server build supports. A client-required operation missing from this list means the deployed server is stale. */
-  features: ServerFeature[];
-}

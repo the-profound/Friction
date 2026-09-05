@@ -32,8 +32,67 @@
  * (which is itself app code that may throw during import).
  */
 import { Platform } from "react-native";
+import {
+  getRenderDiagnostic,
+  shouldSendRenderDiagnostic,
+  type RenderDiagnosticCode,
+} from "./renderErrorDiagnostics";
 
 const CRASH_LOG_FILENAME = "friction-last-fatal-crash.json";
+export {
+  getRenderDiagnostic,
+  type RenderDiagnosticCode,
+} from "./renderErrorDiagnostics";
+
+/**
+ * Best-effort privacy-safe reporting for errors caught by the root boundary.
+ * Raw messages, stacks, component stacks, and user data never enter the payload.
+ */
+export function reportRenderError(error: unknown): RenderDiagnosticCode {
+  const diagnostic = getRenderDiagnostic(error);
+
+  void (async () => {
+    try {
+      const Constants = (await import("expo-constants")).default;
+      const { customFetch, getLastRequestId } = await import(
+        "@workspace/api-client-react"
+      );
+      const { getReleaseDiagnosticContext } = await import("./authDiagnostics");
+      const buildNumber =
+        Platform.OS === "android"
+          ? Constants.expoConfig?.android?.versionCode != null
+            ? String(Constants.expoConfig.android.versionCode)
+            : null
+          : Constants.expoConfig?.ios?.buildNumber ?? null;
+      const requestId = getLastRequestId();
+      const dedupeKey = [diagnostic.diagnosticCode, buildNumber ?? "none"].join(":");
+      if (!shouldSendRenderDiagnostic(dedupeKey)) return;
+
+      await customFetch("/api/client-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "render-error",
+          message: "render-error",
+          name: diagnostic.errorClass,
+          isFatal: false,
+          timestamp: new Date().toISOString(),
+          platform: Platform.OS,
+          platformVersion: String(Platform.Version),
+          appVersion: Constants.expoConfig?.version ?? null,
+          buildNumber,
+          requestId,
+          diagnosticCode: diagnostic.diagnosticCode,
+          release: getReleaseDiagnosticContext(),
+        }),
+      });
+    } catch (reportError) {
+      console.warn("[crashDiagnostics] Failed to report render error:", reportError);
+    }
+  })();
+
+  return diagnostic.diagnosticCode;
+}
 
 export type PersistedCrashLog = {
   source: "fatal-js-error";
