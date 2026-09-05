@@ -32,6 +32,8 @@ import { useNavigation } from "@/contexts/NavigationContext";
 import { useToast } from "@/contexts/ToastContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { useRealtimeChannel } from "@/lib/useRealtimeChannel";
+import { useIsOnline } from "@/lib/useIsOnline";
+import { shouldShowInboxOfflineEmptyNotice } from "@/lib/inboxOfflineState";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
@@ -127,6 +129,7 @@ function InboxScreenContent() {
   const queryClient = useQueryClient();
   const { userId, nickname } = useUser();
   const { showToast } = useToast();
+  const isOnline = useIsOnline();
   const [tapItem, setTapItem] = useState<InboxItem | null>(null);
   // Refs break the hook ordering cycle:
   // useLetterSelectionOverlay is called first (all deps available immediately).
@@ -188,7 +191,7 @@ function InboxScreenContent() {
   // Sync ref after both hooks have returned so onRead always sees the latest value.
   cancelScrollRestorationRef.current = cancelScrollRestoration;
 
-  const { data: inboxData, isLoading, refetch } = useListInbox(
+  const { data: inboxData, isLoading, isPending, refetch } = useListInbox(
     // isRead=false tells the server to return only unread items, keeping the
     // response payload small as read letters accumulate over time.
     { recipientId: userId, isRead: false } as Parameters<typeof useListInbox>[0],
@@ -252,6 +255,12 @@ function InboxScreenContent() {
             onOpen: async () => {
               const openedAt = new Date().toISOString();
               patchInboxItemInCache(queryClient, item.id, { openedAt });
+              if (!isOnline) {
+                // Mutation still fires below — React Query pauses it and
+                // auto-resumes once connectivity returns — this just makes
+                // that deferred sync visible instead of silent.
+                showToast({ message: "오프라인 상태예요. 온라인이 되면 자동으로 반영돼요.", type: "info" });
+              }
               try {
                 await markOpened.mutateAsync({ id: item.id });
               } catch (e) {
@@ -274,7 +283,7 @@ function InboxScreenContent() {
         };
       })(),
     });
-  }, [captureScrollOffset, openLetterOverlay, nickname, queryClient, markOpened]);
+  }, [captureScrollOffset, openLetterOverlay, nickname, queryClient, markOpened, isOnline, showToast]);
 
   const handleInboxScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -353,11 +362,17 @@ function InboxScreenContent() {
     if (!item.openedAt) {
       const openedAt = new Date().toISOString();
       patchInboxItemInCache(queryClient, item.id, { openedAt });
+      if (!isOnline) {
+        // Mutation still fires below — React Query pauses it and auto-resumes
+        // once connectivity returns — this just makes that deferred sync
+        // visible instead of silent.
+        showToast({ message: "오프라인 상태예요. 온라인이 되면 자동으로 반영돼요.", type: "info" });
+      }
       markOpened.mutateAsync({ id: item.id }).catch((e: unknown) => {
         console.warn("Failed to mark inbox opened:", e instanceof Error ? e.message : e);
       });
     }
-  }, [markOpened, queryClient]);
+  }, [markOpened, queryClient, isOnline, showToast]);
 
 
   const handleDelete = useCallback(async () => {
@@ -376,13 +391,21 @@ function InboxScreenContent() {
   }, [tapItem, deleteInboxItem, queryClient, showToast]);
 
   const handleRefresh = useCallback(async () => {
+    if (!isOnline) {
+      // React Query's default networkMode ("online") pauses refetch() while
+      // offline instead of rejecting it, so awaiting it here would leave the
+      // pull-to-refresh spinner stuck until connectivity returns. Short-
+      // circuit with clear feedback instead.
+      showToast({ message: "오프라인 상태예요. 인터넷 연결을 확인해주세요.", type: "info" });
+      return;
+    }
     setIsManualRefreshing(true);
     try {
       await refetch();
     } finally {
       setIsManualRefreshing(false);
     }
-  }, [refetch]);
+  }, [refetch, isOnline, showToast]);
 
   // ── Ancestor chain — shared 편지 선택 모드 traversal ──────────────────────
   // Each tap starts a new traversal: follow InboxItem.replyToArticleId, then
@@ -505,9 +528,15 @@ function InboxScreenContent() {
         centeredBrandTitle
       />
 
-      {isLoading ? (
+      {isLoading || shouldShowInboxOfflineEmptyNotice({
+        isOnline,
+        isPending,
+        hasData: inboxData !== undefined,
+      }) ? (
         <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
-          <Text style={styles.emptyText}>불러오는 중...</Text>
+          <Text style={styles.emptyText}>
+            {isOnline ? "불러오는 중..." : "오프라인 상태예요. 인터넷 연결을 확인해주세요."}
+          </Text>
         </View>
       ) : groups.length === 0 ? (
         <ScrollView

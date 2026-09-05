@@ -105,3 +105,4 @@
 - [CanonicalCardSlot radius and clip ownership](friction-canonical-card-slot-radius-clip.md) — scaled-down cover radius flattens to a fixed ratio and shadow leaks a rectangle sliver unless the outer wrapper owns radius+clip explicitly.
 - [Friction letter-list source-label pattern](friction-letter-list-source-label-pattern.md) — reuse spaceLetterByArticleId (PUBLIC wins) + buildSentLetterSourceMetadataByArticleId + isSpaceSendRecord for any new sent-letter list screen.
 - [Friction offline-aware list screen pattern](friction-offline-list-screen-pattern.md) — `useIsOnline()` only gates network-triggered actions; cached `data` + `isPending`/`isLoading` already handle instant-show correctly.
+- [Friction offline user feedback via onlineManager](friction-offline-user-feedback.md) — default networkMode "online" pauses (not rejects) refetch/mutations offline; wrap onlineManager in a hook to surface toasts instead of a silently stuck spinner.
