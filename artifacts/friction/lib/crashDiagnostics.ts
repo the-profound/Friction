@@ -35,6 +35,7 @@ import { Platform } from "react-native";
 import {
   getRenderDiagnostic,
   getRenderDiagnosticDedupeKey,
+  getTemporaryComponentStackDiagnostic,
   shouldSendRenderDiagnostic,
   type ComponentStackDiagnostic,
   type RenderDiagnosticCode,
@@ -47,12 +48,14 @@ export {
 } from "./renderErrorDiagnostics";
 
 /**
- * Best-effort privacy-safe reporting for errors caught by the root boundary.
- * Raw messages, stacks, component stacks, and user data never enter the payload.
+ * Best-effort reporting for errors caught by the root boundary. Raw messages,
+ * JavaScript stacks, and user data never enter the payload. One explicitly
+ * allowlisted iOS diagnostic build may attach a bounded React component stack.
  */
 export function reportRenderError(
   error: unknown,
   component: ComponentStackDiagnostic,
+  componentStack?: string,
 ): RenderDiagnosticCode {
   const diagnostic = getRenderDiagnostic(error);
 
@@ -81,6 +84,12 @@ export function reportRenderError(
         buildNumber,
       );
       if (!shouldSendRenderDiagnostic(dedupeKey)) return;
+      const temporaryComponentStack = getTemporaryComponentStackDiagnostic(
+        componentStack,
+        diagnostic.diagnosticCode,
+        Platform.OS,
+        buildNumber,
+      );
 
       await customFetch("/api/client-logs", {
         method: "POST",
@@ -99,6 +108,9 @@ export function reportRenderError(
           diagnosticCode: diagnostic.diagnosticCode,
           componentFingerprint: component.componentFingerprint,
           componentDepth: component.componentDepth,
+          ...(temporaryComponentStack
+            ? { componentStack: temporaryComponentStack }
+            : {}),
           release: getReleaseDiagnosticContext(),
         }),
       });

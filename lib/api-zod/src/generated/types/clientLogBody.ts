@@ -37,7 +37,7 @@ export interface ClientLogBody {
    */
   diagnosticCode?: string | null;
   /**
-   * Compact fingerprint of the React component stack; no raw frames are transmitted.
+   * Compact fingerprint of the React component stack.
    * @pattern ^[a-f0-9]{8}$
    */
   componentFingerprint?: string | null;
@@ -47,5 +47,11 @@ export interface ClientLogBody {
    * @maximum 64
    */
   componentDepth?: number | null;
+  /**
+   * Temporary bounded React component stack accepted only for the allowlisted iOS diagnostic build and RND-QUERY-CLIENT.
+
+   * @maxLength 12000
+   */
+  componentStack?: string | null;
   release?: ReleaseDiagnosticContext;
 }

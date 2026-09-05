@@ -63,7 +63,7 @@ describe("render-error diagnostic privacy contract", () => {
   it.each([
     { message: "private@example.com secret" },
     { componentFingerprint: "ABCDEF01" },
-  ])("rejects raw stacks and malformed component metadata at the schema", (extra) => {
+  ])("rejects malformed component metadata at the schema", (extra) => {
     expect(
       ReportClientLogBody.safeParse({
         source: "render-error",
@@ -77,7 +77,7 @@ describe("render-error diagnostic privacy contract", () => {
     ).toBe(false);
   });
 
-  it("strips unknown raw stack fields before route logging", () => {
+  it("accepts the temporary component stack field but strips unknown JS stacks", () => {
     const parsed = ReportClientLogBody.safeParse({
       source: "render-error",
       message: "render-error",
@@ -91,8 +91,45 @@ describe("render-error diagnostic privacy contract", () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data).not.toHaveProperty("stack");
-      expect(parsed.data).not.toHaveProperty("componentStack");
+      expect(parsed.data.componentStack).toBe(
+        "at PrivateUser (private.tsx:1)",
+      );
     }
+  });
+
+  it("logs the component stack only for production iOS build 47 query errors", () => {
+    const base = {
+      message: "render-error",
+      name: "Error",
+      diagnosticCode: "RND-QUERY-CLIENT",
+      componentFingerprint: "abcdef01",
+      componentDepth: 2,
+      platform: "ios",
+      componentStack: "at QueryConsumer (screen.tsx:1)",
+      release: {
+        track: "production",
+        configurationState: "valid",
+        configurationFingerprint: "abcdef0123456789",
+        supabaseHost: "example.supabase.co",
+        apiHost: "example.replit.app",
+      },
+    };
+
+    expect(
+      getSafeRenderErrorDiagnostic({ ...base, buildNumber: "47" }),
+    ).toMatchObject({
+      componentStack: "at QueryConsumer (screen.tsx:1)",
+    });
+    expect(
+      getSafeRenderErrorDiagnostic({ ...base, buildNumber: "46" }),
+    ).not.toHaveProperty("componentStack");
+    expect(
+      getSafeRenderErrorDiagnostic({
+        ...base,
+        buildNumber: "47",
+        diagnosticCode: "RND-HOOK-ORDER",
+      }),
+    ).not.toHaveProperty("componentStack");
   });
 
   it("rejects a non-integer component depth in the server sanitizer", () => {

@@ -45,10 +45,8 @@ export class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
     const componentDiagnostic = getComponentStackDiagnostic(info.componentStack);
-    reportRenderError(error, componentDiagnostic);
+    reportRenderError(error, componentDiagnostic, info.componentStack);
     if (typeof this.props.onError === "function") {
-      // Keep the raw component stack local for developer-provided callbacks.
-      // reportRenderError receives only the non-reversible fingerprint above.
       this.props.onError(error, info.componentStack);
     }
   }

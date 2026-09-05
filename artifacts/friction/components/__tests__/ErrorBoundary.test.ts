@@ -17,7 +17,7 @@ describe("root error boundary diagnostics", () => {
       "getComponentStackDiagnostic(info.componentStack)",
     );
     expect(boundarySource).toContain(
-      "reportRenderError(error, componentDiagnostic)",
+      "reportRenderError(error, componentDiagnostic, info.componentStack)",
     );
     expect(boundarySource).not.toContain("captureException(error)");
     expect(boundarySource).toContain(
