@@ -165,16 +165,20 @@ export function getQueuedThoughts(
 
 export function shouldRefetchQuestionQueue({
   userId,
+  authIsLoading = false,
   isLoading,
   isFetching,
   mutationPending,
 }: {
   userId: string | null | undefined;
+  /** When true, auth restore is still in progress and the request would fire
+   *  without a valid token. Suppress all refetch attempts until auth settles. */
+  authIsLoading?: boolean;
   isLoading: boolean;
   isFetching: boolean;
   mutationPending: boolean;
 }): boolean {
-  return Boolean(userId) && !isLoading && !isFetching && !mutationPending;
+  return Boolean(userId) && !authIsLoading && !isLoading && !isFetching && !mutationPending;
 }
 
 /** Displays the same compact calendar date label used by the record card groups. */

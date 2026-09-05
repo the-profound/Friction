@@ -398,7 +398,12 @@ export default function OnScreen() {
   const thoughtsQuery = useListThoughts();
   const questionQuery = useGetThoughtQuestionQueue({
     query: {
-      enabled: Boolean(userId),
+      // Mirror spaceLettersQuery: wait for auth restore to complete before
+      // firing so the request always has a valid bearer token in memory.
+      // On native, SecureStore restore can lag several seconds; firing without
+      // a token causes a 401 whose internal retry races the same timeout
+      // budget and can exhaust all retries before auth is ready.
+      enabled: Boolean(userId) && !authIsLoading,
       retry: 2,
       refetchOnMount: "always",
     },
@@ -430,6 +435,7 @@ export default function OnScreen() {
     setRecordResetVersion(tabReselectVersion.ON);
     if (shouldRefetchQuestionQueue({
       userId,
+      authIsLoading,
       isLoading: questionQuery.isLoading,
       isFetching: questionQuery.isFetching,
       mutationPending: questionQueueMutationPendingRef.current,
@@ -447,6 +453,7 @@ export default function OnScreen() {
         const queryState = questionQueryStateRef.current;
         if (shouldRefetchQuestionQueue({
           userId,
+          authIsLoading,
           isLoading: queryState.isLoading,
           isFetching: queryState.isFetching,
           mutationPending: questionQueueMutationPendingRef.current,
@@ -461,11 +468,15 @@ export default function OnScreen() {
 
   useEffect(() => {
     if (!questionQuery.isError) return;
+    // Auth restore is still in progress — this error is transient. Suppress
+    // the toast so the user does not see a false alarm; the query will
+    // automatically re-fire once authIsLoading becomes false.
+    if (authIsLoading) return;
     showToast({
       message: "질문을 불러오지 못했습니다. 화면을 당겨 다시 시도해주세요.",
       type: "error",
     });
-  }, [questionQuery.errorUpdatedAt, questionQuery.isError, showToast]);
+  }, [questionQuery.errorUpdatedAt, questionQuery.isError, authIsLoading, showToast]);
 
   useEffect(() => {
     seedRecordDetailCaches(queryClient, {
@@ -841,8 +852,19 @@ export default function OnScreen() {
   const isLoading =
     (articlesQuery.isLoading && !articlesQuery.data) ||
     (thoughtsQuery.isLoading && !thoughtsQuery.data) ||
-    (questionQuery.isLoading && !questionQuery.data);
-  const questionLoadFailed = kind === "thought" && questionQuery.isError && queuedThoughts.length === 0;
+    // While auth is loading the query is disabled (enabled=false) so
+    // questionQuery.isLoading is false even though no data has arrived yet.
+    // Include authIsLoading so the screen keeps its loading state rather than
+    // briefly showing an empty question area before the query fires.
+    ((questionQuery.isLoading || authIsLoading) && !questionQuery.data);
+  const questionLoadFailed =
+    kind === "thought" &&
+    questionQuery.isError &&
+    // Auth restore is still in progress — the error is a pre-auth transient
+    // failure, not a real one. Keep the error state hidden so the user sees
+    // loading instead of an error message they cannot act on.
+    !authIsLoading &&
+    queuedThoughts.length === 0;
   const emptyTitle = questionLoadFailed
     ? "질문을 불러오지 못했어요. 화면을 당겨 다시 시도해주세요."
     : kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
