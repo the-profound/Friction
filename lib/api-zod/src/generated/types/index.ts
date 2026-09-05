@@ -98,6 +98,8 @@ export * from "./sendRecord";
 export * from "./sendRecordTargetType";
 export * from "./sendRecordWithDetails";
 export * from "./sendRecordWithDetailsTargetType";
+export * from "./serverFeature";
+export * from "./serverVersion";
 export * from "./similarThought";
 export * from "./space";
 export * from "./spaceBasicSettings";

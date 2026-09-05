@@ -71,9 +71,27 @@ or vitest fails on an otherwise-correct bundle.
 - `artifacts/friction` has ~31 baseline `tsc` errors confined to
   `components/WebViewMarkdownEditor/editorWebviewSrc/index.ts` (DOM `Node` typing
   conflicts). Unrelated to API work.
+- Root `typecheck:libs` (builds every `lib/*` via `tsc --build` in dependency order)
+  can abort early on an unrelated pre-existing broken package (seen:
+  `lib/integrations-openai-ai-server/src/image/client.ts`), blocking declaration
+  rebuilds for packages downstream of it. Work around it by building just the package
+  you need directly, e.g. `npx tsc --build lib/api-zod/tsconfig.json --force`, instead
+  of waiting on the unrelated package to be fixed.
+- `vitest run` in `artifacts/friction` can have pre-existing failing files unrelated to
+  your change (seen: `lib/__tests__/bodyLayout.test.ts` syntax-corrupted — a lost
+  `describe`/`it` wrapper, classic bad-merge symptom; `lib/__tests__/nonBlockingRecordTransitions.test.ts`
+  and `lib/__tests__/textInputCursorContract.test.ts` asserting literal source snippets
+  that no longer match current files).
 
 **Why:** these caused wasted time chasing "is this my bug?" — they are environmental
-and orval/config-driven, present before any contract change.
+and orval/config-driven, present before any contract change. The test failures above are
+most likely fallout from a concurrent task's merge landing on shared files during a
+high-task-churn period, not something introduced by the session that found them.
+
+**How to apply:** before investigating or fixing a failing test/type error you didn't
+expect, confirm it predates your change: `git stash --include-untracked`, re-run just
+that file, `git stash pop`. If it fails identically with your diff removed, it's a
+pre-existing baseline — note it and move on rather than expanding your task's scope.
 
 ## Pure layout tests must not import React Native tokens
 

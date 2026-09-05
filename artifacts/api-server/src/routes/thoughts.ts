@@ -1090,6 +1090,10 @@ router.get("/thoughts", requireAuth, async (req, res) => {
   const conditions = [
     eq(thoughtsTable.authorId, userId),
     isNull(thoughtsTable.deletedAt),
+    // Preliminary question-queue entries are not activated thoughts yet; they
+    // must only be reachable through the question-queue endpoints, never leak
+    // into the general archive list regardless of client state.
+    ne(thoughtsTable.status, "PRELIMINARY"),
     // After promotion, the article is the sole record shown in the archive.
     // Keeping the source thought out of this list prevents one write from
     // appearing once as a thought and again as an editing article.

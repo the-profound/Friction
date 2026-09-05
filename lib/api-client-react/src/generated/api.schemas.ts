@@ -15,6 +15,10 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Stable operationId of an endpoint that may not exist yet on an older deployed server build. Clients compare this list against the operations they depend on to detect a stale deployment instead of guessing from scattered per-feature failures.
+ */
+export type ServerFeature = (typeof ServerFeature)[keyof typeof ServerFeature];
 export interface User {
   id: string;
   email: string;
@@ -1790,3 +1794,20 @@ export type ListThoughtsParams = {
    */
   sourceArticleId?: string;
 };
+
+export const ServerFeature = {
+  getThoughtQuestionQueue: "getThoughtQuestionQueue",
+  refreshThoughtQuestionQueue: "refreshThoughtQuestionQueue",
+  activateThoughtQuestion: "activateThoughtQuestion",
+  getThought: "getThought",
+} as const;
+
+/**
+ * Lightweight, unauthenticated build/capability probe. Contains no user data, credentials, or other sensitive information.
+ */
+export interface ServerVersion {
+  /** Opaque identifier for the running server process (not a semantic version). Only meaningful for equality/diagnostic purposes; never parse or order it. */
+  buildId: string;
+  /** Operations this server build supports. A client-required operation missing from this list means the deployed server is stale. */
+  features: ServerFeature[];
+}

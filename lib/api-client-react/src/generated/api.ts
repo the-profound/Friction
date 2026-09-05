@@ -86,6 +86,7 @@ import type {
   RegisterPushTokenBody,
   SendArticleBody,
   SendRecordWithDetails,
+  ServerVersion,
   SimilarThought,
   Space,
   SpaceBasicSettings,
@@ -220,6 +221,82 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Unauthenticated probe clients use at startup to detect a deployed server that predates operations they depend on. The response never includes user data or credentials, so it is safe to call before authentication and safe to surface in client diagnostics.
+ * @summary Get server build identifier and supported feature set
+ */
+export const getGetServerVersionUrl = () => {
+  return `/api/version`;
+};
+
+export const getServerVersion = async (
+  options?: RequestInit,
+): Promise<ServerVersion> => {
+  return customFetch<ServerVersion>(getGetServerVersionUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetServerVersionQueryKey = () => {
+  return [`/api/version`] as const;
+};
+
+export const getGetServerVersionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getServerVersion>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getServerVersion>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetServerVersionQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getServerVersion>>
+  > = ({ signal }) => getServerVersion({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getServerVersion>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetServerVersionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getServerVersion>>
+>;
+export type GetServerVersionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get server build identifier and supported feature set
+ */
+
+export function useGetServerVersion<
+  TData = Awaited<ReturnType<typeof getServerVersion>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getServerVersion>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetServerVersionQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

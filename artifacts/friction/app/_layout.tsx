@@ -24,6 +24,7 @@ import { runtimeConfig } from "@/lib/runtimeConfig";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast/Toast";
+import ServerVersionGate from "@/components/ServerVersionGate/ServerVersionGate";
 import { NavigationProvider } from "@/contexts/NavigationContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { ThoughtComposerProvider } from "@/contexts/ThoughtComposerContext";
@@ -495,6 +496,7 @@ export default function RootLayout() {
                       <ReaderTransitionProvider>
                         <AuthGuard />
                         <ToastContainer />
+                        <ServerVersionGate />
                       </ReaderTransitionProvider>
                     </NavigationProvider>
                   </ThoughtComposerProvider>

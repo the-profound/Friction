@@ -1,6 +1,8 @@
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
+- [api-zod enum barrel gap](friction-api-zod-enum-barrel-gap.md) — generated enums (ServerFeature, ThoughtStatus, ...) export only as a TS type from `@workspace/api-zod`, never a runtime const; use string literals.
+- [Friction server version/feature gate](friction-server-version-feature-gate.md) — startup mismatch detection needs `SUPPORTED_SERVER_FEATURES` (server) and `REQUIRED_SERVER_FEATURES` (client) kept in sync by hand.
 - [Friction reader page-turn](friction-reader-pager.md) — WebViews ignore RN zIndex when overlapping; use side-by-side pager. Reader padding token is shared SSOT across 4 screens (pagination coupling, no scroll).
 - [Friction reading-memo WebView editor](friction-reader-memo-webview.md) — reading-mode memo uses same WebView TipTap engine as 기록 tab (Eulyoo1945 has no italic/bold face); page-turn is button-driven flip, not gesture.
 - [Manual branch integration](friction-manual-branch-integration.md) — when auto-merge of two task branches fails: set WT=base branch, copy other's unique files via `git show`, hand-merge only shared (openapi+codegen, CardSelectOverlay), Supabase usually pre-migrated.

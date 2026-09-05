@@ -68,6 +68,8 @@ export type { SendRecord } from "./types/sendRecord";
 export type { SendRecordTargetType } from "./types/sendRecordTargetType";
 export type { SendRecordWithDetails } from "./types/sendRecordWithDetails";
 export type { SendRecordWithDetailsTargetType } from "./types/sendRecordWithDetailsTargetType";
+export type { ServerFeature } from "./types/serverFeature";
+export type { ServerVersion } from "./types/serverVersion";
 export type { SimilarThought } from "./types/similarThought";
 export type { Space } from "./types/space";
 export type { SpaceBasicSettings } from "./types/spaceBasicSettings";

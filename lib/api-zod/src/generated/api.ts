@@ -16,6 +16,37 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * Unauthenticated probe clients use at startup to detect a deployed server that predates operations they depend on. The response never includes user data or credentials, so it is safe to call before authentication and safe to surface in client diagnostics.
+ * @summary Get server build identifier and supported feature set
+ */
+export const GetServerVersionResponse = zod
+  .object({
+    buildId: zod
+      .string()
+      .describe(
+        "Opaque identifier for the running server process (not a semantic version). Only meaningful for equality\/diagnostic purposes; never parse or order it.",
+      ),
+    features: zod
+      .array(
+        zod
+          .enum([
+            "getThoughtQuestionQueue",
+            "refreshThoughtQuestionQueue",
+            "activateThoughtQuestion",
+            "getThought",
+          ])
+          .describe(
+            "Stable operationId of an endpoint that may not exist yet on an older deployed server build. Clients compare this list against the operations they depend on to detect a stale deployment instead of guessing from scattered per-feature failures.",
+          ),
+      )
+      .describe(
+        "Operations this server build supports. A client-required operation missing from this list means the deployed server is stale.",
+      ),
+  })
+  .describe(
+    "Lightweight, unauthenticated build\/capability probe. Contains no user data, credentials, or other sensitive information.",
+  );
+/**
  * @summary Upload a verified inline article image
  */
 export const UploadInlineImageResponse = zod.object({
