@@ -1,5 +1,7 @@
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  /** Per-request timeout in milliseconds. Defaults to {@link DEFAULT_TIMEOUT_MS}. */
+  timeoutMs?: number;
 };
 
 export type ApiRequestTelemetry = {
@@ -457,7 +459,8 @@ export async function customFetch<T = unknown>(
       "API base URL is not configured for the native release bundle.",
     );
   }
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const { responseType = "auto", headers: headersInit, timeoutMs: requestTimeoutMs, ...init } = options;
+  const timeoutMs = requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const method = resolveMethod(input, init.method);
 
@@ -498,9 +501,9 @@ export async function customFetch<T = unknown>(
   const route = safeRoute(input);
   const startedAt = Date.now();
 
-  // Inject a default 15-second timeout when the caller hasn't supplied one.
+  // Inject a per-request timeout when the caller hasn't supplied one.
   // If the caller did supply a signal, race both so whichever fires first wins.
-  const timeoutSignal = buildTimeoutSignal(DEFAULT_TIMEOUT_MS);
+  const timeoutSignal = buildTimeoutSignal(timeoutMs);
   const effectiveSignal = init.signal
     ? combineSignals(init.signal, timeoutSignal)
     : timeoutSignal;
@@ -533,20 +536,33 @@ export async function customFetch<T = unknown>(
     _authRefreshCallback &&
     !hasExplicitAuthorization
   ) {
-    try {
-      const newToken = await _authRefreshCallback();
-      if (newToken) {
-        headers.set("authorization", `Bearer ${newToken}`);
-        const retryResponse = await fetch(input, {
-          ...init,
-          method,
-          headers,
-          signal: effectiveSignal,
-        });
-        response = retryResponse;
+    // Do not retry when the caller explicitly cancelled their signal. The
+    // caller's signal carries semantic intent (navigation away, component
+    // unmount) that must not be bypassed by an automatic retry.
+    const callerAborted = init.signal?.aborted;
+    if (!callerAborted) {
+      try {
+        const newToken = await _authRefreshCallback();
+        if (newToken) {
+          headers.set("authorization", `Bearer ${newToken}`);
+          // Build a fresh timeout for the retry. The original effectiveSignal's
+          // budget was consumed by the first (potentially slow) request;
+          // reusing it aborts the retry immediately if that budget is exhausted.
+          const retryTimeoutSignal = buildTimeoutSignal(timeoutMs);
+          const retrySignal = init.signal
+            ? combineSignals(init.signal, retryTimeoutSignal)
+            : retryTimeoutSignal;
+          const retryResponse = await fetch(input, {
+            ...init,
+            method,
+            headers,
+            signal: retrySignal,
+          });
+          response = retryResponse;
+        }
+      } catch {
+        // Refresh or network failure on retry — fall through to original error.
       }
-    } catch {
-      // Refresh or network failure on retry — fall through to original error.
     }
   }
 

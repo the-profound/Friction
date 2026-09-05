@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  ApiError,
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
   getListThoughtsQueryKey,
@@ -329,6 +330,8 @@ function RecordSourceCard({
     </ScalePressable>
   );
 }
+
+type QuestionErrorKind = "timeout" | "network" | "auth" | "server" | "unknown";
 export default function OnScreen() {
   const router = useRouter();
   const { tabReselectVersion } = useNavigation();
@@ -469,15 +472,19 @@ export default function OnScreen() {
   const thoughtsQuery = useListThoughts();
   const questionQuery = useGetThoughtQuestionQueue({
     query: {
-      // Mirror spaceLettersQuery: wait for auth restore to complete before
-      // firing so the request always has a valid bearer token in memory.
-      // On native, SecureStore restore can lag several seconds; firing without
-      // a token causes a 401 whose internal retry races the same timeout
-      // budget and can exhaust all retries before auth is ready.
+      // Wait for auth restore to complete before firing so the request always
+      // has a valid bearer token in memory. On native, SecureStore restore can
+      // lag several seconds; firing without a token causes a 401 whose internal
+      // retry races the same timeout budget. React Query re-enables
+      // automatically when authIsLoading goes false → triggers the initial fetch.
       enabled: Boolean(userId) && !authIsLoading,
       retry: 2,
       refetchOnMount: "always",
     },
+    // Give the question-queue endpoint a longer window than the global 15 s
+    // default. Generation can take a few seconds server-side on first visit,
+    // and the 401-refresh retry now gets its own fresh timeout budget.
+    request: { timeoutMs: 30_000 },
   });
   const questionQueryStateRef = useRef({
     isLoading: questionQuery.isLoading,
@@ -551,10 +558,16 @@ export default function OnScreen() {
     // the toast so the user does not see a false alarm; the query will
     // automatically re-fire once authIsLoading becomes false.
     if (authIsLoading) return;
-    showToast({
-      message: "질문을 불러오지 못했습니다. 화면을 당겨 다시 시도해주세요.",
-      type: "error",
-    });
+    const errorKind = classifyQuestionError(questionQuery.error);
+    const message =
+      errorKind === "timeout"
+        ? "연결 시간이 초과됐어요. 화면을 당겨 다시 시도해주세요."
+        : errorKind === "network"
+          ? "네트워크 연결을 확인하고 당겨서 새로고침해주세요."
+          : errorKind === "auth"
+            ? "로그인이 만료됐어요. 화면을 당겨 다시 시도해주세요."
+            : "질문을 불러오지 못했습니다. 화면을 당겨 다시 시도해주세요.";
+    showToast({ message, type: "error" });
   }, [questionQuery.errorUpdatedAt, questionQuery.isError, authIsLoading, showToast]);
 
   useEffect(() => {
@@ -896,8 +909,17 @@ export default function OnScreen() {
     // loading instead of an error message they cannot act on.
     !authIsLoading &&
     queuedThoughts.length === 0;
+  const questionErrorKind = questionLoadFailed
+    ? classifyQuestionError(questionQuery.error)
+    : null;
   const emptyTitle = questionLoadFailed
-    ? "질문을 불러오지 못했어요. 화면을 당겨 다시 시도해주세요."
+    ? questionErrorKind === "timeout"
+      ? "연결 시간이 초과됐어요. 당겨서 다시 시도해주세요."
+      : questionErrorKind === "network"
+        ? "네트워크에 연결되지 않았어요. 연결 후 당겨서 새로고침해주세요."
+        : questionErrorKind === "auth"
+          ? "로그인이 만료됐어요. 당겨서 다시 시도해주세요."
+          : "질문을 불러오지 못했어요. 화면을 당겨 다시 시도해주세요."
     : kind === "thought" ? "첫 단상을 남겨보세요" : kind === "editing" ? "편집 중인 글이 없어요" : "아직 내보낸 편지가 없어요";
 
   const renderRecordCard = useCallback((
@@ -1325,4 +1347,27 @@ function getRecordCardHeight(_record: UnifiedRecord, width: number): number {
 
 function getRecordGroupCardHeight(records: readonly UnifiedRecord[], width: number): number {
   return records.length > 0 ? getRecordCardHeight(records[0], width) : width * Sizing.cardRatio;
+}
+
+/**
+ * Maps a raw query error to a coarse failure bucket so the UI can surface
+ * a cause-specific message. Keeps all PII out of logic (no logging here).
+ */
+function classifyQuestionError(error: unknown): QuestionErrorKind {
+  if (!error) return "unknown";
+  if (error instanceof Error) {
+    if (error.name === "TimeoutError" || error.name === "AbortError") return "timeout";
+    // React Native: "Network request failed"; browser: "Failed to fetch"
+    if (
+      error instanceof TypeError ||
+      error.message.toLowerCase().includes("network") ||
+      error.message.toLowerCase().includes("failed to fetch")
+    )
+      return "network";
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) return "auth";
+    if (error.status >= 500) return "server";
+  }
+  return "unknown";
 }

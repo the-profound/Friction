@@ -15,6 +15,17 @@ function kstDayOfWeek(): number {
 }
 
 function captureApiOperationalEvent(event: ApiRequestTelemetry): void {
+  // Dev-only diagnostic log. Helps trace question-queue failures on real
+  // devices where debuggers are not attached. No PII — route strips entity
+  // IDs and the message carries only timing + outcome classification.
+  if (__DEV__ && event.outcome !== "success") {
+    const detail = event.statusCode != null ? ` (HTTP ${event.statusCode})` : "";
+    console.log(
+      `[api] ${event.method} ${event.route}` +
+        ` → ${event.failureType ?? event.outcome}${detail}` +
+        ` in ${event.durationMs}ms`,
+    );
+  }
   posthog?.capture("api_request", {
     request_id: event.requestId,
     method: event.method,

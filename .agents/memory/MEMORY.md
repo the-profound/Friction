@@ -32,7 +32,7 @@
 - [Friction calendar grid consolidation](friction-calendar-grid-consolidation.md) — garbled date grid = mass per-cell Reanimated mount; use shared CalendarGrid/CollapsibleDatePicker, never duplicate grid code.
 - [Friction card hero transition](friction-card-hero-transition.md) — feed CardSelectOverlay a transform-shrunk canonical card, never a native small cardWidth; keep source-card hiding, delay open spring past paint.
 - [Selection overlay scroll restoration](friction-selection-scroll-restoration.md) — native lists can self-adjust after modal source restoration; snapshot, lock, restore-on-close only, and session-gate delayed correction.
-- [Friction cover shadow ownership](friction-cover-shadow-ownership.md) — A cover’s own surface carries its background and shadow; never render an opaque same-sized shadow card behind it.
+- [Friction cover shadow ownership](friction-cover-shadow-ownership.md) — A cover's own surface carries its background and shadow; never render an opaque same-sized shadow card behind it.
 - [Pager slot instance preservation](rn-pager-slot-instance-preservation.md) — static JSX siblings remount on key change; render slots as keyed array + one animated style per view (role as prop).
 - [EAS SDK misdetection guard](friction-eas-sdk-misdetection.md) — EAS prebuild rewrites RN version via SDK misdetection; guarded by eas.json prebuildCommand + root pnpm override (update both on SDK bumps).
 - [Friction Expo SDK upgrade playbook](friction-expo-sdk-upgrade.md) — managed workflow (no ios/android dirs); use registry+expo-doctor not memorized versions; absoluteFillObject removed; app.json top-level schema changes in SDK55+.
@@ -89,3 +89,4 @@
 - [Create retry generations](create-retry-generations.md) — response-loss retries that reuse a client ID must durably persist a monotonic generation beside that ID.
 - [FlatList async row data](flatlist-async-row-data.md) — external async maps need renderItem deps plus extraData, or visible rows can keep the first empty snapshot.
 - [Scroll boundary gesture origin](scroll-boundary-gesture-origin.md) — boundary gestures must use the captured start offset; live scroll state changes before release.
+- [401 retry fresh signal](friction-401-retry-signal.md) — customFetch 401 auto-retry must build a fresh timeout signal; the original effectiveSignal is exhausted by a slow first request and aborts the retry immediately.
