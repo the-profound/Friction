@@ -103,3 +103,4 @@
 - [Friction offline-first React Query persistence](friction-offline-query-persistence.md) — queryKey[0] exact-path allowlist for disk cache; NetInfo→onlineManager wiring; persist-client version pin; cold-start gate design.
 - [Friction offline-aware list screen pattern](friction-offline-list-screen-pattern.md) — `useIsOnline()` only gates network-triggered actions; cached `data` + `isPending`/`isLoading` already handle instant-show correctly.
 - [Friction letter-list source-label pattern](friction-letter-list-source-label-pattern.md) — reuse spaceLetterByArticleId (PUBLIC wins) + buildSentLetterSourceMetadataByArticleId + isSpaceSendRecord for any new sent-letter list screen.
+- [CanonicalCardSlot radius and clip ownership](friction-canonical-card-slot-radius-clip.md) — scaled-down cover radius flattens to a fixed ratio and shadow leaks a rectangle sliver unless the outer wrapper owns radius+clip explicitly.

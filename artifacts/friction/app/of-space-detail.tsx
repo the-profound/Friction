@@ -92,20 +92,7 @@ const SC_LEFT_PAD = Spacing.screenPx;
 const SC_CARD_W = Math.floor((SCREEN_W - SC_LEFT_PAD - 2 * SC_CARD_GAP) / 2.5);
 const SC_CARD_H = SC_CARD_W * (8 / 5);
 
-// The carousel slot (SC_CARD_W) is narrower than the canonical card width that
-// CardSelectOverlay renders at (Sizing.cardSlotW). If we rendered the card
-// natively at SC_CARD_W, ArticleCardItem would lay its internals out with
-// different rounding/minimum-size floors than the overlay's canonical card, so
-// the hero transition would visibly swap one card for a differently-laid-out
-// one at progress=0.
-//
-// Instead — matching how the inbox / profile carousels behave, where slot width
-// already equals the canonical width — we always render the card at the
-// canonical size and shrink it with a pure transform. The carousel card is then
-// literally the same pixels as the overlay card at progress=0, so it grows in
-// place with no swap and no flash on the way back down.
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
+const SC_SLOT_RADIUS = 14;
 function roundStatusColor(status: string): string {
   if (status === "ACTIVE") return Colors.noticeAccent;
   if (status === "UPCOMING") return Colors.zinc400;
@@ -299,7 +286,11 @@ function SpaceCarousel({
           (letter.sourceArticleId ?? letter.id) === hiddenCardId && spaceCarouselStyles.cardSlotHidden,
         ]}
       >
-        <CanonicalCardSlot width={SC_CARD_W} height={SC_CARD_H}>
+        <CanonicalCardSlot
+          width={SC_CARD_W}
+          height={SC_CARD_H}
+          borderRadius={SC_SLOT_RADIUS}
+        >
           <ArticleCardItem
             title={title ?? "제목 없음"}
             authorName={authorName}
@@ -408,7 +399,7 @@ const spaceCarouselStyles = StyleSheet.create({
   },
   openingSlotCardInner: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: SC_SLOT_RADIUS,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.zinc200,
     borderStyle: "dashed",
@@ -763,6 +754,7 @@ function RoundSection({
                 ref={upcomingOpeningSlotRef}
                 width={SC_CARD_W}
                 height={SC_CARD_H}
+                borderRadius={SC_SLOT_RADIUS}
               >
                 <ArticleCardItem
                   title={title ?? "제목 없음"}
@@ -2140,7 +2132,7 @@ const styles = StyleSheet.create({
   slotCard: {
     width: SC_CARD_W,
     height: SC_CARD_H,
-    borderRadius: 14,
+    borderRadius: SC_SLOT_RADIUS,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 14,
     justifyContent: "space-between",
