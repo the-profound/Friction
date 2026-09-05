@@ -138,6 +138,7 @@ export default function MyPageScreen() {
         showBack
         onBackPress={() => router.back()}
         backAccessibilityLabel="설정에서 돌아가기"
+        backgroundColor={Colors.zinc50}
       />
 
       <ScrollView

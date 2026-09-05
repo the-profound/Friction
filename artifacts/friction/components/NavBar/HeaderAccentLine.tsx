@@ -5,10 +5,20 @@ import { Colors } from "@/constants/tokens";
 
 interface HeaderAccentLineProps {
   titleLineHeight: number;
+  /**
+   * Height of the flex row that contains the title.
+   * Pass the actual max-child height so the lines are centred on the title
+   * text regardless of whether a back button (44 px) or action buttons (36 px)
+   * set the row height.
+   */
+  rowHeight: number;
 }
 
-export function HeaderAccentLine({ titleLineHeight }: HeaderAccentLineProps) {
-  const titleBottomOffset = 15 + (36 - titleLineHeight) / 2;
+export function HeaderAccentLine({ titleLineHeight, rowHeight }: HeaderAccentLineProps) {
+  // Container paddingBottom is 15 px.  The title text is vertically centred
+  // inside the row, so its bottom edge sits at 15 + (rowHeight - titleLineHeight) / 2
+  // above the shell bottom.
+  const titleBottomOffset = 15 + (rowHeight - titleLineHeight) / 2;
   const lineGap = 2.5;
 
   return (

@@ -13,6 +13,9 @@ interface PageHeaderProps {
   title: string;
   centeredBrandTitle?: boolean;
   showBack?: boolean;
+  /** Override the header background. Defaults to Colors.white.
+   *  Pass Colors.zinc50 (or any other color) to blend with a non-white screen. */
+  backgroundColor?: string;
   onBackPress?: () => void;
   backAccessibilityLabel?: string;
   hideTitle?: boolean;
@@ -71,20 +74,25 @@ export function PageHeader({
   rightText,
   onRightTextPress,
   searchLast = false,
+  backgroundColor = Colors.white,
 }: PageHeaderProps) {
   const { headerScrolled } = useNavigation();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
+  // Row height is driven by the tallest child: the back button (44 px) when
+  // shown, otherwise the action buttons / title container (36 px).
+  const rowHeight = showBack ? Sizing.headerButtonTouchSize : Sizing.searchButtonSize;
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={[styles.shell, headerScrolled && Shadows.headerScrolled]}>
+      <View style={[styles.shell, headerScrolled && Shadows.headerScrolled, { backgroundColor }]}>
         <View
           style={[
             styles.container,
             centeredBrandTitle && styles.centeredContainer,
-            { paddingTop: topInset + Spacing.headerPt },
+            { paddingTop: topInset + Spacing.headerPt, backgroundColor },
           ]}
         >
           {centeredBrandTitle ? (
@@ -202,7 +210,7 @@ export function PageHeader({
           </View>
         </View>
         {centeredBrandTitle ? (
-          <HeaderAccentLine titleLineHeight={windowWidth * 0.065} />
+          <HeaderAccentLine titleLineHeight={windowWidth * 0.065} rowHeight={rowHeight} />
         ) : null}
       </View>
     </TouchableWithoutFeedback>
@@ -228,6 +236,12 @@ const styles = StyleSheet.create({
   headerSide: {
     flex: 1,
     minWidth: 0,
+    // Row direction so the back button sits at the left edge of this side-slot.
+    // In a column container the cross-axis is horizontal, so alignSelf:"center"
+    // on the button would centre it horizontally — not what we want. Making
+    // this a row means alignSelf:"center" now centres vertically (desired).
+    flexDirection: "row",
+    alignItems: "center",
   },
   title: {
     ...Typography.headerTitle,
