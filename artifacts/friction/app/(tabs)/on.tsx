@@ -365,7 +365,7 @@ export default function OnScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
-  const [kind, setKind] = useState<RecordKind>("thought");
+  const [kind, setKind] = useState<RecordKind>("letter");
   const [view, setView] = useState<RecordView>("card");
   const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
   const [searchActive, setSearchActive] = useState(false);
@@ -525,7 +525,7 @@ export default function OnScreen() {
   const addToCollection = useAddArticleToMyCollection();
 
   useEffect(() => {
-    setKind("thought");
+    setKind("letter");
     setView("card");
     setRecordResetVersion(tabReselectVersion.ON);
     closeSearch();
@@ -585,11 +585,23 @@ export default function OnScreen() {
     // the toast so the user does not see a false alarm; the query will
     // automatically re-fire once authIsLoading becomes false.
     if (authIsLoading) return;
+    // The question queue is supplemental to the record feed. If primary
+    // records are already available, keep the feed usable without repeatedly
+    // interrupting the user for a secondary request failure.
+    if ((articlesQuery.data?.length ?? 0) + (thoughtsQuery.data?.length ?? 0) > 0) return;
     const errorKind = classifyQuestionError(questionQuery.error);
     if (!shouldShowQuestionErrorToast(errorKind, lastShownQuestionErrorKindRef.current)) return;
     lastShownQuestionErrorKindRef.current = errorKind;
     showToast({ message: getQuestionUnavailableMessage(errorKind), type: "error" });
-  }, [questionQuery.errorUpdatedAt, questionQuery.isError, questionQuery.isSuccess, authIsLoading, showToast]);
+  }, [
+    articlesQuery.data,
+    thoughtsQuery.data,
+    questionQuery.errorUpdatedAt,
+    questionQuery.isError,
+    questionQuery.isSuccess,
+    authIsLoading,
+    showToast,
+  ]);
 
   useEffect(() => {
     seedRecordDetailCaches(queryClient, {
@@ -632,7 +644,7 @@ export default function OnScreen() {
     [allRecords, searchQuery],
   );
   const queuedQuestionRecords = useMemo<CardRecord[]>(
-    () => kind === "thought"
+    () => kind === "letter"
       ? queuedThoughts.map((thought, index) => ({
           id: thought.id,
           kind: "thought" as const,
@@ -666,7 +678,7 @@ export default function OnScreen() {
     return anchors;
   }, [allCardRecords, cardMixSeed, queuedQuestionRecords]);
   const visibleRecords = useMemo<CardRecord[]>(
-    () => kind === "thought" && view !== "card" && queuedThoughts[0]
+    () => kind === "letter" && view !== "card" && queuedThoughts[0]
       ? [{
           id: queuedThoughts[0].id,
           kind: "thought" as const,
@@ -951,7 +963,7 @@ export default function OnScreen() {
     // briefly showing an empty question area before the query fires.
     ((questionQuery.isLoading || authIsLoading) && !questionQuery.data);
   const questionLoadFailed =
-    kind === "thought" &&
+    kind === "letter" &&
     questionQuery.isError &&
     // Auth restore is still in progress — the error is a pre-auth transient
     // failure, not a real one. Keep the error state hidden so the user sees

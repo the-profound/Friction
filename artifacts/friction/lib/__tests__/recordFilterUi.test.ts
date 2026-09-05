@@ -16,6 +16,20 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).toContain('label="편지" active={kind === "letter"}');
   });
 
+  it("opens on letters and mixes queued questions into the letter feed", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+
+    expect(recordsScreen).toContain(
+      'const [kind, setKind] = useState<RecordKind>("letter")',
+    );
+    expect(recordsScreen).toContain('setKind("letter")');
+    expect(recordsScreen).toContain('() => kind === "letter"');
+    expect(recordsScreen).toContain("buildMixedRecordGroups(");
+  });
+
   it("routes letter list rows through the shared action-menu flow", () => {
     const recordsScreen = readFileSync(
       join(__dirname, "../../app/(tabs)/on.tsx"),

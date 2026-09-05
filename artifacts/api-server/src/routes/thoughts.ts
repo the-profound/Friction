@@ -903,7 +903,7 @@ router.post(
   "/thoughts/question-queue/refresh",
   requireAuth,
   async (req, res) => {
-  const userId = req.user!.id;
+    const userId = req.user!.id;
     const currentThoughtId = (req.body as Record<string, unknown> | undefined)
       ?.currentThoughtId;
     if (typeof currentThoughtId !== "string") {
@@ -917,98 +917,55 @@ router.post(
       | { requeued: false; snapshot: Awaited<ReturnType<typeof queueSnapshot>> }
       | { requeued: true; sourceCandidates: SourceCandidate[]; needed: number };
 
-  const phase1: ActivatePhase1 = await db.transaction(async (tx) => {
-    await lockQuestionQueue(tx, userId);
-    const normalizedQueue = await normalizeQuestionQueue(tx, userId);
+    const phase1: Phase1Result = await db.transaction(async (tx) => {
+      await lockQuestionQueue(tx, userId);
+      const before = await normalizeQuestionQueue(tx, userId);
+      const current = before[0];
+      if (!current || current.thought.id !== currentThoughtId) {
+        return {
+          requeued: false as const,
+          snapshot: await queueSnapshot(tx, userId),
+        };
+      }
 
-    const [thought] = await tx
-      .select()
-      .from(thoughtsTable)
-      .where(
-        and(
-          eq(thoughtsTable.id, thoughtId),
-          eq(thoughtsTable.authorId, userId),
-          isNull(thoughtsTable.deletedAt),
-        ),
-      )
-      .limit(1);
+      await cleanupQuestionQueue(tx, userId);
+      const lastPosition = before.at(-1)?.position ?? current.position;
+      await tx
+        .update(thoughtQuestionQueueTable)
+        .set({ position: lastPosition + 1 })
+        .where(eq(thoughtQuestionQueueTable.id, current.queueId));
+      await compactQuestionQueue(tx, userId);
 
-    if (!thought) return { kind: "not_found" as const };
+      const { sourceCandidates, needed } = await readCandidates(
+        tx,
+        userId,
+        before.length,
+      );
+      return { requeued: true as const, sourceCandidates, needed };
+    });
 
-    const [queued] = await tx
-      .select({ id: thoughtQuestionQueueTable.id })
-      .from(thoughtQuestionQueueTable)
-      .where(
-        and(
-          eq(thoughtQuestionQueueTable.userId, userId),
-          eq(thoughtQuestionQueueTable.thoughtId, thoughtId),
-        ),
-      )
-      .limit(1);
-
-    if (
-      !queued &&
-      thought.status === "NORMAL" &&
-      thought.createdFrom === "question"
-    ) {
-      return {
-        kind: "retry" as const,
-        body: {
-          activatedThought: thought,
-          ...(await queueSnapshot(tx, userId)),
-        },
-      };
-    }
-    if (!queued || thought.status !== "PRELIMINARY") {
-      return { kind: "not_queued" as const };
+    if (!phase1.requeued) {
+      res.json({ ...phase1.snapshot, requeued: false });
+      return;
     }
 
-    const [activatedThought] = await tx
-      .update(thoughtsTable)
-      .set({ status: "NORMAL", updatedAt: new Date() })
-      .where(eq(thoughtsTable.id, thought.id))
-      .returning();
-    await tx
-      .delete(thoughtQuestionQueueTable)
-      .where(eq(thoughtQuestionQueueTable.id, queued.id));
-    await compactQuestionQueue(tx, userId);
-
-    // Queue count after removing the activated thought.
-    const postCompactLength = Math.max(0, normalizedQueue.length - 1);
-    const { sourceCandidates, needed } = await readCandidates(
-      tx,
-      userId,
-      postCompactLength,
+    const aiResults = await generateAIQuestions(
+      phase1.sourceCandidates,
+      phase1.needed,
     );
-    return { kind: "activated" as const, activatedThought, sourceCandidates, needed };
-  });
 
-  if (phase1.kind === "not_found") {
-    res.status(404).json({ error: "Thought not found" });
-    return;
-  }
-  if (phase1.kind === "not_queued") {
-    res.status(409).json({ error: "Thought is not an active queued question" });
-    return;
-  }
-  if (phase1.kind === "retry") {
-    res.status(200).json(phase1.body);
-    return;
-  }
+    const snapshot = await db.transaction(async (tx) => {
+      await lockQuestionQueue(tx, userId);
+      const queued = await normalizeQuestionQueue(tx, userId);
+      await writeGeneratedQuestions(tx, userId, aiResults, queued);
+      return queueSnapshot(tx, userId);
+    });
 
-  // Phase 2: AI calls outside any DB transaction.
-  const aiResults = await generateAIQuestions(
-    phase1.sourceCandidates,
-    phase1.needed,
-  );
+    res.json({ ...snapshot, requeued: true });
+  },
+);
 
-  // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
-  const snapshot = snapshotResult?.snapshot ?? null;
-
-  res.status(200).json({ activatedThought: phase1.activatedThought, ...snapshot });
-});
-
-router.get("/thoughts", requireAuth, async (req, res) => {
+router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
   const userId = req.user!.id;
   const thoughtId = req.params.id;
 
@@ -1111,7 +1068,12 @@ router.get("/thoughts", requireAuth, async (req, res) => {
   );
 
   // Phase 3: Short transaction — re-acquire lock, re-normalize, write results.
-  const snapshot = snapshotResult?.snapshot ?? null;
+  const snapshot = await db.transaction(async (tx) => {
+    await lockQuestionQueue(tx, userId);
+    const queued = await normalizeQuestionQueue(tx, userId);
+    await writeGeneratedQuestions(tx, userId, aiResults, queued);
+    return queueSnapshot(tx, userId);
+  });
 
   res.status(200).json({ activatedThought: phase1.activatedThought, ...snapshot });
 });
