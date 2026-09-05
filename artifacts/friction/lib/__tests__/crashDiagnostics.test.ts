@@ -4,7 +4,6 @@ import {
   getRenderDiagnostic,
   getComponentStackDiagnostic,
   getRenderDiagnosticDedupeKey,
-  getTemporaryComponentStackDiagnostic,
   shouldSendRenderDiagnostic,
 } from "../renderErrorDiagnostics";
 
@@ -60,36 +59,6 @@ describe("render error diagnostics privacy contract", () => {
       Array.from({ length: 100 }, (_, index) => `at C${index}`).join("\n"),
     );
     expect(diagnostic.componentDepth).toBe(64);
-  });
-
-  it("attaches a bounded component stack only for iOS build 47 query errors", () => {
-    const stack = Array.from(
-      { length: 80 },
-      (_, index) => `    at Component${index} (screen.tsx:${index + 1})`,
-    ).join("\n");
-
-    const diagnostic = getTemporaryComponentStackDiagnostic(
-      stack,
-      "RND-QUERY-CLIENT",
-      "ios",
-      "47",
-    );
-
-    expect(diagnostic).not.toBeNull();
-    expect(diagnostic?.split("\n")).toHaveLength(64);
-    expect(diagnostic).toContain("Component0");
-    expect(diagnostic).not.toContain("Component64");
-    expect(
-      getTemporaryComponentStackDiagnostic(
-        stack,
-        "RND-QUERY-CLIENT",
-        "ios",
-        "48",
-      ),
-    ).toBeNull();
-    expect(
-      getTemporaryComponentStackDiagnostic(stack, "RND-TYPE", "ios", "47"),
-    ).toBeNull();
   });
 
   it("dedupes by code, component fingerprint, and native build identity", () => {

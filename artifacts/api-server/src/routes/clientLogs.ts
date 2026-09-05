@@ -206,7 +206,6 @@ export function getSafeRenderErrorDiagnostic(input: {
   diagnosticCode?: unknown;
   componentFingerprint?: unknown;
   componentDepth?: unknown;
-  componentStack?: unknown;
   platform?: unknown;
   appVersion?: unknown;
   buildNumber?: unknown;
@@ -229,27 +228,6 @@ export function getSafeRenderErrorDiagnostic(input: {
   ) {
     return null;
   }
-
-  const release = getSafeReleaseDiagnostic(input.release);
-  const temporaryComponentStack =
-    input.diagnosticCode === "RND-QUERY-CLIENT" &&
-    input.platform === "ios" &&
-    input.buildNumber === "47" &&
-    release?.track === "production" &&
-    typeof input.componentStack === "string"
-      ? input.componentStack
-          .replace(/\r\n?/g, "\n")
-          .split("\n")
-          .slice(0, 64)
-          .map((line) =>
-            line.replace(
-              /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,
-              "",
-            ),
-          )
-          .join("\n")
-          .slice(0, 12_000)
-      : null;
 
   return {
     errorClass: input.name,
@@ -275,10 +253,7 @@ export function getSafeRenderErrorDiagnostic(input: {
       /^req_[a-z0-9]{20,32}$/.test(input.requestId)
         ? input.requestId
         : null,
-    ...(temporaryComponentStack?.trim()
-      ? { componentStack: temporaryComponentStack }
-      : {}),
-    release,
+    release: getSafeReleaseDiagnostic(input.release),
   };
 }
 

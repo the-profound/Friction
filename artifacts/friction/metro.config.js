@@ -47,14 +47,39 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
-// Force a single React / React-Native instance across all workspace packages.
-// Without this, Metro can resolve `react` relative to each symlinked lib dir
-// (e.g. lib/api-client-react) and load a second copy, causing "invalid hook
-// call" and "cannot read property 'useContext' of null".
 // Force single instances of React and packages that use React context.
-// Without this, pnpm's isolated node_modules can produce separate copies
-// for workspace libs (e.g. lib/api-client-react), causing "invalid hook call"
-// and "cannot read property 'useContext' of null" at runtime.
+// `extraNodeModules` is only a fallback after Metro's normal hierarchical
+// lookup. A workspace package can therefore resolve its package-local pnpm
+// peer variant before these aliases are consulted. Resolve singleton imports
+// from the app directory first so EAS and local bundles use identical context
+// objects even when their pnpm node_modules layouts differ.
+const singletonResolutionOrigin = path.join(projectRoot, "package.json");
+const singletonPackages = [
+  "react",
+  "react-native",
+  "@tanstack/react-query",
+];
+const defaultResolveRequest = config.resolver.resolveRequest;
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const isSingletonRequest = singletonPackages.some(
+    (packageName) =>
+      moduleName === packageName || moduleName.startsWith(`${packageName}/`),
+  );
+
+  if (isSingletonRequest) {
+    return context.resolveRequest(
+      { ...context, originModulePath: singletonResolutionOrigin },
+      moduleName,
+      platform,
+    );
+  }
+
+  return defaultResolveRequest
+    ? defaultResolveRequest(context, moduleName, platform)
+    : context.resolveRequest(context, moduleName, platform);
+};
+
 config.resolver.extraNodeModules = {
   react: path.resolve(projectRoot, "node_modules/react"),
   "react-native": path.resolve(projectRoot, "node_modules/react-native"),

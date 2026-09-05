@@ -12,11 +12,13 @@ describe("authenticated native tab startup", () => {
   const queryBoundary = read("components/QueryClientBoundary.tsx");
   const notificationDeepLink = read("lib/useNotificationDeepLink.ts");
 
-  it("starts directly on the record tab instead of transitioning through inbox", () => {
+  it("starts on the record tab even when the root URL resolves to inbox", () => {
     expect(tabLayout).toContain('initialRouteName="on"');
-    expect(rootLayout).not.toContain(
+    expect(rootLayout).toContain(
       '(segments[1] as string) === "index"',
     );
+    expect(rootLayout).toContain('router.replace("/(tabs)/on")');
+    expect(rootLayout).toContain("!hasRedirectedRef.current");
   });
 
   it("passes the authenticated identity through the protected provider boundary", () => {

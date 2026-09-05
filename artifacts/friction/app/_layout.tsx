@@ -207,6 +207,7 @@ function AuthGuard() {
   const { activeSession, clearActiveSession } = useActiveReading();
   const router = useRouter();
   const segments = useSegments();
+  const hasRedirectedRef = useRef(false);
   const previousUserIdRef = useRef<string | null>(null);
 
   const firstSegment = segments[0] as string | undefined;
@@ -227,6 +228,16 @@ function AuthGuard() {
       navigationKind === "protected" &&
       (firstSegment === "login" || firstSegment === "login-callback")
     ) {
+      hasRedirectedRef.current = true;
+      router.replace("/(tabs)/on");
+    } else if (
+      navigationKind === "protected" &&
+      Platform.OS !== "web" &&
+      firstSegment === "(tabs)" &&
+      (segments[1] == null || (segments[1] as string) === "index") &&
+      !hasRedirectedRef.current
+    ) {
+      hasRedirectedRef.current = true;
       router.replace("/(tabs)/on");
     }
   }, [clearActiveSession, configurationError, firstSegment, isLoading, navigationKind, router, segments]);

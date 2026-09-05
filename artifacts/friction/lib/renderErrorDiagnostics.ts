@@ -27,8 +27,6 @@ const RENDER_ERROR_CODES: Readonly<Record<string, RenderDiagnosticCode>> = {
 };
 
 const MAX_COMPONENT_DEPTH = 64;
-const MAX_TEMPORARY_COMPONENT_STACK_LENGTH = 12_000;
-const TEMPORARY_COMPONENT_STACK_IOS_BUILD = "47";
 
 const ACTIONABLE_MESSAGE_CODES: ReadonlyArray<{
   code: RenderDiagnosticCode;
@@ -80,34 +78,6 @@ export type ComponentStackDiagnostic = {
   componentFingerprint: string;
   componentDepth: number;
 };
-
-export function getTemporaryComponentStackDiagnostic(
-  componentStack: unknown,
-  diagnosticCode: RenderDiagnosticCode,
-  platform: string,
-  nativeBuildIdentifier: string | null,
-): string | null {
-  if (
-    diagnosticCode !== "RND-QUERY-CLIENT" ||
-    platform !== "ios" ||
-    nativeBuildIdentifier !== TEMPORARY_COMPONENT_STACK_IOS_BUILD ||
-    typeof componentStack !== "string"
-  ) {
-    return null;
-  }
-
-  const boundedStack = componentStack
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .slice(0, MAX_COMPONENT_DEPTH)
-    .map((line) =>
-      line.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ""),
-    )
-    .join("\n")
-    .slice(0, MAX_TEMPORARY_COMPONENT_STACK_LENGTH);
-
-  return boundedStack.trim().length > 0 ? boundedStack : null;
-}
 
 /**
  * Reduces React's component stack to compact, bounded metadata. Component

@@ -5043,8 +5043,6 @@ export const reportClientLogBodyComponentFingerprintRegExp = new RegExp(
 export const reportClientLogBodyComponentDepthMin = 0;
 export const reportClientLogBodyComponentDepthMax = 64;
 
-export const reportClientLogBodyComponentStackMax = 12000;
-
 export const reportClientLogBodyReleaseConfigurationFingerprintRegExp =
   new RegExp("^[a-f0-9]{16}$");
 export const reportClientLogBodyReleaseSupabaseHostMax = 253;
@@ -5087,20 +5085,15 @@ export const ReportClientLogBody = zod
       .string()
       .regex(reportClientLogBodyComponentFingerprintRegExp)
       .nullish()
-      .describe("Compact fingerprint of the React component stack."),
+      .describe(
+        "Compact fingerprint of the React component stack; no raw frames are transmitted.",
+      ),
     componentDepth: zod
       .number()
       .min(reportClientLogBodyComponentDepthMin)
       .max(reportClientLogBodyComponentDepthMax)
       .nullish()
       .describe("Bounded number of frames in the React component stack."),
-    componentStack: zod
-      .string()
-      .max(reportClientLogBodyComponentStackMax)
-      .nullish()
-      .describe(
-        "Temporary bounded React component stack accepted only for the allowlisted iOS diagnostic build and RND-QUERY-CLIENT.\n",
-      ),
     release: zod
       .object({
         track: zod.enum(["development", "preview", "production"]),

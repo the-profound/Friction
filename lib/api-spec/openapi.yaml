@@ -5872,20 +5872,13 @@ components:
           type: string
           nullable: true
           pattern: "^[a-f0-9]{8}$"
-          description: Compact fingerprint of the React component stack.
+          description: Compact fingerprint of the React component stack; no raw frames are transmitted.
         componentDepth:
           type: integer
           nullable: true
           minimum: 0
           maximum: 64
           description: Bounded number of frames in the React component stack.
-        componentStack:
-          type: string
-          nullable: true
-          maxLength: 12000
-          description: >
-            Temporary bounded React component stack accepted only for the
-            allowlisted iOS diagnostic build and RND-QUERY-CLIENT.
         release:
           $ref: "#/components/schemas/ReleaseDiagnosticContext"
       required: [source, message]
