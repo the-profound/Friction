@@ -6,24 +6,25 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
-  ScrollView,
   useWindowDimensions,
 } from "react-native";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
-import { Colors, Typography, Spacing } from "@/constants/tokens";
+import { keepPreviousData, useQueries, useQueryClient } from "@tanstack/react-query";
+import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ScalePressable from "@/components/shared/ScalePressable";
+import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
-import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
+import { spaceLetterToViewModel } from "@/hooks/useSpaceLetterCards";
 import {
   useListSpaces,
   useListMySpaceInvitations,
@@ -31,11 +32,14 @@ import {
   useListOperatorPendingSpaceCodeRequests,
   listOperatorPendingSpaceCodeRequests,
   getListSpacesQueryKey,
+  getListSpaceLettersQueryKey,
+  listSpaceLetters,
   getListMySpaceInvitationsQueryKey,
   getListMySpaceCodeRequestsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   SpaceListItem,
+  SpaceLetter,
   SpaceInvitationWithSpace,
   SpaceCodeRequestWithSpace,
   SpacePendingCodeRequestSummary,
@@ -48,11 +52,9 @@ import {
 
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
+
+const SPACE_CARD_MIN_HEIGHT = 132;
 const OPERATOR_CROWN_COLOR = "#92323D";
-
-type RoleFilter = "all" | "OPERATOR" | "PARTICIPANT";
-type StatusFilter = "all" | "ACTIVE";
-
 function isOverduePlannedStart(item: SpaceListItem): boolean {
   if (item.status !== "RECRUITING" || !item.plannedStartsAt) return false;
   return new Date(item.plannedStartsAt) < new Date();
@@ -74,25 +76,40 @@ function sortSpaces(spaces: SpaceListItem[]): SpaceListItem[] {
   });
 }
 
+function sortRecentLetters(letters: SpaceLetter[]): SpaceLetter[] {
+  return [...letters]
+    .filter((letter) => letter.articleTitle || letter.articleExcerpt)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    .slice(0, 3);
+}
 function SpaceCard({
   item,
   onPress,
   cardWidth,
+  recentLetters,
 }: {
   item: SpaceListItem;
   onPress: () => void;
   cardWidth: number;
+  recentLetters: SpaceLetter[];
 }) {
   const statusStyle = spaceStatusStyle(item.status);
   const statusText = spaceStatusLabel(item.status);
   const isOperator = item.myRole === "OPERATOR";
   const isOverdue = isOverduePlannedStart(item);
+  const titleFontSize = cardWidth * 0.064;
+  const descriptionFontSize = cardWidth * 0.04;
 
   return (
     <ScalePressable
       style={[styles.cardWrapper, { width: cardWidth }]}
       onPress={onPress}
       contentStyle={styles.card}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name} 공간 열기`}
     >
       {isOperator && (
         <View style={styles.crownBadge}>
@@ -101,7 +118,14 @@ function SpaceCard({
       )}
       <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
-          <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+          <Text
+            style={[
+              styles.cardName,
+              { fontSize: titleFontSize, lineHeight: titleFontSize * 1.3 },
+            ]}
+          >
+            {item.name}
+          </Text>
           <View style={styles.cardBadgeGroup}>
             {isOverdue && (
               <View style={styles.overdueBadge}>
@@ -125,8 +149,24 @@ function SpaceCard({
           </View>
         </View>
         {item.description ? (
-          <Text style={styles.cardDesc} numberOfLines={4}>{item.description}</Text>
+          <Text
+            style={[
+              styles.cardDesc,
+              {
+                fontSize: descriptionFontSize,
+                lineHeight: descriptionFontSize * 1.45,
+              },
+            ]}
+            numberOfLines={4}
+          >
+            {item.description}
+          </Text>
         ) : null}
+        <RecentPostCards
+          letters={recentLetters}
+          space={item}
+          cardWidth={cardWidth}
+        />
         <View style={styles.cardSpacer} />
         <View style={styles.cardMeta}>
           {item.activeRound ? (
@@ -150,18 +190,6 @@ function SpaceCard({
     </ScalePressable>
   );
 }
-
-const ROLE_FILTER_OPTIONS: { key: RoleFilter; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "OPERATOR", label: "공간장" },
-  { key: "PARTICIPANT", label: "참여자" },
-];
-
-const STATUS_FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "ACTIVE", label: "진행 중" },
-];
-
 function InvitationBar({
   invitations,
   onPress,
@@ -260,16 +288,14 @@ export default function SpacesScreen() {
   const navBottom = useNavBarBottomSafeArea();
   const router = useRouter();
   const { userId } = useUser();
-  const { prepareAuthSession } = useAuth();
+  const { prepareAuthSession, isLoading: authIsLoading } = useAuth();
   const queryClient = useQueryClient();
   const { width: screenWidth } = useWindowDimensions();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const refreshLockRef = useRef(false);
   const [isOperatorRetrying, setIsOperatorRetrying] = useState(false);
   const operatorRetryLockRef = useRef(false);
-  const [showAddSheet, setShowAddSheet] = useState(false);
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [showMenuSheet, setShowMenuSheet] = useState(false);
 
   const cardWidth = Math.floor(screenWidth - GRID_H_PADDING * 2);
 
@@ -310,12 +336,38 @@ export default function SpacesScreen() {
     [spacesQuery.data],
   );
 
-  const spaces = useMemo(() => {
-    let result = allSpaces;
-    if (roleFilter !== "all") result = result.filter((s) => s.myRole === roleFilter);
-    if (statusFilter !== "all") result = result.filter((s) => s.status === statusFilter);
-    return result;
-  }, [allSpaces, roleFilter, statusFilter]);
+  const spaceLetterQueryKeys = useMemo(
+    () =>
+      allSpaces.map((space) => [
+        ...getListSpaceLettersQueryKey(space.id),
+        { userId },
+      ]),
+    [allSpaces, userId],
+  );
+  const spaceLettersQueries = useQueries({
+    queries: allSpaces.map((space, index) => ({
+      queryKey: spaceLetterQueryKeys[index],
+      queryFn: async ({ signal }: { signal?: AbortSignal }) => {
+        const session = await prepareAuthSession();
+        if (!session) {
+          throw new Error("로그인 상태를 확인할 수 없어요.");
+        }
+        return listSpaceLetters(space.id, { signal });
+      },
+      enabled: !!userId && !authIsLoading,
+      staleTime: 30_000,
+    })),
+  });
+  const recentLettersBySpaceId = useMemo(
+    () =>
+      new Map(
+        allSpaces.map((space, index) => [
+          space.id,
+          sortRecentLetters(spaceLettersQueries[index]?.data ?? []),
+        ]),
+      ),
+    [allSpaces, spaceLettersQueries],
+  );
 
   const invitations = (invitationsQuery.data ?? []) as SpaceInvitationWithSpace[];
   const codeRequests = (codeRequestsQuery.data ?? []) as SpaceCodeRequestWithSpace[];
@@ -336,8 +388,15 @@ export default function SpacesScreen() {
       invitationsQuery.refetch(),
       codeRequestsQuery.refetch(),
       operatorPendingQuery.refetch(),
+      ...spaceLettersQueries.map((query) => query.refetch()),
     ]);
-  }, [spacesQuery, invitationsQuery, codeRequestsQuery, operatorPendingQuery]);
+  }, [
+    spacesQuery,
+    invitationsQuery,
+    codeRequestsQuery,
+    operatorPendingQuery,
+    spaceLettersQueries,
+  ]);
 
   const handleRefresh = useCallback(async () => {
     if (refreshLockRef.current) return;
@@ -386,10 +445,20 @@ export default function SpacesScreen() {
       ) {
         operatorPendingQuery.refetch();
       }
+      for (const queryKey of spaceLetterQueryKeys) {
+        const queryState = queryClient.getQueryState(queryKey);
+        if (
+          isQueryStale(queryClient, queryKey) &&
+          queryState?.fetchStatus !== "fetching"
+        ) {
+          void queryClient.refetchQueries({ queryKey, exact: true });
+        }
+      }
     }, [
       queryClient,
       userId,
       operatorPendingQueryKey,
+      spaceLetterQueryKeys,
       spacesQuery.refetch,
       invitationsQuery.refetch,
       codeRequestsQuery.refetch,
@@ -432,12 +501,13 @@ export default function SpacesScreen() {
       <SpaceCard
         item={item}
         cardWidth={cardWidth}
+        recentLetters={recentLettersBySpaceId.get(item.id) ?? []}
         onPress={() =>
           router.push({ pathname: "/of-space-detail" as never, params: { id: item.id } })
         }
       />
     ),
-    [router, cardWidth],
+    [router, cardWidth, recentLettersBySpaceId],
   );
 
   const hasPrimaryContent =
@@ -454,28 +524,8 @@ export default function SpacesScreen() {
     operatorPending.length === 0 &&
     operatorPendingQuery.isError;
 
-  const filterBars = (
-    <View style={styles.filterRow}>
-      <DropdownFilter
-        label="참여 방법"
-        value={roleFilter}
-        defaultValue="all"
-        options={ROLE_FILTER_OPTIONS}
-        onChange={setRoleFilter}
-      />
-      <DropdownFilter
-        label="공간 상태"
-        value={statusFilter}
-        defaultValue="all"
-        options={STATUS_FILTER_OPTIONS}
-        onChange={setStatusFilter}
-      />
-    </View>
-  );
-
   const listHeaderComponent = (
     <>
-      {filterBars}
       <OperatorPendingBar
         summaries={operatorPending}
         onPress={handleOperatorPendingBarPress}
@@ -485,7 +535,7 @@ export default function SpacesScreen() {
         onPress={handleInvitationBarPress}
       />
       <CodeRequestBar requests={codeRequests} onPress={handleCodeRequestBarPress} />
-      {spaces.length > 0 && <View style={styles.gridTopSpacer} />}
+      {allSpaces.length > 0 && <View style={styles.gridTopSpacer} />}
     </>
   );
 
@@ -494,14 +544,25 @@ export default function SpacesScreen() {
       <PageHeader
         title="공간 목록"
         centeredBrandTitle
-        showAdd
-        onAddPress={() => setShowAddSheet(true)}
-        showArchive
-        onArchivePress={() => router.push("/of-space-archived-list" as never)}
       />
+      <View style={styles.headerActionRow}>
+        <ScalePressable
+          style={styles.headerMenuButton}
+          contentStyle={styles.headerMenuButtonContent}
+          onPress={() => setShowMenuSheet(true)}
+          accessibilityRole="button"
+          accessibilityLabel="공간 메뉴 열기"
+        >
+          <Feather
+            name="more-horizontal"
+            size={Sizing.searchIconSize}
+            color={Colors.zinc700}
+          />
+        </ScalePressable>
+      </View>
       <ActionSheetModal
-        visible={showAddSheet}
-        onClose={() => setShowAddSheet(false)}
+        visible={showMenuSheet}
+        onClose={() => setShowMenuSheet(false)}
         actions={[
           {
             label: "공간 만들기",
@@ -510,6 +571,10 @@ export default function SpacesScreen() {
           {
             label: "초대 문구로 참여",
             onPress: () => router.push("/space-join" as never),
+          },
+          {
+            label: "보관된 공간",
+            onPress: () => router.push("/of-space-archived-list" as never),
           },
           { label: "취소", style: "cancel", onPress: () => {} },
         ]}
@@ -579,58 +644,25 @@ export default function SpacesScreen() {
           <Text style={styles.emptyTitle}>공간이 없어요</Text>
           <Text style={styles.emptySubtitle}>함께 편지를 나눌 공간을 만들거나{"\n"}초대 문구로 참여해보세요</Text>
         </RefreshableEmpty>
-      ) : spaces.length === 0 ? (
-          <ScrollView
-            contentContainerStyle={{ paddingBottom: navBottom }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isManualRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={Colors.zinc400}
-              />
-            }
-            showsVerticalScrollIndicator={false}
-          >
-            {filterBars}
-            <OperatorPendingBar
-              summaries={operatorPending}
-              onPress={handleOperatorPendingBarPress}
+      ) : (
+        <FlatList
+          {...LIST_PERF_PRESET}
+          data={allSpaces}
+          keyExtractor={(item) => item.id}
+          renderItem={renderSpaceItem}
+          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
+          refreshControl={
+            <RefreshControl
+              refreshing={isManualRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.zinc400}
             />
-            <InvitationBar
-              invitations={invitations}
-              onPress={handleInvitationBarPress}
-            />
-            <CodeRequestBar requests={codeRequests} onPress={handleCodeRequestBarPress} />
-            {allSpaces.length > 0 && (
-              <View style={[styles.centerContainer, styles.filteredEmptyInline]}>
-                <Text style={styles.filteredEmptyText}>해당하는 공간이 없어요</Text>
-              </View>
-            )}
-          </ScrollView>
-        ) : (
-          <FlatList
-            {...LIST_PERF_PRESET}
-            data={spaces}
-            keyExtractor={(item) => item.id}
-            renderItem={renderSpaceItem}
-            contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
-            refreshControl={
-              <RefreshControl
-                refreshing={isManualRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={Colors.zinc400}
-              />
-            }
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={listHeaderComponent}
-            ListEmptyComponent={
-              <View style={styles.filteredEmptyInline}>
-                <Text style={styles.filteredEmptyText}>해당하는 공간이 없어요</Text>
-              </View>
-            }
-          />
-        )
-      }
+          }
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={listHeaderComponent}
+          extraData={recentLettersBySpaceId}
+        />
+      )}
     </View>
   );
 }
@@ -691,38 +723,46 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: 4,
   },
-  gridTopSpacer: {
-    height: 4,
+  headerActionRow: {
+    minHeight: Sizing.searchButtonSize,
+    marginTop: 4,
+    marginBottom: 16,
+    paddingHorizontal: Spacing.screenPx,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
   },
-  filteredEmptyInline: {
-    paddingVertical: 32,
+  headerMenuButton: {
+    width: Sizing.searchButtonSize,
+    height: Sizing.searchButtonSize,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  headerMenuButtonContent: {
+    width: Sizing.searchButtonSize,
+    height: Sizing.searchButtonSize,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: Sizing.searchButtonSize / 2,
+    backgroundColor: Colors.searchBgInactive,
     alignItems: "center",
     justifyContent: "center",
   },
-  filteredEmptyText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc500,
-  },
-  // ─── Filter row ──────────────────────────────────────────────────────────────
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingHorizontal: Spacing.screenPx,
-    gap: 8,
-    paddingVertical: 10,
-  },
-  filterWithInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  gridTopSpacer: {
+    height: 4,
   },
   // ─── Space card ─────────────────────────────────────────────────────────────
   cardWrapper: {
+    minHeight: SPACE_CARD_MIN_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
     marginHorizontal: GRID_H_PADDING,
     marginBottom: GRID_COLUMN_GAP,
   },
   card: {
+    minHeight: SPACE_CARD_MIN_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
     borderRadius: 16,
     backgroundColor: Colors.white,
     shadowColor: "#000",
@@ -732,6 +772,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardContent: {
+    minHeight: SPACE_CARD_MIN_HEIGHT,
     padding: 16,
     position: "relative",
     flexDirection: "column",
@@ -782,16 +823,23 @@ const styles = StyleSheet.create({
   },
   cardName: {
     ...Typography.bodySemiBold,
-    fontSize: 20,
+    fontWeight: "700",
     color: Colors.zinc900,
     flex: 1,
   },
   cardDesc: {
     ...Typography.caption,
-    fontSize: 12,
     color: Colors.zinc600,
-    lineHeight: 16,
     marginTop: 2,
+  },
+  recentPosts: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 10,
+    minHeight: 119,
+    pointerEvents: "none",
   },
   cardSpacer: {
     flex: 1,
@@ -940,3 +988,50 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+function RecentPostCards({
+  letters,
+  space,
+  cardWidth,
+}: {
+  letters: SpaceLetter[];
+  space: SpaceListItem;
+  cardWidth: number;
+}) {
+  if (letters.length === 0) return null;
+
+  const availableWidth = cardWidth - 32;
+  const coverWidth = Math.min(
+    90,
+    Math.floor((availableWidth - 16) / 3),
+  );
+  const coverHeight = coverWidth * Sizing.cardRatio;
+
+  return (
+    <View style={styles.recentPosts}>
+      {letters.map((letter) => {
+        const card = spaceLetterToViewModel(
+          letter,
+          space.name,
+          space.isAnonymous,
+        );
+        return (
+          <CanonicalCardSlot
+            key={letter.id}
+            width={coverWidth}
+            height={coverHeight}
+          >
+            <ArticleCardItem
+              title={letter.articleTitle || "제목 없음"}
+              authorName={card.authorName}
+              spaceName={card.spaceName}
+              cover={card.cover}
+              disabled
+              onPress={() => {}}
+            />
+          </CanonicalCardSlot>
+        );
+      })}
+    </View>
+  );
+}

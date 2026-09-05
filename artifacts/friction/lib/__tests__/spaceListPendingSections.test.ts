@@ -10,7 +10,7 @@ const readAppFile = (path: string) =>
   readFileSync(join(__dirname, "../..", path), "utf8");
 
 describe("space list pending sections", () => {
-  it("renders operator approvals before invitations and personal applications in every list branch", () => {
+  it("renders operator approvals before invitations and personal applications in the list header", () => {
     const source = readAppFile("app/(tabs)/of.tsx");
     const operatorSections = [...source.matchAll(/<OperatorPendingBar/g)].map(
       (match) => match.index,
@@ -22,15 +22,108 @@ describe("space list pending sections", () => {
       (match) => match.index,
     );
 
-    expect(operatorSections).toHaveLength(2);
-    expect(invitationSections).toHaveLength(2);
-    expect(personalRequestSections).toHaveLength(2);
+    expect(operatorSections).toHaveLength(1);
+    expect(invitationSections).toHaveLength(1);
+    expect(personalRequestSections).toHaveLength(1);
     operatorSections.forEach((operatorIndex, index) => {
       expect(operatorIndex).toBeLessThan(invitationSections[index]!);
       expect(invitationSections[index]!).toBeLessThan(
         personalRequestSections[index]!,
       );
     });
+  });
+
+  it("shows every sorted non-archived space without role or status filters", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+
+    expect(source).not.toContain("DropdownFilter");
+    expect(source).not.toContain("roleFilter");
+    expect(source).not.toContain("statusFilter");
+    expect(source).not.toContain("해당하는 공간이 없어요");
+    expect(source).toContain("data={allSpaces}");
+    expect(source).toContain('s.status !== "ARCHIVED"');
+  });
+
+  it("uses one content-sized menu button below the centered space title", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+    const headerStart = source.indexOf('<PageHeader');
+    const sheetStart = source.indexOf("<ActionSheetModal", headerStart);
+    const headerActions = source.slice(headerStart, sheetStart);
+
+    expect(headerActions).not.toContain("showAdd");
+    expect(headerActions).not.toContain("showArchive");
+    expect(headerActions).toContain("styles.headerActionRow");
+    expect(headerActions).toContain('name=\"more-horizontal\"');
+    expect(headerActions).toContain('accessibilityLabel=\"공간 메뉴 열기\"');
+    expect(source).toContain("height: Sizing.searchButtonSize");
+    expect(source).toContain("marginTop: 4");
+    expect(source).toContain("marginBottom: 16");
+    expect(source).toContain('label: "보관된 공간"');
+  });
+
+  it("lets space cards grow with content while keeping a compact minimum touch target", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+
+    expect(source).toContain("const SPACE_CARD_MIN_HEIGHT = 132");
+    expect(source.match(/minHeight: SPACE_CARD_MIN_HEIGHT/g)).toHaveLength(3);
+    expect(source).not.toContain("SPACE_CARD_HEIGHT");
+    expect(source).not.toContain('height: "100%"');
+    expect(source).toContain('accessibilityLabel={`${item.name} 공간 열기`}');
+  });
+
+  it("scales card typography from its width and lets long titles wrap fully", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+
+    expect(source).toContain("const titleFontSize = cardWidth * 0.064");
+    expect(source).toContain("const descriptionFontSize = cardWidth * 0.04");
+    expect(source).toContain('fontWeight: "700"');
+    expect(source).not.toContain(
+      '<Text style={styles.cardName} numberOfLines={1}>',
+    );
+  });
+
+  it("loads and displays up to three recent visible space posts inside each space card", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+
+    expect(source).toContain("useQueries");
+    expect(source).toContain("getListSpaceLettersQueryKey(space.id)");
+    expect(source).toContain("sortRecentLetters");
+    expect(source).toContain(".slice(0, 3)");
+    expect(source).toContain("<RecentPostCards");
+    expect(source).toContain("articleTitle || \"제목 없음\"");
+    expect(source).toContain("spaceLetterToViewModel");
+    expect(source).toContain("<CanonicalCardSlot");
+    expect(source).toContain("<ArticleCardItem");
+    expect(source).toContain(
+      "90,\n    Math.floor((availableWidth - 16) / 3)",
+    );
+    expect(source).toContain("coverWidth * Sizing.cardRatio");
+    expect(source).not.toContain("recentPostExcerpt");
+    const recentPostsStyle = source.slice(
+      source.indexOf("recentPosts:"),
+      source.indexOf("cardSpacer:", source.indexOf("recentPosts:")),
+    );
+    expect(recentPostsStyle).toContain('justifyContent: "flex-start"');
+    expect(recentPostsStyle).not.toContain('justifyContent: "center"');
+  });
+
+  it("rerenders recent posts after authenticated queries resolve and refreshes them manually", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+
+    expect(source).toContain("await prepareAuthSession()");
+    expect(source).toContain("enabled: !!userId && !authIsLoading");
+    expect(source).toContain("{ userId }");
+    expect(source).toContain(
+      "[router, cardWidth, recentLettersBySpaceId]",
+    );
+    expect(source).toContain("extraData={recentLettersBySpaceId}");
+    expect(source).toContain(
+      "...spaceLettersQueries.map((query) => query.refetch())",
+    );
+    expect(source).toContain("for (const queryKey of spaceLetterQueryKeys)");
+    expect(source).toContain(
+      "void queryClient.refetchQueries({ queryKey, exact: true })",
+    );
   });
 
   it("uses distinct copy for operator approvals and personal applications", () => {
