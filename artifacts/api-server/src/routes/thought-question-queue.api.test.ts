@@ -278,7 +278,7 @@ vi.mock("../services/preliminary-question-format", () => ({
   isQuestionThoughtMarkdown: () => false,
 }));
 
-const { default: router } = await import("./thoughts");
+const { default: router, _drainBackgroundGenerations } = await import("./thoughts");
 const { generatePreliminaryThoughtQuestion } = await import(
   "../services/generate-preliminary-thought-question"
 );
@@ -372,7 +372,10 @@ async function request(baseUrl: string, userId: string, path: string, init?: Req
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // Drain any background generation tasks left over from the previous test before
+  // resetting shared state, so stale DB writes don't bleed into the next scenario.
+  await _drainBackgroundGenerations();
   state.activeUser = "";
   state.selectedThoughtId = "";
   state.generatedCount = 0;
@@ -581,7 +584,7 @@ describe("thought question queue API", () => {
     });
   });
 
-  it("returns a bounded, ordered full queue while retaining current and next aliases", async () => {
+  it("returns the minimum backlog immediately and fills the full queue via background AI", async () => {
     seedCandidates("user-a", 18);
 
     await withServer(async (baseUrl) => {
@@ -589,19 +592,16 @@ describe("thought question queue API", () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as QueueResponse;
 
-      expect(body.queue).toHaveLength(6);
-      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
-        "generated-1",
-        "generated-2",
-        "generated-3",
-        "generated-4",
-        "generated-5",
-        "generated-6",
-      ]);
+      // Immediate response always has at least the minimum backlog (random fallback).
+      expect(body.queue).toHaveLength(3);
       expect(body.current).toMatchObject({ id: "generated-1" });
       expect(body.next).toMatchObject({ id: "generated-2" });
-      expect(state.generatedCount).toBe(6);
+
+      // Background AI fills remaining slots up to the target size.
+      await _drainBackgroundGenerations();
+      expect(state.generatedCount).toBe(6); // 3 random fallback + 3 AI
       expect(state.lastCandidateLimit).toBe(18);
+      expect(state.queues.get("user-a")).toHaveLength(6);
     });
   });
 
@@ -634,9 +634,13 @@ describe("thought question queue API", () => {
 
     await withServer(async (baseUrl) => {
       const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
-      expect(body.queue).toHaveLength(6);
-      expect(body.queue.at(-1)).toMatchObject({ id: "generated-1" });
+      // Immediate response has the 5 existing questions (already above the minimum floor).
+      expect(body.queue).toHaveLength(5);
+
+      // Background AI generates 1 question from the one remaining unused source.
+      await _drainBackgroundGenerations();
       expect(state.generatedCount).toBe(1);
+      expect(state.queues.get("user-a")).toHaveLength(6);
     });
   });
 
@@ -647,9 +651,13 @@ describe("thought question queue API", () => {
 
     await withServer(async (baseUrl) => {
       const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
-      expect(body.queue).toHaveLength(6);
-      expect(body.queue.at(-1)).toMatchObject({ id: "generated-1" });
+      // Immediate response has the 5 existing questions (already above the minimum floor).
+      expect(body.queue).toHaveLength(5);
+
+      // Background AI generates 1 question from the 3 non-question direct sources.
+      await _drainBackgroundGenerations();
       expect(state.generatedCount).toBe(1);
+      expect(state.queues.get("user-a")).toHaveLength(6);
     });
   });
 
@@ -747,7 +755,7 @@ describe("thought question queue API", () => {
     });
   });
 
-  it("GET /question-queue: AI generation does not run inside a DB transaction", async () => {
+  it("GET /question-queue: background AI generation does not run inside a DB transaction", async () => {
     seedCandidates("user-a", 3);
     let insideTransaction = false;
     let aiCalledInsideTx = false;
@@ -770,6 +778,8 @@ describe("thought question queue API", () => {
       await withServer(async (baseUrl) => {
         const response = await request(baseUrl, "user-a", "/thoughts/question-queue");
         expect(response.status).toBe(200);
+        // Drain background before asserting — AI fires after the response is sent.
+        await _drainBackgroundGenerations();
         expect(aiCalledInsideTx).toBe(false);
       });
     } finally {
@@ -844,15 +854,14 @@ describe("thought question queue API", () => {
     }
   });
 
-  it("discards AI results in the write phase when a concurrent request consumed the same sources", async () => {
-    // Simulate the race: Phase 1 selects sources S1–S3, another request uses
-    // them during Phase 2 (AI), Phase 3 must discard the stale result and fall
-    // back to random questions so no duplicate-source provenance is written.
+  it("discards background AI results when a concurrent request consumed the same sources", async () => {
+    // Simulate the race: Phase 1 reads candidates S1–S3 for background generation.
+    // A concurrent request marks them as used while the background AI is running.
+    // The background write phase must discard the stale result and not insert it.
     seedCandidates("user-a", 3);
 
     vi.mocked(generatePreliminaryThoughtQuestion).mockImplementationOnce(async () => {
-      // Simulate a concurrent request marking the same sources as used between
-      // Phase 1 (candidate read) and Phase 3 (write under the advisory lock).
+      // Simulate a concurrent request marking the sources as used while AI runs.
       state.usedSources.set(
         "user-a",
         new Set(["user-a-source-1", "user-a-source-2", "user-a-source-3"]),
@@ -865,11 +874,50 @@ describe("thought question queue API", () => {
         await request(baseUrl, "user-a", "/thoughts/question-queue")
       ).json()) as QueueResponse;
 
-      // The AI result is discarded because its sources became used.
-      // The random fallback fills the minimum backlog instead.
+      // Immediate response: minimum backlog filled with 3 random fallback questions.
       expect(body.queue).toHaveLength(3);
-      // All three are random fallback (no source-based question inserted).
-      expect(state.generatedCount).toBe(3);
+
+      // Drain background — AI result is discarded because its sources were consumed.
+      // No extra questions are added; the minimum floor (already at 3) is sufficient.
+      await _drainBackgroundGenerations();
+      expect(state.generatedCount).toBe(3); // 3 random fallback only, no AI question saved
+    });
+  });
+
+  it("does not run concurrent background AI generation for the same user", async () => {
+    seedCandidates("user-a", 18);
+    let aiCallCount = 0;
+
+    // First call takes longer — lets a second request arrive while it is still running.
+    let unblockFirst: () => void;
+    const firstCallGate = new Promise<void>((resolve) => { unblockFirst = resolve; });
+
+    vi.mocked(generatePreliminaryThoughtQuestion)
+      .mockImplementationOnce(async () => {
+        await firstCallGate;
+        aiCallCount++;
+        return { title: "생성된 질문?", description: "설명입니다." };
+      })
+      .mockImplementation(async () => {
+        aiCallCount++;
+        return { title: "생성된 질문?", description: "설명입니다." };
+      });
+
+    await withServer(async (baseUrl) => {
+      // Fire two simultaneous GET requests for the same user.
+      const [res1, res2] = await Promise.all([
+        request(baseUrl, "user-a", "/thoughts/question-queue"),
+        request(baseUrl, "user-a", "/thoughts/question-queue"),
+      ]);
+      expect(res1.status).toBe(200);
+      expect(res2.status).toBe(200);
+
+      // Unblock the first AI call so background tasks can finish.
+      unblockFirst!();
+      await _drainBackgroundGenerations();
+
+      // Only one background generation pass should have run for this user.
+      expect(aiCallCount).toBeLessThanOrEqual(3); // max one pass of 3 questions
     });
   });
 });
