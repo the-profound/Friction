@@ -156,8 +156,8 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       insertHardBreak() {
         sendCommand({ type: "insertHardBreak" });
       },
-      insertQuote(text: string) {
-        sendCommand({ type: "insertQuote", text });
+      insertQuote(text: string, attribution?: string) {
+        sendCommand({ type: "insertQuote", text, attribution });
       },
       autoSplitImages() {
         return new Promise<{ hadConsecutiveImages: boolean }>((resolve) => {

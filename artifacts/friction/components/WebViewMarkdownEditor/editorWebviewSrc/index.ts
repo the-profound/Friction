@@ -1976,17 +1976,22 @@ function spellFindRange(
         }
         case "insertQuote": {
           if (editor && !editor.isDestroyed && cmd.text) {
-            // cmd.text may be a JSON-encoded { text, attribution? } object
-            // (produced by the reader sentence-quote path) or a plain string
-            // (produced by the quote-picker path). Parse defensively.
+            // Keep the direct attribution field for the shared quote-picker
+            // contract. Parse the old JSON payload too so existing callers
+            // continue to insert the same document structure.
             let quoteText = cmd.text as string;
-            let quoteAttribution: string | null = null;
+            let quoteAttribution: string | null =
+              typeof cmd.attribution === "string" && cmd.attribution.trim()
+                ? cmd.attribution.trim()
+                : null;
             try {
               const parsed = JSON.parse(cmd.text as string) as unknown;
               if (parsed && typeof parsed === "object" && "text" in parsed) {
                 quoteText = (parsed as { text: string }).text;
-                const attr = (parsed as { attribution?: string }).attribution;
-                if (attr && attr.trim()) quoteAttribution = attr.trim();
+                if (!quoteAttribution) {
+                  const attr = (parsed as { attribution?: string }).attribution;
+                  if (attr && attr.trim()) quoteAttribution = attr.trim();
+                }
               }
             } catch {
               // Not JSON — treat as plain string.

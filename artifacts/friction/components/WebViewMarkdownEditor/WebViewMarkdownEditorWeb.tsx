@@ -474,11 +474,18 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           editor.chain().focus().setHardBreak().run();
         }
       },
-      insertQuote(text: string) {
+      insertQuote(text: string, attribution?: string) {
         if (editor && !editor.isDestroyed && text) {
+          const quoteAttribution = attribution?.trim();
+          const blockContent = [
+            { type: "paragraph", content: [{ type: "text", text }] },
+            ...(quoteAttribution
+              ? [{ type: "paragraph", content: [{ type: "text", text: quoteAttribution }] }]
+              : []),
+          ];
           editor.chain().focus().insertContent({
             type: "blockquote",
-            content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+            content: blockContent,
           }).run();
         }
       },

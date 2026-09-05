@@ -95,6 +95,7 @@ import {
 } from "@workspace/api-client-react";
 import { isMeaningfulThoughtMarkdown } from "@workspace/api-zod";
 import { useQueryClient } from "@tanstack/react-query";
+import { buildStoredSentenceQuote } from "@/lib/storedSentenceQuote";
 import {
   invalidateArticleLists,
   invalidateThoughtLists,
@@ -2410,7 +2411,8 @@ export default function WritingScreen() {
 
   const handleSelectQuoteSentence = useCallback((sentence: StoredSentence) => {
     if (isNavigatingRef.current) return;
-    editorRef.current?.insertQuote(sentence.text);
+    const quote = buildStoredSentenceQuote(sentence);
+    editorRef.current?.insertQuote(quote.text, quote.attribution);
     closePanelRestoreKeyboard();
   }, [closePanelRestoreKeyboard]);
 

@@ -50,7 +50,7 @@ export type RNToWebViewCommand =
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }
   | { type: "insertHardBreak" }
-  | { type: "insertQuote"; text: string }
+  | { type: "insertQuote"; text: string; attribution?: string }
   | { type: "autoSplitImages" }
   | { type: "scrollToBlock"; pageIndex: number; blockIndex: number }
   | { type: "setSpellHighlight"; original: string; contextHint: string; occurrenceIndex: number }
@@ -125,7 +125,7 @@ export interface WebViewMarkdownEditorRef {
   toggleMark: (mark: string) => void;
   insertDivider: () => void;
   insertHardBreak: () => void;
-  insertQuote: (text: string) => void;
+  insertQuote: (text: string, attribution?: string) => void;
   autoSplitImages: () => Promise<{ hadConsecutiveImages: boolean }>;
   scrollToBlock: (pageIndex: number, blockIndex: number) => void;
   setSpellHighlight: (original: string, contextHint: string, occurrenceIndex: number) => void;
