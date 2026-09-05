@@ -5,6 +5,7 @@ import {
   StyleSheet,
   FlatList,
   Image,
+  RefreshControl,
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -35,7 +36,9 @@ import {
   getListUserSpaceLettersQueryKey,
 } from "@workspace/api-client-react";
 import { isQueryStale } from "@/lib/useScreenFocused";
+import { useIsOnline } from "@/lib/useIsOnline";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
+import { useToast } from "@/contexts/ToastContext";
 import type { Article, SpaceListItem, SendRecordWithDetails } from "@workspace/api-client-react";
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
@@ -77,8 +80,11 @@ export default function MyScreen() {
   const { isLoading: authIsLoading } = useAuth();
   const queryClient = useQueryClient();
   const { width: windowWidth } = useWindowDimensions();
+  const isOnline = useIsOnline();
+  const { showToast } = useToast();
 
   const [myTab, setMyTab] = useState<MyTab>("letters");
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   // Shared "내 편지 선택 오버레이" hook.
   // cancelScrollRestorationRef breaks the hook-ordering cycle: the hook's
@@ -108,6 +114,11 @@ export default function MyScreen() {
   const refetchUserReads = userReadsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
+      // Offline: every one of these queries has network-dependent list/profile
+      // data already backed by the disk cache (see lib/offlineQueryPersistence.ts),
+      // so there is nothing to gain from firing paused fetches on every focus —
+      // skip them entirely and let the cached data keep rendering as-is.
+      if (!isOnline) return;
       if (isQueryStale(queryClient, getGetUserQueryKey(userId))) {
         refetchUser();
       }
@@ -134,8 +145,32 @@ export default function MyScreen() {
           queryKey: getListUserSpaceLettersQueryKey(userId),
         });
       }
-    }, [queryClient, userId, refetchUser, refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchUserReads]),
+    }, [queryClient, userId, isOnline, refetchUser, refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchUserReads]),
   );
+
+  // Manual "pull to refresh" — the one network-dependent action this screen
+  // exposes to the user besides the error-state retry button. Offline, a
+  // refetch would just sit paused with no visible feedback, so tell the user
+  // why instead of spinning the RefreshControl indefinitely.
+  const handleManualRefresh = useCallback(async () => {
+    if (!isOnline) {
+      showToast({ message: "오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요.", type: "info" });
+      return;
+    }
+    setIsManualRefreshing(true);
+    try {
+      await Promise.all([
+        refetchUser(),
+        refetchArticles(),
+        refetchSpaces(),
+        refetchSendRecords(),
+        refetchNeighbors(),
+        refetchUserReads(),
+      ]);
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  }, [isOnline, showToast, refetchUser, refetchArticles, refetchSpaces, refetchSendRecords, refetchNeighbors, refetchUserReads]);
 
   const sendRecordByArticleId = useMemo(
     () =>
@@ -247,16 +282,34 @@ export default function MyScreen() {
   );
 
 
+  // The active tab's query, when it has one — used to tell "still loading",
+  // "offline with nothing cached yet", and "genuinely empty" apart in the
+  // shared empty-state renderer below.
+  const activeTabQuery =
+    myTab === "letters" ? articlesQuery : myTab === "spaces" ? spacesQuery : null;
+
   const renderEmpty = useCallback(
     (message: string, subtitle?: string) => {
-      const loading =
-        authIsLoading ||
-        (myTab === "letters" && articlesQuery.isLoading) ||
-        (myTab === "spaces" && spacesQuery.isLoading);
+      const loading = authIsLoading || (activeTabQuery?.isLoading ?? false);
       if (loading) {
         return (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyText}>불러오는 중...</Text>
+          </View>
+        );
+      }
+      // Offline and this query has never successfully fetched anything (no
+      // disk cache to fall back to either, e.g. very first launch offline) —
+      // say so explicitly rather than the misleading "there's nothing here"
+      // empty state, which reads as a real (permanent) empty result.
+      if (!isOnline && activeTabQuery?.isPending) {
+        return (
+          <View style={styles.emptyWrap}>
+            <Feather name="wifi-off" size={22} color={Colors.zinc400} />
+            <Text style={styles.emptyTitle}>오프라인 상태예요</Text>
+            <Text style={styles.emptyText}>
+              네트워크에 연결하면 데이터를 불러올 수 있어요
+            </Text>
           </View>
         );
       }
@@ -267,17 +320,23 @@ export default function MyScreen() {
         </View>
       );
     },
-    [myTab, authIsLoading, articlesQuery.isLoading, spacesQuery.isLoading],
+    [authIsLoading, activeTabQuery, isOnline],
   );
 
   const renderError = useCallback(
-    (onRetry: () => void) => (
+    (message: string, onRetry: () => void) => (
       <View style={styles.emptyWrap}>
-        <Text style={styles.emptyTitle}>편지를 불러오지 못했어요</Text>
+        <Text style={styles.emptyTitle}>{message}</Text>
         <ScalePressable
           style={styles.retryButton}
           contentStyle={styles.retryButtonContent}
-          onPress={onRetry}
+          onPress={() => {
+            if (!isOnline) {
+              showToast({ message: "오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요.", type: "info" });
+              return;
+            }
+            onRetry();
+          }}
           accessibilityRole="button"
           accessibilityLabel="다시 시도"
         >
@@ -285,7 +344,7 @@ export default function MyScreen() {
         </ScalePressable>
       </View>
     ),
-    [],
+    [isOnline, showToast],
   );
 
   const contentPadding = useMemo(
@@ -413,10 +472,12 @@ export default function MyScreen() {
   const listEmpty =
     myTab === "letters"
       ? articlesQuery.isError
-        ? renderError(() => articlesQuery.refetch())
+        ? renderError("편지를 불러오지 못했어요", () => articlesQuery.refetch())
         : renderEmpty("아직 보낸 편지가 없어요")
       : myTab === "spaces"
-        ? renderEmpty("참여 중인 공간이 없어요")
+        ? spacesQuery.isError
+          ? renderError("공간을 불러오지 못했어요", () => spacesQuery.refetch())
+          : renderEmpty("참여 중인 공간이 없어요")
         : renderEmpty("아직 비어있어요", "간행물 기능은 곧 만나볼 수 있어요");
 
   return (
@@ -543,6 +604,13 @@ export default function MyScreen() {
         onScroll={handleSelectionScroll}
         scrollEventThrottle={16}
         scrollEnabled={!isOverlayActive}
+        refreshControl={
+          <RefreshControl
+            refreshing={isManualRefreshing}
+            onRefresh={handleManualRefresh}
+            tintColor={Colors.zinc400}
+          />
+        }
       />
 
       {/* Collapse the overlay's touch surface to none when inactive.
