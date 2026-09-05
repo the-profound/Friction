@@ -104,7 +104,7 @@ body{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-siz
 body{padding:16px 0 0;overflow-x:hidden;overflow-y:visible;position:relative;background:#fff}
 `.trim();
 
-const VERSION = "3.26.0";
+const VERSION = "3.27.0";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";

@@ -878,6 +878,7 @@ interface InitPayload {
   placeholder?: string;
   editorConfigVersion?: string;
   editorSessionId?: string;
+  hideTitle?: boolean;
   ensureTrailingParagraph?: boolean;
   typography?: BodyTypographyMetrics;
   layoutGeneration?: number;
@@ -1376,6 +1377,18 @@ function spellFindRange(
     titleInput.style.height = titleInput.scrollHeight + "px";
   }
 
+  // hideTitle 은 최초 "init" 처리 중, ProseMirror 를 마운트하는 setupEditor()
+  // 보다 먼저 적용해야 한다. onReady 이후 별도 injection 으로 뒤늦게 적용하면
+  // 제목 입력창 + 본문이 분리된 기본 레이아웃이 첫 프레임에 노출되는
+  // flash 가 생긴다.
+  function applyTitleVisibility(hideTitle: boolean) {
+    if (!hideTitle) return;
+    if (titleInput) titleInput.style.display = "none";
+    document.body.style.paddingTop = "0px";
+    const ec = document.getElementById("editor-content");
+    if (ec) (ec as HTMLElement).style.paddingBottom = "24px";
+  }
+
   function focusEditorStartFromTitle() {
     titleInput?.blur();
     if (!editor || editor.isDestroyed) return;
@@ -1642,6 +1655,7 @@ function spellFindRange(
             titleInput.value = titleValue;
             autoResizeTitle();
           }
+          applyTitleVisibility(!!payload.hideTitle);
 
           if (!editor) {
             setupEditor(placeholder, initialMarkdown, ensureTrailingParagraph);

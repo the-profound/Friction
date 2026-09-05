@@ -196,6 +196,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
                   editorSessionId: editorSessionIdRef.current,
                   placeholder,
                   titleValue,
+                  hideTitle,
                   ensureTrailingParagraph,
                    typography: typographyStateRef.current.metrics,
                    layoutGeneration: typographyStateRef.current.generation,
@@ -212,17 +213,12 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               break;
             case "onReady":
               // markReady is called by onBodyFontsReady before init is sent.
+              // hideTitle is applied inside the WebView's "init" handler
+              // (before setupEditor mounts TipTap) via the init payload, so
+              // no separate injection round-trip is needed here — doing it
+              // here would run after first paint and cause a visible flash.
               // Here we only record boot timing and notify the caller.
               recordWebViewBoot("editor", mountedAtRef.current);
-              if (hideTitle) {
-                bridge.injectRaw(
-                  `(function(){try{` +
-                    `var t=document.getElementById('title-input');if(t)t.style.display='none';` +
-                    `if(document.body)document.body.style.paddingTop='0px';` +
-                    `var ec=document.getElementById('editor-content');if(ec)ec.style.paddingBottom='24px';` +
-                    `}catch(e){}})();true;`,
-                );
-              }
               onReady?.(data.payload?.editorSessionId);
               break;
             case "onBodyTypographyDiagnostic":

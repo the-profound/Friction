@@ -10,6 +10,13 @@ export interface EditorInitPayload {
   placeholder?: string;
   titleValue?: string;
   /**
+   * true면 TipTap 에디터 setup(setupEditor) 이전에 제목 영역을 숨긴 채
+   * 렌더링한다. onReady 이후 별도 injection으로 뒤늦게 숨기면 제목 입력창이
+   * 잠깐 노출되는 flash가 생기므로, init 페이로드에 포함시켜 최초 렌더링부터
+   * 반영한다.
+   */
+  hideTitle?: boolean;
+  /**
    * 마지막 블록이 비본문 블록일 때 커서용 빈 단락을 덧붙일지 여부.
    * 기본값은 true로, 기존 편집기의 이어쓰기 동작을 유지한다.
    */

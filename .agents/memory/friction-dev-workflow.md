@@ -63,6 +63,10 @@ Task 브랜치가 소스만 수정하고 머지될 경우 이 단계가 누락�
 fix가 적용되지 않아 본문 저장 버그가 지속됨. `grep programmaticUpdatePending editorHtml.ts`
 count=0 이면 번들이 오래된 것.
 
+If you bump `VERSION` in `buildEditorHtml.mjs` when rebuilding, also update the hardcoded
+version-substring assertion in `lib/__tests__/on01aAutosave.test.ts` (e.g. `toContain("3.26.0-")`)
+or vitest fails on an otherwise-correct bundle.
+
 ## Pre-existing baselines (not your regression)
 - `artifacts/friction` has ~31 baseline `tsc` errors confined to
   `components/WebViewMarkdownEditor/editorWebviewSrc/index.ts` (DOM `Node` typing
