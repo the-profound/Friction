@@ -33,7 +33,7 @@ import {
   invalidateMyCollections,
   invalidateMyCollectionDetail,
 } from "@/lib/queryInvalidation";
-import type { MyCollectionArticleWithDetails, MyCollection, Article } from "@workspace/api-client-react";
+import type { MyCollectionArticleWithDetails, MyCollection } from "@workspace/api-client-react";
 import { MyArticlesPickerBottomSheet } from "@/components/MyArticlesPickerBottomSheet/MyArticlesPickerBottomSheet";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import SubmitButton from "@/components/SubmitButton/SubmitButton";
@@ -42,6 +42,7 @@ import DropdownFilter from "@/components/DropdownFilter/DropdownFilter";
 import type { DropdownOption } from "@/components/DropdownFilter/DropdownFilter";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
@@ -377,27 +378,15 @@ export default function PersonalCollectionDetailScreen() {
     ({ item }: { item: MyCollectionArticleWithDetails }) => {
       const isSelected = selectedIds.has(item.articleId);
       return (
-        <ScalePressable
-          style={styles.selectionRow}
+        <ArticleListItem
+          articleId={item.articleId}
+          title={item.article?.title ?? ""}
+          authorName={item.article?.authorNickname}
+          cover={item.article?.cover}
           onPress={() => toggleSelect(item.articleId)}
-          contentStyle={styles.selectionRowContent}
-        >
-          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
-          </View>
-          <View style={styles.selectionItemContent}>
-            <View style={styles.articleItem}>
-              <View style={styles.articleInfo}>
-                <Text style={styles.articleTitle} numberOfLines={1}>
-                  {item.article?.title ?? "제목 없음"}
-                </Text>
-                <Text style={styles.articleDate}>
-                  {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
-                </Text>
-              </View>
-            </View>
-          </View>
-        </ScalePressable>
+          selected={isSelected}
+          accessibilityLabel={`${item.article?.title?.trim() || "제목 없음"} 편지 ${isSelected ? "선택 해제" : "선택"}`}
+        />
       );
     },
     [selectedIds, toggleSelect],
@@ -440,7 +429,7 @@ export default function PersonalCollectionDetailScreen() {
           },
           {
             label: "삭제",
-            color: "#EF4444",
+            color: Colors.primaryAction,
             onPress: () => {
               closeOpenRow();
               handleRemoveArticle(item.articleId);
@@ -449,9 +438,14 @@ export default function PersonalCollectionDetailScreen() {
         ]}
         onSwipeOpen={() => handleSwipeOpen(item.articleId)}
         onScrollLock={(locked) => setScrollEnabled(!locked)}
+        actionRightInset={Spacing.screenPx}
+        actionBottomInset={Spacing.cardGap}
       >
-        <ScalePressable
-          style={styles.articleItemOuter}
+        <ArticleListItem
+          articleId={item.articleId}
+          title={item.article?.title ?? ""}
+          authorName={item.article?.authorNickname}
+          cover={item.article?.cover}
           onPress={() => {
             closeOpenRow();
             if (item.article) {
@@ -465,19 +459,7 @@ export default function PersonalCollectionDetailScreen() {
               });
             }
           }}
-          delayLongPress={400}
-          contentStyle={styles.articleItemContent}
-        >
-          <View style={styles.articleInfo}>
-            <Text style={styles.articleTitle} numberOfLines={1}>
-              {item.article?.title ?? "제목 없음"}
-            </Text>
-            <Text style={styles.articleDate}>
-              {new Date(item.addedAt).toLocaleDateString("ko-KR")}에 추가
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={16} color={Colors.zinc300} />
-        </ScalePressable>
+        />
       </SwipeableRow>
     ),
     [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router, userId, id, openLetterOverlay, collection?.name],
@@ -573,7 +555,7 @@ export default function PersonalCollectionDetailScreen() {
       ) : selectionMode ? (
         <FlatList
           {...LIST_PERF_PRESET}
-          data={articles}
+          data={sortedArticles}
           keyExtractor={(item) => item.articleId}
           renderItem={renderSelectionItem}
           contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 80 + 24 }]}
@@ -840,37 +822,6 @@ const styles = StyleSheet.create({
   gridContent: {
     paddingTop: 8,
   },
-  articleItem: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-    backgroundColor: Colors.white,
-  },
-  articleItemOuter: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
-  },
-  articleItemContent: {
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
-    backgroundColor: Colors.white,
-    flexDirection: "row",
-    alignItems: "center",},
-  articleInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  articleTitle: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.zinc900,
-  },
-  articleDate: {
-    ...Typography.caption,
-    fontSize: 12,
-    color: Colors.zinc500,
-  },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
@@ -1001,32 +952,6 @@ const styles = StyleSheet.create({
     ...Typography.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
-  },
-  selectionRow: {
-  },
-  selectionRowContent: {
-    paddingLeft: Spacing.screenPx,
-    backgroundColor: Colors.white,
-    flexDirection: "row",
-    alignItems: "center",},
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: Colors.zinc300,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.white,
-    marginRight: 12,
-    flexShrink: 0,
-  },
-  checkboxSelected: {
-    backgroundColor: Colors.zinc900,
-    borderColor: Colors.zinc900,
-  },
-  selectionItemContent: {
-    flex: 1,
   },
   selectionBar: {
     paddingHorizontal: Spacing.screenPx,

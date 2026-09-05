@@ -29,6 +29,10 @@ const scheduleSheetSource = readFileSync(
   new URL("../ArticleScheduleSheet/ArticleScheduleSheet.tsx", import.meta.url),
   "utf8",
 );
+const collectionDetailSource = readFileSync(
+  new URL("../../app/of-01-detail.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("ArticleListItem contract", () => {
   it("renders the shared cover surface with only title and author metadata", () => {
@@ -116,5 +120,31 @@ describe("ArticleListItem contract", () => {
     expect(pickerSource).not.toContain("ArticleCardCover");
     expect(sendInlineSource).not.toContain("useGetArticle");
     expect(pickerSource).not.toContain("useGetArticle");
+  });
+
+  it("uses the shared cover row for collection list and selection modes", () => {
+    expect(collectionDetailSource.match(/<ArticleListItem/g)).toHaveLength(2);
+    expect(collectionDetailSource).toContain(
+      "authorName={item.article?.authorNickname}",
+    );
+    expect(collectionDetailSource).toContain("cover={item.article?.cover}");
+    expect(collectionDetailSource).toContain(
+      'title={item.article?.title ?? ""}',
+    );
+    expect(collectionDetailSource).toContain("selected={isSelected}");
+  });
+
+  it("keeps collection swipe actions aligned with the raised card geometry", () => {
+    expect(collectionDetailSource).toContain(
+      "actionRightInset={Spacing.screenPx}",
+    );
+    expect(collectionDetailSource).toContain(
+      "actionBottomInset={Spacing.cardGap}",
+    );
+    expect(collectionDetailSource).toContain("onSwipeOpen={() => handleSwipeOpen(item.articleId)}");
+    expect(collectionDetailSource).toContain(
+      "onScrollLock={(locked) => setScrollEnabled(!locked)}",
+    );
+    expect(collectionDetailSource).toContain("color: Colors.primaryAction");
   });
 });
