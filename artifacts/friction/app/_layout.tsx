@@ -6,7 +6,6 @@ import {
   NotoSerifKR_800ExtraBold,
 } from "@expo-google-fonts/noto-serif-kr";
 import {
-  QueryClient,
   QueryClientProvider,
   onlineManager,
 } from "@tanstack/react-query";
@@ -28,6 +27,10 @@ import { useNotificationDeepLink } from "@/lib/useNotificationDeepLink";
 import { runtimeConfig } from "@/lib/runtimeConfig";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import {
+  QueryClientBoundary,
+  renderQueryClientBoundary,
+} from "@/components/QueryClientBoundary";
 import ToastContainer from "@/components/Toast/Toast";
 import ServerVersionGate from "@/components/ServerVersionGate/ServerVersionGate";
 import { NavigationProvider } from "@/contexts/NavigationContext";
@@ -40,6 +43,7 @@ import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { uploadPendingCrashLogIfAny } from "@/lib/crashDiagnostics";
 import { supabase } from "@/lib/supabase";
 import { getCurrentAuthAccessToken } from "@/lib/authTokenStore";
+import { queryClient } from "@/lib/queryClient";
 import { Colors } from "@/constants/tokens";
 import { Platform } from "react-native";
 import { ReaderTransitionProvider } from "@/contexts/ReaderTransitionContext";
@@ -82,34 +86,6 @@ try {
 } catch (err) {
   console.warn("[SplashScreen] preventAutoHideAsync failed:", err);
 }
-
-// Keep cached data "fresh" for 30 seconds so that switching between tabs
-// does not trigger a full refetch (and show a loading spinner) if the data
-// was fetched within the last half-minute.  Individual screens still call
-// refetch() on focus, but only when the data is older than this threshold
-// (see `isQueryStale` in lib/useScreenFocused.ts).
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Treat cached data as fresh for 30s — avoids refetch spinners during quick tab switches.
-      staleTime: 30_000,
-      // Keep inactive query cache around for 5 minutes so brief tab departures
-      // (e.g. checking another app) don't drop data and force a full reload.
-      gcTime: 5 * 60_000,
-      // Retry once on failure — covers transient mobile network blips without
-      // burning battery on infinite retry loops when the server is truly down.
-      retry: 1,
-      // After the device regains connectivity, always refetch so stale cached
-      // data from before the disconnect is replaced with the latest server state.
-      refetchOnReconnect: "always",
-    },
-    mutations: {
-      // Never auto-retry mutations — they may be non-idempotent (e.g. send letter,
-      // create collection); the user should explicitly retry from the UI instead.
-      retry: 0,
-    },
-  },
-});
 
 function ActiveReadingGuard({
   children,
@@ -162,47 +138,53 @@ function AuthConfigurationErrorView({ message }: { message: string }) {
 
 function ProtectedRouteStack({ userId }: { userId: string }) {
   return (
-    <UserProvider key={userId} userId={userId}>
-      <ActiveReadingGuard userId={userId}>
-        <Stack key={`protected-${userId}`} screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="read" options={{ animation: "none" }} />
-          <Stack.Screen name="of-01" />
-          <Stack.Screen name="of-01-detail" />
-          <Stack.Screen name="of-02" />
-          <Stack.Screen name="of-02-detail" />
-          <Stack.Screen name="of-03" />
-          <Stack.Screen name="stored-sentence-detail" />
-          <Stack.Screen name="of-space-rounds" />
-          <Stack.Screen name="of-space-basic-settings" />
-          <Stack.Screen name="of-space-start" />
-          <Stack.Screen name="of-space-schedule-send" />
-          <Stack.Screen name="of-space-archive" />
-          <Stack.Screen
-            name="on-01a"
-            options={{ animation: "none", animationTypeForReplace: "pop" }}
-          />
-          <Stack.Screen
-            name="on-01b"
-            options={{ animation: "none", animationTypeForReplace: "pop" }}
-          />
-          <Stack.Screen name="on-01c" options={{ animation: "none" }} />
-          <Stack.Screen name="to-03" />
-          <Stack.Screen name="to-send" options={{ presentation: "card", animation: "slide_from_right" }} />
-          <Stack.Screen name="mypage" />
-          <Stack.Screen name="user-profile/[userId]" />
-          <Stack.Screen name="mypage-neighbors" />
-          <Stack.Screen name="mypage-sendrecords" />
-          <Stack.Screen name="settings" options={{ presentation: "card" }} />
-          <Stack.Screen name="terms" options={{ presentation: "card" }} />
-          {/* Keep the login route declared while redirecting after sign-in.
-              It is still inside UserProvider, so it cannot expose a provider
-              gap if the router has not processed the redirect yet. */}
-          <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="login-callback" options={{ headerShown: false }} />
-        </Stack>
-      </ActiveReadingGuard>
-    </UserProvider>
+    <QueryClientBoundary>
+      <UserProvider key={userId} userId={userId}>
+        <ActiveReadingGuard userId={userId}>
+          <Stack
+            key={`protected-${userId}`}
+            screenLayout={renderQueryClientBoundary}
+            screenOptions={{ headerShown: false, headerBackTitle: "Back" }}
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="read" options={{ animation: "none" }} />
+            <Stack.Screen name="of-01" />
+            <Stack.Screen name="of-01-detail" />
+            <Stack.Screen name="of-02" />
+            <Stack.Screen name="of-02-detail" />
+            <Stack.Screen name="of-03" />
+            <Stack.Screen name="stored-sentence-detail" />
+            <Stack.Screen name="of-space-rounds" />
+            <Stack.Screen name="of-space-basic-settings" />
+            <Stack.Screen name="of-space-start" />
+            <Stack.Screen name="of-space-schedule-send" />
+            <Stack.Screen name="of-space-archive" />
+            <Stack.Screen
+              name="on-01a"
+              options={{ animation: "none", animationTypeForReplace: "pop" }}
+            />
+            <Stack.Screen
+              name="on-01b"
+              options={{ animation: "none", animationTypeForReplace: "pop" }}
+            />
+            <Stack.Screen name="on-01c" options={{ animation: "none" }} />
+            <Stack.Screen name="to-03" />
+            <Stack.Screen name="to-send" options={{ presentation: "card", animation: "slide_from_right" }} />
+            <Stack.Screen name="mypage" />
+            <Stack.Screen name="user-profile/[userId]" />
+            <Stack.Screen name="mypage-neighbors" />
+            <Stack.Screen name="mypage-sendrecords" />
+            <Stack.Screen name="settings" options={{ presentation: "card" }} />
+            <Stack.Screen name="terms" options={{ presentation: "card" }} />
+            {/* Keep the login route declared while redirecting after sign-in.
+                It is still inside UserProvider, so it cannot expose a provider
+                gap if the router has not processed the redirect yet. */}
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="login-callback" options={{ headerShown: false }} />
+          </Stack>
+        </ActiveReadingGuard>
+      </UserProvider>
+    </QueryClientBoundary>
   );
 }
 

@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import React from "react";
 
 import { NavBar } from "@/components/NavBar/NavBar";
+import { renderQueryClientBoundary } from "@/components/QueryClientBoundary";
 import { useUser } from "@/contexts/UserContext";
 
 export default function TabLayout() {
@@ -11,6 +12,7 @@ export default function TabLayout() {
     <>
       <Tabs
         initialRouteName="on"
+        screenLayout={renderQueryClientBoundary}
         screenOptions={{
           headerShown: false,
           tabBarStyle: { display: "none" },
