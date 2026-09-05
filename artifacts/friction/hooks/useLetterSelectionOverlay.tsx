@@ -551,42 +551,47 @@ export function useLetterSelectionOverlay(
               ? "개인에게 발신된 편지는 수신자 공개로만 설정할 수 있어요"
               : "발신하지 않은 편지는 수신자 공개로만 설정할 수 있어요");
       inlineModalNode = (
-        <Pressable style={inlineOverlayStyles.backdrop} onPress={handleDismiss}>
-          <View style={inlineOverlayStyles.contentWrapper}>
-            <Pressable style={inlineOverlayStyles.card} onPress={(e) => e.stopPropagation()}>
-              <Text style={inlineOverlayStyles.title}>{title}</Text>
-              <Text style={inlineOverlayStyles.description}>{description}</Text>
-              <View style={inlineOverlayStyles.buttons}>
-                <ScalePressable
-                  style={inlineOverlayStyles.button}
-                  contentStyle={[inlineOverlayStyles.buttonContent, inlineOverlayStyles.cancelButton]}
-                  onPress={handleDismiss}
-                  disabled={isChangingVisibility}
-                  accessibilityRole="button"
-                  accessibilityLabel="취소"
-                >
-                  <Text style={inlineOverlayStyles.cancelText}>취소</Text>
-                </ScalePressable>
-                {isConfirmVisible && (
+        <View style={inlineOverlayStyles.fullScreenRoot}>
+          <Pressable style={inlineOverlayStyles.backdrop} onPress={handleDismiss}>
+            <View style={inlineOverlayStyles.contentWrapper}>
+              <Pressable style={inlineOverlayStyles.card} onPress={(e) => e.stopPropagation()}>
+                <Text style={inlineOverlayStyles.title}>{title}</Text>
+                <Text style={inlineOverlayStyles.description}>{description}</Text>
+                <View style={inlineOverlayStyles.buttons}>
                   <ScalePressable
                     style={inlineOverlayStyles.button}
                     contentStyle={[
                       inlineOverlayStyles.buttonContent,
-                      inlineOverlayStyles.confirmButton,
-                      isChangingVisibility && inlineOverlayStyles.buttonDisabled,
+                      inlineOverlayStyles.cancelButton,
                     ]}
-                    onPress={confirmVisibilityChange}
+                    onPress={handleDismiss}
                     disabled={isChangingVisibility}
                     accessibilityRole="button"
-                    accessibilityLabel="변경"
+                    accessibilityLabel="취소"
                   >
-                    <Text style={inlineOverlayStyles.confirmText}>변경</Text>
+                    <Text style={inlineOverlayStyles.cancelText}>취소</Text>
                   </ScalePressable>
-                )}
-              </View>
-            </Pressable>
-          </View>
-        </Pressable>
+                  {isConfirmVisible && (
+                    <ScalePressable
+                      style={inlineOverlayStyles.button}
+                      contentStyle={[
+                        inlineOverlayStyles.buttonContent,
+                        inlineOverlayStyles.confirmButton,
+                        isChangingVisibility && inlineOverlayStyles.buttonDisabled,
+                      ]}
+                      onPress={confirmVisibilityChange}
+                      disabled={isChangingVisibility}
+                      accessibilityRole="button"
+                      accessibilityLabel="변경"
+                    >
+                      <Text style={inlineOverlayStyles.confirmText}>변경</Text>
+                    </ScalePressable>
+                  )}
+                </View>
+              </Pressable>
+            </View>
+          </Pressable>
+        </View>
       );
     }
 
@@ -633,8 +638,15 @@ export function useLetterSelectionOverlay(
 // Styles for the View-based visibility dialog rendered inside the overlay's
 // native Modal window via the `inlineModal` prop.
 const inlineOverlayStyles = StyleSheet.create({
+  fullScreenRoot: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
+    width: "100%",
+    height: "100%",
     backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
