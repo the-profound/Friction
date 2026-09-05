@@ -47,4 +47,17 @@ describe("thought create idempotency contract", () => {
     );
     expect(createRoute).toContain('error: "Thought id is already in use"');
   });
+
+  it("updates an existing thought instead of running deletion logic", () => {
+    const source = readFileSync(join(__dirname, "thoughts.ts"), "utf8");
+    const updateRoute = source.slice(
+      source.indexOf('router.patch("/thoughts/:id"'),
+      source.indexOf("export function canPromoteThoughtToArticle"),
+    );
+
+    expect(updateRoute).toContain(".set({ content, updatedAt: new Date() })");
+    expect(updateRoute).toContain("return { status: 200, body: updated }");
+    expect(updateRoute).not.toContain(".set({ deletedAt })");
+    expect(updateRoute).not.toContain("return \"deleted\"");
+  });
 });

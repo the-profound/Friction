@@ -1133,7 +1133,7 @@ router.get("/thoughts", requireAuth, async (req, res) => {
 });
 
 router.post("/thoughts", requireAuth, async (req, res) => {
-  const parsed = UpdateThoughtBody.safeParse(req.body);
+  const parsed = CreateThoughtBody.safeParse(req.body);
   if (!parsed.success) {
     res
       .status(400)
@@ -1170,66 +1170,97 @@ router.post("/thoughts", requireAuth, async (req, res) => {
 
   let thought;
   if (clientId) {
-  const result = await db.transaction(async (tx) => {
-    await lockQuestionQueue(tx, userId);
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
-    );
-    const [existing] = await tx
-      .select({
-        id: thoughtsTable.id,
-        authorId: thoughtsTable.authorId,
-        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
-      })
-      .from(thoughtsTable)
-      .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
-      .for("update");
-
-    if (!existing) return "not-found" as const;
-    if (existing.authorId !== userId) return "forbidden" as const;
-
-    const [activePromotion] = await tx
-      .select({ id: thoughtPromotionsTable.id })
-      .from(thoughtPromotionsTable)
-      .where(
-        and(
-          eq(thoughtPromotionsTable.fromThoughtId, id),
-          eq(thoughtPromotionsTable.promotionType, "promote"),
-        ),
-      )
-      .limit(1);
-    if (activePromotion) return "promoted" as const;
-
-    const deletedAt = new Date();
-    const [deleted] = await tx
-      .update(thoughtsTable)
-      .set({ deletedAt })
-      .where(
-        and(
-          eq(thoughtsTable.id, id),
-          eq(thoughtsTable.authorId, userId),
-          isNull(thoughtsTable.deletedAt),
-          existing.migratedFromArticleId
-            ? eq(
-                thoughtsTable.migratedFromArticleId,
-                existing.migratedFromArticleId,
-              )
-            : isNull(thoughtsTable.migratedFromArticleId),
-        ),
-      )
-      .returning({ id: thoughtsTable.id });
-    if (!deleted) return "conflict" as const;
-    await tx
-      .delete(thoughtQuestionQueueTable)
-      .where(
-        and(
-          eq(thoughtQuestionQueueTable.userId, userId),
-          eq(thoughtQuestionQueueTable.thoughtId, id),
-        ),
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-create:${clientId}`}))`,
       );
-    await compactQuestionQueue(tx, userId);
-    return "deleted" as const;
-  });
+      const [inserted] = await tx
+        .insert(thoughtsTable)
+        .values(insertValues)
+        .onConflictDoNothing({ target: thoughtsTable.id })
+        .returning();
+      if (inserted) return { status: 201, thought: inserted } as const;
+
+      const [existing] = await tx
+        .select()
+        .from(thoughtsTable)
+        .where(eq(thoughtsTable.id, clientId))
+        .for("update");
+      if (!existing || existing.authorId !== authorId) {
+        return {
+          status: 409,
+          error: "Thought id is already in use",
+        } as const;
+      }
+
+      const [activePromotion] = await tx
+        .select({ id: thoughtPromotionsTable.id })
+        .from(thoughtPromotionsTable)
+        .where(eq(thoughtPromotionsTable.fromThoughtId, clientId))
+        .limit(1);
+      if (
+        activePromotion ||
+        existing.deletedAt ||
+        existing.migratedFromArticleId
+      ) {
+        return {
+          status: 409,
+          error: "Thought can no longer accept a create retry",
+        } as const;
+      }
+
+      if (
+        existing.createdFrom !== createdFrom ||
+        existing.sourceArticleId !== (sourceArticleId ?? null) ||
+        existing.sourceStoredSentenceId !==
+          (sourceStoredSentenceId ?? null) ||
+        existing.status !== (status ?? "NORMAL")
+      ) {
+        return {
+          status: 409,
+          error: "Thought create retry does not match the original request",
+        } as const;
+      }
+
+      const retryAction = getThoughtCreateRetryAction({
+        existingGeneration: existing.createRequestGeneration,
+        incomingGeneration: requestGeneration,
+        contentMatches: existing.content === content,
+      });
+      if (retryAction === "return-existing") {
+        return { status: 201, thought: existing } as const;
+      }
+      if (retryAction === "conflict") {
+        return {
+          status: 409,
+          error: "Thought create retry generation conflicts with existing content",
+        } as const;
+      }
+
+      const [updated] = await tx
+        .update(thoughtsTable)
+        .set({
+          content,
+          createRequestGeneration: requestGeneration,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(thoughtsTable.id, clientId),
+            eq(thoughtsTable.authorId, authorId),
+            isNull(thoughtsTable.deletedAt),
+            sql`${thoughtsTable.createRequestGeneration} < ${requestGeneration}`,
+          ),
+        )
+        .returning();
+      if (!updated) {
+        return {
+          status: 409,
+          error: "Thought changed before the create retry completed",
+        } as const;
+      }
+      return { status: 201, thought: updated } as const;
+    });
 
     if ("error" in result) {
       res.status(result.status).json({ error: result.error });
@@ -1341,7 +1372,6 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   }
 
   const result = await db.transaction(async (tx) => {
-    await lockQuestionQueue(tx, userId);
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
     );
@@ -1355,8 +1385,11 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
       .where(and(eq(thoughtsTable.id, id), isNull(thoughtsTable.deletedAt)))
       .for("update");
 
-    if (!existing) return "not-found" as const;
-    if (existing.authorId !== userId) return "forbidden" as const;
+    if (!existing)
+      return { status: 404, body: { error: "Thought not found" } } as const;
+    if (existing.authorId !== userId) {
+      return { status: 403, body: { error: "Forbidden" } } as const;
+    }
 
     const [activePromotion] = await tx
       .select({ id: thoughtPromotionsTable.id })
@@ -1368,12 +1401,18 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
         ),
       )
       .limit(1);
-    if (activePromotion) return "promoted" as const;
+    if (activePromotion) {
+      return {
+        status: 409,
+        body: {
+          error: "A promoted thought must be edited through its review article",
+        },
+      } as const;
+    }
 
-    const deletedAt = new Date();
-    const [deleted] = await tx
+    const [updated] = await tx
       .update(thoughtsTable)
-      .set({ deletedAt })
+      .set({ content, updatedAt: new Date() })
       .where(
         and(
           eq(thoughtsTable.id, id),
@@ -1387,18 +1426,27 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
             : isNull(thoughtsTable.migratedFromArticleId),
         ),
       )
-      .returning({ id: thoughtsTable.id });
-    if (!deleted) return "conflict" as const;
-    await tx
-      .delete(thoughtQuestionQueueTable)
-      .where(
-        and(
-          eq(thoughtQuestionQueueTable.userId, userId),
-          eq(thoughtQuestionQueueTable.thoughtId, id),
-        ),
-      );
-    await compactQuestionQueue(tx, userId);
-    return "deleted" as const;
+      .returning({
+        id: thoughtsTable.id,
+        authorId: thoughtsTable.authorId,
+        content: thoughtsTable.content,
+        createdFrom: thoughtsTable.createdFrom,
+        sourceArticleId: thoughtsTable.sourceArticleId,
+        sourceStoredSentenceId: thoughtsTable.sourceStoredSentenceId,
+        status: thoughtsTable.status,
+        migratedFromArticleId: thoughtsTable.migratedFromArticleId,
+        createdAt: thoughtsTable.createdAt,
+        updatedAt: thoughtsTable.updatedAt,
+      });
+    if (!updated) {
+      return {
+        status: 409,
+        body: {
+          error: "Thought changed while it was being updated. Please retry.",
+        },
+      } as const;
+    }
+    return { status: 200, body: updated } as const;
   });
 
   if (result.status === 404) {

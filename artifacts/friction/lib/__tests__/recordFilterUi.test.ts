@@ -16,17 +16,17 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).toContain('label="편지" active={kind === "letter"}');
   });
 
-  it("opens on letters and mixes queued questions into the letter feed", () => {
+  it("opens on thoughts and mixes queued questions into the thought feed", () => {
     const recordsScreen = readFileSync(
       join(__dirname, "../../app/(tabs)/on.tsx"),
       "utf8",
     );
 
     expect(recordsScreen).toContain(
-      'const [kind, setKind] = useState<RecordKind>("letter")',
+      'const [kind, setKind] = useState<RecordKind>("thought")',
     );
-    expect(recordsScreen).toContain('setKind("letter")');
-    expect(recordsScreen).toContain('() => kind === "letter"');
+    expect(recordsScreen).toContain('setKind("thought")');
+    expect(recordsScreen).toContain('() => kind === "thought"');
     expect(recordsScreen).toContain("buildMixedRecordGroups(");
   });
 
