@@ -249,6 +249,49 @@ function CodeRequestBar({
   );
 }
 
+function OperatorPendingStatusBanner({
+  visible,
+  isRetrying,
+  onRetry,
+}: {
+  visible: boolean;
+  isRetrying: boolean;
+  onRetry: () => void;
+}) {
+  if (!visible) return null;
+  return (
+    <View style={styles.operatorPendingNotice}>
+      <Feather
+        name="alert-circle"
+        size={14}
+        color={Colors.zinc400}
+        style={styles.operatorPendingNoticeIcon}
+      />
+      <Text style={styles.operatorPendingNoticeText} numberOfLines={2}>
+        승인 대기 목록을 불러오지 못했어요
+      </Text>
+      <ScalePressable
+        style={styles.operatorPendingNoticeRetryOuter}
+        contentStyle={styles.operatorPendingNoticeRetry}
+        onPress={onRetry}
+        disabled={isRetrying}
+        accessibilityRole="button"
+        accessibilityLabel="승인 대기 목록 다시 시도"
+        accessibilityState={{
+          disabled: isRetrying,
+          busy: isRetrying,
+        }}
+      >
+        {isRetrying ? (
+          <ActivityIndicator size="small" color={Colors.zinc600} />
+        ) : (
+          <Text style={styles.operatorPendingNoticeRetryText}>다시 시도</Text>
+        )}
+      </ScalePressable>
+    </View>
+  );
+}
+
 function OperatorPendingBar({
   summaries,
   onPress,
@@ -507,17 +550,14 @@ export default function SpacesScreen() {
     invitations.length > 0 ||
     codeRequests.length > 0;
   const hasRawContent = hasPrimaryContent || operatorPending.length > 0;
-  const isOperatorSummaryOnlyLoading =
-    !hasPrimaryContent &&
-    operatorPending.length === 0 &&
-    operatorPendingQuery.isLoading;
-  const isOperatorSummaryOnlyError =
-    !hasPrimaryContent &&
-    operatorPending.length === 0 &&
-    operatorPendingQuery.isError;
 
   const listHeaderComponent = (
     <>
+      <OperatorPendingStatusBanner
+        visible={operatorPendingQuery.isError}
+        isRetrying={isOperatorRetrying}
+        onRetry={handleOperatorRetry}
+      />
       <OperatorPendingBar
         summaries={operatorPending}
         onPress={handleOperatorPendingBarPress}
@@ -599,33 +639,6 @@ export default function SpacesScreen() {
             )}
           </ScalePressable>
         </View>
-      ) : isOperatorSummaryOnlyLoading ? (
-        <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
-          <Text style={styles.loadingText}>불러오는 중...</Text>
-        </View>
-      ) : isOperatorSummaryOnlyError ? (
-        <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
-          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>승인 대기 목록을 불러오지 못했어요</Text>
-          <ScalePressable
-            style={styles.retryButtonOuter}
-            contentStyle={styles.retryButton}
-            onPress={handleOperatorRetry}
-            disabled={isOperatorRetrying}
-            accessibilityRole="button"
-            accessibilityLabel="승인 대기 목록 다시 시도"
-            accessibilityState={{
-              disabled: isOperatorRetrying,
-              busy: isOperatorRetrying,
-            }}
-          >
-            {isOperatorRetrying ? (
-              <ActivityIndicator size="small" color={Colors.white} />
-            ) : (
-              <Text style={styles.retryButtonText}>다시 시도</Text>
-            )}
-          </ScalePressable>
-        </View>
       ) : !hasRawContent ? (
         <RefreshableEmpty
           refreshing={isManualRefreshing}
@@ -635,6 +648,11 @@ export default function SpacesScreen() {
           <Feather name="grid" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>공간이 없어요</Text>
           <Text style={styles.emptySubtitle}>함께 편지를 나눌 공간을 만들거나{"\n"}초대 문구로 참여해보세요</Text>
+          <OperatorPendingStatusBanner
+            visible={operatorPendingQuery.isError}
+            isRetrying={isOperatorRetrying}
+            onRetry={handleOperatorRetry}
+          />
         </RefreshableEmpty>
       ) : (
         <FlatList
@@ -940,6 +958,49 @@ const styles = StyleSheet.create({
   operatorPendingSubtext: {
     ...Typography.body,
     fontSize: 13,
+    color: Colors.zinc700,
+  },
+  operatorPendingNotice: {
+    alignSelf: "stretch",
+    marginHorizontal: Spacing.screenPx,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: Colors.zinc50,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.zinc200,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  operatorPendingNoticeIcon: {
+    flexShrink: 0,
+  },
+  operatorPendingNoticeText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.zinc500,
+    flex: 1,
+  },
+  operatorPendingNoticeRetryOuter: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  operatorPendingNoticeRetry: {
+    minWidth: 60,
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: Colors.zinc200,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  operatorPendingNoticeRetryText: {
+    ...Typography.captionMedium,
+    fontSize: 12,
+    fontWeight: "600",
     color: Colors.zinc700,
   },
   // ─── Code request bar ────────────────────────────────────────────────────────

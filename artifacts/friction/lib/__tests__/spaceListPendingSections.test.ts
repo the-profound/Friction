@@ -183,16 +183,72 @@ describe("space list pending sections", () => {
     const loadingEnd = source.indexOf("const refetchAll", loadingStart);
     const loadingAndError = source.slice(loadingStart, loadingEnd);
 
+    // Only the primary queries (spaces/invitations/code requests) may drive
+    // the full-screen loading/error branches. The operator summary query must
+    // never be part of that decision.
     expect(loadingAndError).not.toContain("operatorPendingQuery.isLoading");
     expect(loadingAndError).not.toContain("operatorPendingQuery.isError");
-    expect(source).toContain("const isOperatorSummaryOnlyLoading =");
-    expect(source).toContain("const isOperatorSummaryOnlyError =");
-    expect(source.indexOf("isOperatorSummaryOnlyLoading ?")).toBeLessThan(
-      source.indexOf("!hasRawContent ?"),
+
+    // There must be no separate full-screen branch dedicated to the operator
+    // summary query failing or loading — that would still cover the whole
+    // screen for a supplemental query.
+    expect(source).not.toContain("isOperatorSummaryOnlyLoading");
+    expect(source).not.toContain("isOperatorSummaryOnlyError");
+    expect(source).not.toContain("승인 대기 목록을 불러오지 못했어요</Text>");
+
+    // The empty state must render whenever there is no primary or operator
+    // content, regardless of the operator query's own error/loading status.
+    expect(source).toContain("!hasRawContent ?");
+    expect(source).toContain(
+      "const hasRawContent = hasPrimaryContent || operatorPending.length > 0;",
     );
-    expect(source.indexOf("isOperatorSummaryOnlyError ?")).toBeLessThan(
-      source.indexOf("!hasRawContent ?"),
+  });
+
+  it("surfaces the operator summary failure as a small non-blocking notice instead", () => {
+    const source = readAppFile("app/(tabs)/of.tsx");
+
+    // A dedicated, non-blocking banner component exists and is driven purely
+    // by the operator query's own error/retry state.
+    expect(source).toContain("function OperatorPendingStatusBanner(");
+    const bannerStart = source.indexOf("function OperatorPendingStatusBanner(");
+    const bannerEnd = source.indexOf("function OperatorPendingBar(", bannerStart);
+    const banner = source.slice(bannerStart, bannerEnd);
+    expect(banner).toContain("if (!visible) return null;");
+    expect(banner).toContain("승인 대기 목록을 불러오지 못했어요");
+    expect(banner).toContain("disabled={isRetrying}");
+    expect(banner).toContain("busy: isRetrying");
+
+    // It must be wired into both the list header (spaces exist) and the
+    // empty state (no spaces at all) so failures are visible either way,
+    // gated only on the operator query's own isError flag.
+    const bannerUsages = [
+      ...source.matchAll(/<OperatorPendingStatusBanner/g),
+    ];
+    expect(bannerUsages).toHaveLength(2);
+
+    const listHeaderStart = source.indexOf("const listHeaderComponent = (");
+    const listHeaderEnd = source.indexOf("return (", listHeaderStart);
+    const listHeader = source.slice(listHeaderStart, listHeaderEnd);
+    expect(listHeader).toContain("<OperatorPendingStatusBanner");
+    expect(listHeader).toContain("visible={operatorPendingQuery.isError}");
+    // The banner must precede the pending bar itself in the header so the
+    // failure notice and (empty) approvals list never both render at once
+    // in a confusing order.
+    expect(listHeader.indexOf("<OperatorPendingStatusBanner")).toBeLessThan(
+      listHeader.indexOf("<OperatorPendingBar"),
     );
+
+    const emptyStateStart = source.indexOf("!hasRawContent ?");
+    const emptyStateEnd = source.indexOf(") : (", emptyStateStart);
+    const emptyState = source.slice(emptyStateStart, emptyStateEnd);
+    expect(emptyState).toContain("공간이 없어요");
+    expect(emptyState).toContain("<OperatorPendingStatusBanner");
+    expect(emptyState).toContain("visible={operatorPendingQuery.isError}");
+
+    // Retrying the notice reuses the same retry lock/handler as the rest of
+    // the screen, not a bespoke path.
+    expect(source.match(/onRetry={handleOperatorRetry}/g)).toHaveLength(2);
+    expect(source.match(/isRetrying={isOperatorRetrying}/g)).toHaveLength(2);
   });
 
   it("gates the supplemental request on userId and delegates auth to customFetch", () => {
@@ -247,7 +303,18 @@ describe("space list pending sections", () => {
     expect(source.match(/height: 44/g)).toHaveLength(2);
     expect(source.match(/flexGrow: 0/g)?.length).toBeGreaterThanOrEqual(2);
     expect(source.match(/flexShrink: 0/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(source).toContain("disabled={isOperatorRetrying}");
-    expect(source).toContain("busy: isOperatorRetrying");
+
+    // The main full-screen retry button still exposes disabled/busy state
+    // driven by the manual-refresh lock.
+    expect(source).toContain("disabled={isManualRefreshing}");
+    expect(source).toContain("busy: isManualRefreshing");
+
+    // The non-blocking operator summary notice exposes its own
+    // disabled/busy state, driven by the shared retry lock.
+    const bannerStart = source.indexOf("function OperatorPendingStatusBanner(");
+    const bannerEnd = source.indexOf("function OperatorPendingBar(", bannerStart);
+    const banner = source.slice(bannerStart, bannerEnd);
+    expect(banner).toContain("disabled={isRetrying}");
+    expect(banner).toContain("busy: isRetrying");
   });
 });

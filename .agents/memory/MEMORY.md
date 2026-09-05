@@ -92,3 +92,4 @@
 - [401 retry fresh signal](friction-401-retry-signal.md) — customFetch 401 auto-retry must build a fresh timeout signal; the original effectiveSignal is exhausted by a slow first request and aborts the retry immediately.
 - [Swipeable card edge ornaments](friction-swipeable-edge-ornaments.md) — reserve ornament overflow inside the swipe clip; never rely on negative offsets beyond an overflow-hidden row.
 - [Router-level UUID guard for path IDs](friction-router-param-uuid-guard.md) — router.param 404-guards non-UUID :id before auth runs; must migrate mocked-DB test fixture IDs to real UUIDs first.
+- [Friction prod/dev route skew](friction-prod-dev-route-skew.md) — check deployment logs for the exact failing path before assuming route skew is live; a supplemental query's error must never get its own full-screen branch either.
