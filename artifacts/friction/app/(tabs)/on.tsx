@@ -101,16 +101,9 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { isListSearchBoundaryGesture } from "@/lib/dateGroupVerticalSnap";
-import {
-  clearRecordControlsTimer,
-  getNextRecordControlsVisibility,
-  getRecordControlsScrollVisibility,
-  restartRecordControlsTimer,
-  type RecordControlsTimer,
-} from "@/lib/recordControlsInactivity";
 const FILTER_BUTTON_HEIGHT = 36;
-const VIEW_BUTTON_SIZE = 40;
-const FILTER_GRADIENT_OVERLAP = 18;
+const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
+const FILTER_GRADIENT_OVERLAP = 12;
 const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
@@ -386,7 +379,9 @@ export default function OnScreen() {
   const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [controlsVisible, setControlsVisible] = useState(true);
+  // The filter/view menu bar stays visible at all times; the only exception
+  // is while search is active (an explicit user action, not scroll/inactivity).
+  const controlsVisible = !searchActive;
   const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
   const recordSessionRef = useRef<UnifiedRecord[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
@@ -412,13 +407,11 @@ export default function OnScreen() {
     seed: string;
     anchors: QuestionPlacementAnchors;
   } | null>(null);
-  const controlsVisibleRef = useRef(true);
   const controlsAnimation = useRef(new Animated.Value(1)).current;
   const lastScrollOffsetRef = useRef(0);
   const listDragStartOffsetRef = useRef(0);
   const listPointerStartYRef = useRef<number | null>(null);
   const listPointerStartOffsetRef = useRef(0);
-  const controlsTimerRef = useRef<RecordControlsTimer>(null);
   const searchActiveRef = useRef(false);
 
   searchActiveRef.current = searchActive;
@@ -437,58 +430,18 @@ export default function OnScreen() {
     openRecordRowRef.current = next;
   }, []);
 
-  const clearControlsTimer = useCallback(() => {
-    controlsTimerRef.current = clearRecordControlsTimer(controlsTimerRef.current);
-  }, []);
-
-  const applyControlsVisibility = useCallback((
-    action: "activity" | "show" | "hide" | "inactive",
-  ) => {
-    const nextVisible = getNextRecordControlsVisibility(
-      controlsVisibleRef.current,
-      action,
-      searchActiveRef.current,
-    );
-    if (controlsVisibleRef.current === nextVisible) return;
-    controlsVisibleRef.current = nextVisible;
-    setControlsVisible(nextVisible);
-  }, []);
-
-  const restartControlsInactivityTimer = useCallback(() => {
-    clearControlsTimer();
-    if (searchActiveRef.current) return;
-    controlsTimerRef.current = restartRecordControlsTimer(controlsTimerRef.current, () => {
-      controlsTimerRef.current = null;
-      if (searchActiveRef.current) return;
-      applyControlsVisibility("inactive");
-    });
-  }, [applyControlsVisibility, clearControlsTimer]);
-
-  const showControlsForActivity = useCallback(() => {
-    applyControlsVisibility("show");
-    restartControlsInactivityTimer();
-  }, [applyControlsVisibility, restartControlsInactivityTimer]);
-
-  const registerControlsActivity = useCallback(() => {
-    applyControlsVisibility("activity");
-    restartControlsInactivityTimer();
-  }, [applyControlsVisibility, restartControlsInactivityTimer]);
-
   const closeSearch = useCallback(() => {
     closeOpenRecordRow();
     searchActiveRef.current = false;
     setSearchActive(false);
     setSearchQuery("");
-    requestAnimationFrame(showControlsForActivity);
-  }, [closeOpenRecordRow, showControlsForActivity]);
+  }, [closeOpenRecordRow]);
 
   const openSearch = useCallback(() => {
     closeOpenRecordRow();
-    clearControlsTimer();
-    applyControlsVisibility("hide");
     searchActiveRef.current = true;
     setSearchActive(true);
-  }, [applyControlsVisibility, clearControlsTimer, closeOpenRecordRow]);
+  }, [closeOpenRecordRow]);
 
   const tryOpenListSearch = useCallback((
     startOffset: number,
@@ -510,17 +463,11 @@ export default function OnScreen() {
     closeOpenRecordRow();
     closeOverlay();
     lastScrollOffsetRef.current = 0;
-    showControlsForActivity();
-  }, [kind, view, closeOpenRecordRow, closeOverlay, showControlsForActivity]);
+  }, [kind, view, closeOpenRecordRow, closeOverlay]);
 
   useEffect(() => {
     closeOpenRecordRow();
   }, [searchQuery, closeOpenRecordRow]);
-
-  useEffect(() => {
-    showControlsForActivity();
-    return clearControlsTimer;
-  }, [clearControlsTimer, showControlsForActivity]);
 
   useEffect(() => {
     Animated.timing(controlsAnimation, {
@@ -608,11 +555,10 @@ export default function OnScreen() {
     useCallback(() => {
       closeSearch();
       return () => {
-        clearControlsTimer();
         setSearchActive(false);
         setSearchQuery("");
       };
-    }, [clearControlsTimer, closeSearch]),
+    }, [closeSearch]),
   );
 
   useEffect(() => {
@@ -784,31 +730,11 @@ export default function OnScreen() {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       verticalDateSnap.onScroll(event);
       scrollPressGuard.onScroll();
-      const offset = Math.max(0, event.nativeEvent.contentOffset.y);
-      const visibility = getRecordControlsScrollVisibility(
-        lastScrollOffsetRef.current,
-        offset,
-      );
-      lastScrollOffsetRef.current = offset;
-      if (searchActiveRef.current) return;
-
-      if (visibility === "hide") {
-        clearControlsTimer();
-        applyControlsVisibility("hide");
-        return;
-      }
-      if (visibility === "show") {
-        applyControlsVisibility("show");
-      }
-      registerControlsActivity();
+      // Offset tracking still feeds the search-boundary gesture below; the
+      // filter/view menu bar itself no longer hides on scroll.
+      lastScrollOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
     },
-    [
-      clearControlsTimer,
-      registerControlsActivity,
-      scrollPressGuard,
-      applyControlsVisibility,
-      verticalDateSnap.onScroll,
-    ],
+    [scrollPressGuard, verticalDateSnap.onScroll],
   );
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
@@ -1109,13 +1035,7 @@ export default function OnScreen() {
   ]);
 
   return (
-    <View
-      style={styles.container}
-      onTouchStart={registerControlsActivity}
-      {...(Platform.OS === "web"
-        ? ({ onPointerDown: registerControlsActivity } as object)
-        : {})}
-    >
+    <View style={styles.container}>
       <PageHeader
         title="기록함"
         centeredBrandTitle
@@ -1142,22 +1062,22 @@ export default function OnScreen() {
             style={[styles.filterControls, { opacity: controlsAnimation }]}
           >
             <View style={styles.kindFilterGroup}>
-              <RecordKindButton label="단상" active={kind === "thought"} onPress={() => { showControlsForActivity(); setKind("thought"); }} />
-              <RecordKindButton label="편집" active={kind === "editing"} onPress={() => { showControlsForActivity(); setKind("editing"); }} />
-              <RecordKindButton label="편지" active={kind === "letter"} onPress={() => { showControlsForActivity(); setKind("letter"); }} />
+              <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
+              <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
+              <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
             </View>
             <View style={styles.viewFilterGroup}>
               <RecordViewButton
                 icon="list"
                 label="목록형으로 보기"
                 active={view === "content"}
-                onPress={() => { showControlsForActivity(); setView("content"); }}
+                onPress={() => setView("content")}
               />
               <RecordViewButton
                 icon="layers"
                 label="하나씩 보기"
                 active={view === "card"}
-                onPress={() => { showControlsForActivity(); setView("card"); }}
+                onPress={() => setView("card")}
               />
             </View>
           </Animated.View>
@@ -1217,7 +1137,6 @@ export default function OnScreen() {
             onPointerDown: (event: { nativeEvent?: { clientY?: number } }) => {
               listPointerStartYRef.current = event.nativeEvent?.clientY ?? null;
               listPointerStartOffsetRef.current = lastScrollOffsetRef.current;
-              registerControlsActivity();
             },
             onPointerUp: (event: { nativeEvent?: { clientY?: number } }) => {
               const startY = listPointerStartYRef.current;
@@ -1231,9 +1150,7 @@ export default function OnScreen() {
               listPointerStartYRef.current = null;
             },
             onWheel: (event: { deltaY?: number }) => {
-              if (!tryOpenListSearch(lastScrollOffsetRef.current, -(event.deltaY ?? 0))) {
-                registerControlsActivity();
-              }
+              tryOpenListSearch(lastScrollOffsetRef.current, -(event.deltaY ?? 0));
             },
           } : {})}
         >
@@ -1288,7 +1205,6 @@ export default function OnScreen() {
             onScrollBeginDrag={(event) => {
               closeOpenRecordRow();
               listDragStartOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
-              registerControlsActivity();
             }}
             onScrollEndDrag={(event) => {
               const endOffset = Math.max(0, event.nativeEvent.contentOffset.y);

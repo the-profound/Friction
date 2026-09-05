@@ -64,12 +64,25 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).toContain("onSearchBoundaryGesture: openSearch");
     expect(recordsScreen).toContain("onPointerUp:");
     expect(recordsScreen).toContain("event.nativeEvent.velocity?.y");
-    expect(recordsScreen).toContain("restartRecordControlsTimer");
     expect(recordsScreen).toContain('pointerEvents={controlsVisible && !searchActive ? "box-none" : "none"}');
-    expect(recordsScreen).toContain("getRecordControlsScrollVisibility");
-    expect(recordsScreen).toContain("registerControlsActivity");
     expect(recordsScreen).toContain("removeFocusOutline");
     expect(searchBar).toContain('outlineStyle: "none"');
+  });
+
+  it("keeps the filter/view menu bar always visible except during search", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+
+    // The menu bar must never hide due to scrolling or inactivity timers —
+    // only the explicit search-open action may hide it.
+    expect(recordsScreen).not.toContain("recordControlsInactivity");
+    expect(recordsScreen).not.toContain("getRecordControlsScrollVisibility");
+    expect(recordsScreen).not.toContain("restartRecordControlsTimer");
+    expect(recordsScreen).not.toContain("registerControlsActivity");
+    expect(recordsScreen).not.toContain("showControlsForActivity");
+    expect(recordsScreen).toContain("const controlsVisible = !searchActive;");
   });
 
   it("keeps the filter-bar layout space stable while only fading its controls", () => {
