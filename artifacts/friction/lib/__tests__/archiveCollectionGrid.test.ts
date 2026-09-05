@@ -6,6 +6,8 @@ const appRoot = join(__dirname, "../..");
 const archiveScreen = readFileSync(join(appRoot, "app/(tabs)/archive.tsx"), "utf8");
 
 const sentenceCard = readFileSync(join(appRoot, "components/StoredSentenceCard.tsx"), "utf8");
+
+describe("archive collected sentence list", () => {
   const sentenceFilterAction = archiveScreen.slice(
     archiveScreen.indexOf('{activeSubTab === "personal" ? ('),
     archiveScreen.indexOf("</View>", archiveScreen.indexOf('{activeSubTab === "personal" ? (')),

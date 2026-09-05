@@ -13,6 +13,14 @@ export const EDITOR_CONFIG_VERSION = `3.27.0-${BODY_FONT_CONFIG_VERSION}`;
 
 export interface EditorFontOptions extends EmbeddedBodyFontOptions {
   perfEnabled?: boolean;
+  /**
+   * hideTitle 값을 이 WebView 인스턴스가 처음 마운트될 때 값으로 고정해
+   * 전달한다. true 면 title-input 이 첫 페인트부터 보이지 않는다 (task #1967).
+   * 이후 hideTitle prop 이 바뀌어도 이 값은 갱신하지 않는다 — 값이 바뀌는
+   * 기존 흐름은 전부 화면 재마운트(라우트 replace)를 동반하므로 새 WebView
+   * 인스턴스가 그 시점의 값을 다시 초기값으로 받는다.
+   */
+  initialHideTitle?: boolean;
 }
 
 function buildFontFaceCSS(opts: EditorFontOptions): string {
@@ -31,6 +39,7 @@ export function getEditorHtml(fontOptions: EditorFontOptions = {}): string {
   const perfHeadScript = buildWebViewPerfHeadScript(!!fontOptions.perfEnabled);
   const bridgeHeadScript = buildWebViewBridgeHeadScript();
   const fontReadyScript = buildBodyFontReadyScript(hasEmbeddedBodyFonts(fontOptions));
+  const bodyClass = fontOptions.initialHideTitle ? ' class="hide-title"' : "";
   return `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -99,10 +108,18 @@ body{min-height:100%;background:#fff;container-type:inline-size;-webkit-text-siz
 .tiptap-question-block p::before{content:'Q. '}
 @keyframes page-anchor-pulse{0%{opacity:0}25%{opacity:1}75%{opacity:1}100%{opacity:0}}
 .page-anchor-overlay{position:absolute;left:0;width:100%;background:rgba(59,130,246,0.14);border-radius:6px;pointer-events:none;z-index:0;animation:page-anchor-pulse 1.6s ease-in-out forwards}
-body{padding:16px 0 0;overflow-x:hidden;overflow-y:visible;position:relative;background:#fff}</style>
+body{padding:16px 0 0;overflow-x:hidden;overflow-y:visible;position:relative;background:#fff}
+/* hide-title 는 이 WebView 인스턴스가 처음 마운트될 때의 hideTitle 값으로
+   고정되어 최초 HTML/CSS 에 굽혀 들어간다 (task #1967). RN 이 폰트 로딩
+   완료 후 "init" 커맨드를 왕복 전송해 뒤늦게 title-input 을 숨기면 그 사이
+   제목 입력창이 한 프레임이라도 보였다 사라지는 flash 가 생긴다 — 이 클래스는
+   그 지연 없이 첫 페인트부터 제목 입력창을 없앤 상태로 그린다. */
+body.hide-title #title-input{display:none}
+body.hide-title{padding-top:0}
+body.hide-title #editor-content{padding-bottom:24px}</style>
 ${fontReadyScript}
 </head>
-<body>
+<body${bodyClass}>
 <textarea id="title-input" rows="1" placeholder="제목"></textarea>
 <div id="editor-content"></div>
 <script>

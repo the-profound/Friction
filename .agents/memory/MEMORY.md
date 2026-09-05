@@ -99,3 +99,4 @@
 - [Friction 404 classification](friction-404-classification.md) — a genuine domain 404 has a structured JSON body; an unmatched Express route returns plain-text/HTML — use body shape, not just status, to tell them apart.
 - [Friction question-queue activation signal](friction-question-queue-activation-signal.md) — createdFrom:"question" + status:"PRELIMINARY" reliably means "still queued, unactivated" from one GET; no extra queue query needed.
 - [Friction large-screen test convention](friction-large-screen-test-convention.md) — on-01a.tsx/on.tsx-scale screens have no render harness; regression tests assert on raw source text instead.
+- [WebViewMarkdownEditor hideTitle flash](friction-editor-init-flash-hidetitle.md) — bake hideTitle into initial WebView HTML/CSS (frozen at mount), not a postMessage round-trip; every hideTitle-changing flow already fully remounts via router.replace.

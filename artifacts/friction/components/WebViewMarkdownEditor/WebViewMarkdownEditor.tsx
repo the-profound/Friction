@@ -61,6 +61,14 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
   ) {
     const webViewRef = useRef<WebView>(null);
     const mountedAtRef = useRef<number>(Date.now());
+    // hideTitle 은 이 인스턴스가 처음 마운트될 때의 값으로 고정한다. 초기 HTML
+    // 자체가 이 값을 반영해 title-input 을 그리므로, 폰트 로딩 완료 후 "init"
+    // 왕복 커맨드를 기다리지 않고도 첫 프레임부터 제목 입력창이 숨겨진다
+    // (task #1967). 작성 도중 hideTitle 이 바뀌는 기존 흐름(나누기 등)은
+    // 전부 화면 자체가 라우트 replace 로 재마운트되므로, 새 인스턴스가 그
+    // 시점의 값을 다시 초기값으로 받아 문제 없다 — 같은 인스턴스에서 이 값이
+    // 뒤늦게 갱신될 필요는 없다.
+    const initialHideTitleRef = useRef(hideTitle);
     const [scrollLocked, setScrollLocked] = useState(false);
     const autoSplitResolversRef = useRef<Array<(r: { hadConsecutiveImages: boolean }) => void>>([]);
     const bodyFontsReadyRef = useRef(false);
@@ -348,7 +356,10 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
         notoRegularBase64: fonts.notoRegularBase64,
         notoSemiBoldBase64: fonts.notoSemiBoldBase64,
         perfEnabled: isWebViewPerfEnabled(),
+        initialHideTitle: initialHideTitleRef.current,
       }),
+      // initialHideTitleRef.current is intentionally frozen at mount and never
+      // re-read as a dependency trigger — see comment at its declaration.
       [fonts.regularBase64, fonts.semiBoldBase64, fonts.notoRegularBase64, fonts.notoSemiBoldBase64],
     );
     const previousHtmlRef = useRef(html);
