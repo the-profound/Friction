@@ -159,6 +159,20 @@ interface CardSelectOverlayProps {
     disabled: boolean;
     onPress: () => void;
   } | null;
+  /**
+   * Optional content rendered inside the CardSelectOverlay's native Modal window.
+   * Use this for confirm/info dialogs that must appear above the overlay backdrop —
+   * sibling RN Modals cannot guarantee z-order over a previously-presented Modal.
+   * Render as an absolute-fill View overlay (not a nested RN Modal).
+   */
+  inlineModal?: React.ReactNode;
+  /**
+   * When an inline dialog is active, Android's hardware Back button fires the
+   * Modal's onRequestClose. Provide this handler (with any in-flight guard)
+   * so Back dismisses the dialog instead of closing the whole overlay.
+   * When omitted, Back falls through to the normal overlay close.
+   */
+  onInlineModalRequestClose?: () => void;
 }
 
 export default function CardSelectOverlay({
@@ -176,6 +190,8 @@ export default function CardSelectOverlay({
   originUsesCarouselShadow = false,
   envelopeInfo,
   visibilityButton,
+  inlineModal,
+  onInlineModalRequestClose,
 }: CardSelectOverlayProps) {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -1103,7 +1119,7 @@ export default function CardSelectOverlay({
       visible={rendered}
       animationType="none"
       statusBarTranslucent
-      onRequestClose={requestClose}
+      onRequestClose={onInlineModalRequestClose ?? requestClose}
       onShow={handleModalShow}
     >
       {/* Dark backdrop — touch disabled the moment closing begins so the
@@ -1343,6 +1359,12 @@ export default function CardSelectOverlay({
           </ScalePressable>
         )}
       </Animated.View>
+
+      {/* Inline modal: confirm / info dialogs passed by the caller.
+          Rendered inside the native Modal window so they always appear above
+          the overlay backdrop. Must be a View-based overlay — not a nested
+          RN Modal — to guarantee correct z-order. */}
+      {inlineModal}
 
       {/* Full-screen fade-to-black overlay inside the Modal so it renders above all Modal content */}
       <RAnimated.View

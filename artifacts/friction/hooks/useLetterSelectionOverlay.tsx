@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
+import { View, Pressable, StyleSheet, Text } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -17,7 +18,8 @@ import CardSelectOverlay, {
   type ChainArticleMeta,
   type OriginLayout,
 } from "@/components/CardSelectOverlay/CardSelectOverlay";
-import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import ScalePressable from "@/components/shared/ScalePressable";
+import { Colors } from "@/constants/tokens";
 import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useToast } from "@/contexts/ToastContext";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
@@ -386,61 +388,106 @@ export function useLetterSelectionOverlay(
       };
     }
 
+    // Build a View-based overlay for visibility confirm / info dialogs.
+    // These are rendered INSIDE the CardSelectOverlay's native Modal window
+    // (via the inlineModal prop) so they always appear above the overlay
+    // backdrop. A sibling RN Modal cannot guarantee this because the
+    // CardSelectOverlay Modal was presented first and sits on top in the
+    // native window stack regardless of zIndex.
+    const isConfirmVisible = visibilityConfirmTarget !== null;
+    const isInfoVisible = visibilityInfoModal !== null;
+
+    // Defined unconditionally so it can also be passed as onInlineModalRequestClose.
+    // This lets Android's hardware Back button dismiss the dialog (instead of
+    // closing the whole overlay) while honouring the in-flight guard.
+    const handleDismiss = () => {
+      if (isChangingVisibility) return;
+      setVisibilityConfirmTarget(null);
+      setVisibilityInfoModal(null);
+    };
+
+    let inlineModalNode: React.ReactNode = null;
+    if (isConfirmVisible || isInfoVisible) {
+
+      const title = isConfirmVisible
+        ? (visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
+            ? "수신자 공개로 변경하시겠습니까?"
+            : "전체 공개로 변경하시겠습니까?")
+        : "전체 공개로 변경할 수 없어요";
+
+      const description = isConfirmVisible
+        ? (visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
+            ? "편지가 내 프로필에서 사라지며, 발신 시점의 수신자만 읽을 수 있게 됩니다."
+            : "편지가 내 프로필에 표시되며, Friction 내 모든 사용자가 볼 수 있습니다.")
+        : (visibilityInfoModal === "anon"
+            ? "익명 공간에 발신된 편지는 수신자 공개로만 설정할 수 있어요"
+            : visibilityInfoModal === "personal"
+              ? "개인에게 발신된 편지는 수신자 공개로만 설정할 수 있어요"
+              : "발신하지 않은 편지는 수신자 공개로만 설정할 수 있어요");
+
+      inlineModalNode = (
+        <Pressable style={inlineOverlayStyles.backdrop} onPress={handleDismiss}>
+          <View style={inlineOverlayStyles.contentWrapper}>
+            <Pressable style={inlineOverlayStyles.card} onPress={(e) => e.stopPropagation()}>
+              <Text style={inlineOverlayStyles.title}>{title}</Text>
+              <Text style={inlineOverlayStyles.description}>{description}</Text>
+              <View style={inlineOverlayStyles.buttons}>
+                <ScalePressable
+                  style={inlineOverlayStyles.button}
+                  contentStyle={[inlineOverlayStyles.buttonContent, inlineOverlayStyles.cancelButton]}
+                  onPress={handleDismiss}
+                  disabled={isChangingVisibility}
+                  accessibilityRole="button"
+                  accessibilityLabel="취소"
+                >
+                  <Text style={inlineOverlayStyles.cancelText}>취소</Text>
+                </ScalePressable>
+                {isConfirmVisible && (
+                  <ScalePressable
+                    style={inlineOverlayStyles.button}
+                    contentStyle={[
+                      inlineOverlayStyles.buttonContent,
+                      inlineOverlayStyles.confirmButton,
+                      isChangingVisibility && inlineOverlayStyles.buttonDisabled,
+                    ]}
+                    onPress={confirmVisibilityChange}
+                    disabled={isChangingVisibility}
+                    accessibilityRole="button"
+                    accessibilityLabel="변경"
+                  >
+                    <Text style={inlineOverlayStyles.confirmText}>변경</Text>
+                  </ScalePressable>
+                )}
+              </View>
+            </Pressable>
+          </View>
+        </Pressable>
+      );
+    }
+
     return (
-      <>
-        <CardSelectOverlay
-          articles={chainArticles}
-          metas={chainMetas}
-          initialIndex={chainInitialIndex}
-          originLayout={selectedOrigin}
-          onClose={closeOverlay}
-          onRead={handleOverlayRead}
-          onReady={() => setIsSelectedSourceHidden(true)}
-          onNavigateToCollection={(id) =>
-            router.push({ pathname: "/of-02-detail", params: { id } })
-          }
-          onNavigateToAuthor={(authorId) =>
-            router.push(`/user-profile/${authorId}` as never)
-          }
-          currentCollectionId={overlayNavOptions.currentCollectionId}
-          currentAuthorId={overlayNavOptions.currentAuthorId}
-          visibilityButton={visibilityButton}
-        />
-        <ConfirmModal
-          visible={Boolean(visibilityConfirmTarget)}
-          title={
-            visibilityConfirmTarget?.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
-              ? "수신자 공개로 변경하시겠습니까?"
-              : "전체 공개로 변경하시겠습니까?"
-          }
-          description={
-            visibilityConfirmTarget?.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
-              ? "편지가 내 프로필에서 사라지며, 발신 시점의 수신자만 읽을 수 있게 됩니다."
-              : "편지가 내 프로필에 표시되며, Friction 내 모든 사용자가 볼 수 있습니다."
-          }
-          confirmLabel="변경"
-          cancelLabel="취소"
-          confirmDisabled={isChangingVisibility}
-          cancelDisabled={isChangingVisibility}
-          onConfirm={confirmVisibilityChange}
-          onCancel={() => {
-            if (!isChangingVisibility) setVisibilityConfirmTarget(null);
-          }}
-        />
-        <ConfirmModal
-          visible={visibilityInfoModal !== null}
-          title="전체 공개로 변경할 수 없어요"
-          description={
-            visibilityInfoModal === "anon"
-              ? "익명 공간에 발신된 편지는 수신자 공개로만 설정할 수 있어요"
-              : visibilityInfoModal === "personal"
-                ? "개인에게 발신된 편지는 수신자 공개로만 설정할 수 있어요"
-                : "발신하지 않은 편지는 수신자 공개로만 설정할 수 있어요"
-          }
-          cancelLabel="취소"
-          onCancel={() => setVisibilityInfoModal(null)}
-        />
-      </>
+      <CardSelectOverlay
+        articles={chainArticles}
+        metas={chainMetas}
+        initialIndex={chainInitialIndex}
+        originLayout={selectedOrigin}
+        onClose={closeOverlay}
+        onRead={handleOverlayRead}
+        onReady={() => setIsSelectedSourceHidden(true)}
+        onNavigateToCollection={(id) =>
+          router.push({ pathname: "/of-02-detail", params: { id } })
+        }
+        onNavigateToAuthor={(authorId) =>
+          router.push(`/user-profile/${authorId}` as never)
+        }
+        currentCollectionId={overlayNavOptions.currentCollectionId}
+        currentAuthorId={overlayNavOptions.currentAuthorId}
+        visibilityButton={visibilityButton}
+        inlineModal={inlineModalNode}
+        onInlineModalRequestClose={
+          isConfirmVisible || isInfoVisible ? handleDismiss : undefined
+        }
+      />
     );
   };
 
@@ -454,3 +501,73 @@ export function useLetterSelectionOverlay(
     spaceLetterByArticleId,
   };
 }
+
+// ── Styles for the View-based inline overlay (rendered inside CardSelectOverlay's Modal) ──
+const inlineOverlayStyles = StyleSheet.create({
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  contentWrapper: {
+    width: "100%",
+    alignItems: "center",
+  },
+  card: {
+    width: "100%",
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: Colors.zinc900,
+    textAlign: "center",
+  },
+  description: {
+    fontSize: 14,
+    color: Colors.zinc500,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  buttons: {
+    flexDirection: "row",
+    marginTop: 20,
+    gap: 10,
+  },
+  button: {
+    flex: 1,
+    height: 48,
+  },
+  buttonContent: {
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+  },
+  cancelButton: {
+    backgroundColor: Colors.zinc100,
+  },
+  confirmButton: {
+    backgroundColor: Colors.primaryAction,
+  },
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  cancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.zinc600,
+  },
+  confirmText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.primaryActionForeground,
+  },
+});
