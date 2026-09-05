@@ -50,7 +50,7 @@ const readEditorTypes = () =>
   );
 
 describe("on-01a editor hydration and initialization", () => {
-  it("uses route context for the full-width restricted reading toolbar", () => {
+  it("renders only the keyboard dismiss action for the restricted reading toolbar", () => {
     const screen = readScreen();
     const toolbar = readFileSync(
       join(appRoot, "components/MemoToolbar/MemoToolbar.tsx"),
@@ -74,14 +74,22 @@ describe("on-01a editor hydration and initialization", () => {
     );
 
     expect(toolbar).toContain('export type MemoToolbarMode = "full" | "restricted";');
-    expect(toolbar).toContain("scrollEnabled={!restricted && aaActive}");
-    expect(toolbar).toContain("disabled={restricted}");
-    expect(toolbar).toContain("accessibilityState={restricted ? disabledState : undefined}");
+    expect(toolbar).toContain('if (restricted) {');
+    const restrictedBranch = toolbar.slice(
+      toolbar.indexOf('if (restricted) {'),
+      toolbar.indexOf("const normalBtnW"),
+    );
+    expect(restrictedBranch).toContain("styles.keyboardOnlyCapsule");
+    expect(restrictedBranch).toContain("styles.keyboardOnlyBtn");
+    expect(restrictedBranch).toContain('accessibilityLabel="키보드 내리기"');
+    expect(restrictedBranch).toContain('testID="memo-toolbar-dismiss-keyboard"');
+    expect(restrictedBranch).not.toContain("<ScrollView");
+    expect(restrictedBranch).not.toContain("keyboardSeparator");
+    expect(restrictedBranch).not.toContain("문단 형식");
+    expect(restrictedBranch).not.toContain("글자 서식");
+    expect(restrictedBranch).not.toContain("실행 취소");
+    expect(restrictedBranch).not.toContain("다시 실행");
     expect(toolbar).toContain("<View style={styles.keyboardSeparator} />");
-    expect(toolbar).toContain('accessibilityLabel="키보드 내리기"');
-    expect(toolbar).toContain('testID="memo-toolbar-dismiss-keyboard"');
-    expect(toolbar).not.toContain("keyboardOnlyCapsule");
-    expect(toolbar).not.toContain("keyboardOnlyBtn");
     expect(toolbar).not.toContain("thought?.createdFrom");
   });
 
@@ -97,6 +105,10 @@ describe("on-01a editor hydration and initialization", () => {
     expect(toolbar).toContain("onOpenAddMenu");
     expect(toolbar).toContain("onInsertDivider");
     expect(toolbar).toContain("onShiftEnter");
+    expect(toolbar).toContain("<ScrollView");
+    expect(toolbar).toContain('accessibilityLabel="문단 형식"');
+    expect(toolbar).toContain('accessibilityLabel="실행 취소"');
+    expect(toolbar).toContain('accessibilityLabel="다시 실행"');
     expect(screen).toContain("mode={toolbarContract.mode}");
   });
 
