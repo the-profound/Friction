@@ -100,3 +100,4 @@
 - [Friction question-queue activation signal](friction-question-queue-activation-signal.md) — createdFrom:"question" + status:"PRELIMINARY" reliably means "still queued, unactivated" from one GET; no extra queue query needed.
 - [Friction large-screen test convention](friction-large-screen-test-convention.md) — on-01a.tsx/on.tsx-scale screens have no render harness; regression tests assert on raw source text instead.
 - [WebViewMarkdownEditor hideTitle flash](friction-editor-init-flash-hidetitle.md) — bake hideTitle into initial WebView HTML/CSS (frozen at mount), not a postMessage round-trip; every hideTitle-changing flow already fully remounts via router.replace.
+- [Friction offline-first React Query persistence](friction-offline-query-persistence.md) — queryKey[0] exact-path allowlist for disk cache; NetInfo→onlineManager wiring; persist-client version pin; cold-start gate design.

@@ -5,7 +5,9 @@ import {
   NotoSerifKR_600SemiBold,
   NotoSerifKR_800ExtraBold,
 } from "@expo-google-fonts/noto-serif-kr";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, onlineManager } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import NetInfo from "@react-native-community/netinfo";
 import { Stack, useRouter, usePathname, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { getNotificationsModule } from "@/lib/safeNotifications";
@@ -47,8 +49,22 @@ import {
   getActiveReadingForUser,
   getAuthNavigationDecision,
 } from "@/lib/authNavigation";
+import { offlineQueryPersistOptions } from "@/lib/offlineQueryPersistence";
 
 setBaseUrl(runtimeConfig.apiBaseUrl);
+
+// React Native has no browser-style navigator.onLine/online/offline events,
+// so React Query's default online detection never fires here. Wire the
+// device's real connectivity state in explicitly: offline pauses queries
+// (keeping whatever is cached, no error) and reconnecting triggers the
+// `refetchOnReconnect: "always"` refetch configured below. Works on web too
+// (NetInfo falls back to browser online/offline events there), so this
+// replaces rather than supplements the default listener.
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected);
+  });
+});
 
 // Best-effort: if the previous launch crashed with a fatal JS error, upload
 // the diagnostic captured for it (see lib/crashDiagnostics.ts) now that the
@@ -445,6 +461,11 @@ export default function RootLayout() {
     NotoSerifKR_800ExtraBold,
   });
   const [fontLoadTimedOut, setFontLoadTimedOut] = useState(false);
+  // Cold-start restore of the persisted (allowlisted) query cache — see
+  // lib/offlineQueryPersistence.ts. Runs in parallel with font loading below
+  // (both start on first mount), so it only adds to startup time if it is
+  // slower than fonts, which a local AsyncStorage read essentially never is.
+  const [offlineCacheRestored, setOfflineCacheRestored] = useState(false);
 
   useEffect(() => {
     if (fontsLoaded || fontError) return;
@@ -458,23 +479,35 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    if (fontsLoaded || fontError || fontLoadTimedOut) {
+    if (offlineCacheRestored) return;
+    const timeoutId = setTimeout(() => {
+      console.warn(
+        "[offlineQueryPersistence] Restoring the persisted query cache exceeded 3 seconds; continuing without waiting further.",
+      );
+      setOfflineCacheRestored(true);
+    }, 3000);
+    return () => clearTimeout(timeoutId);
+  }, [offlineCacheRestored]);
+
+  const startupReady =
+    (fontsLoaded || fontError || fontLoadTimedOut) && offlineCacheRestored;
+
+  useEffect(() => {
+    if (startupReady) {
       // Guard: SplashScreen.hideAsync() is a TurboModule call; a failure here
       // should not leave the app stuck on the splash screen indefinitely.
       SplashScreen.hideAsync().catch((err) => {
         console.warn("[SplashScreen] hideAsync failed:", err);
       });
     }
-  }, [fontsLoaded, fontError, fontLoadTimedOut]);
+  }, [startupReady]);
 
-  if (!fontsLoaded && !fontError && !fontLoadTimedOut) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.zinc400} />
-        <Text style={styles.loadingLabel}>앱을 준비하고 있어요</Text>
-      </View>
-    );
-  }
+  const loadingView = (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={Colors.zinc400} />
+      <Text style={styles.loadingLabel}>앱을 준비하고 있어요</Text>
+    </View>
+  );
 
   const appTree = (
     <SafeAreaProvider>
@@ -486,25 +519,34 @@ export default function RootLayout() {
           )
         : null}
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
-            <AuthProvider>
-              <ActiveReadingProvider>
-                <ToastProvider>
-                  <ThoughtComposerProvider>
-                    <NavigationProvider>
-                      <ReaderTransitionProvider>
-                        <AuthGuard />
-                        <ToastContainer />
-                        <ServerVersionGate />
-                      </ReaderTransitionProvider>
-                    </NavigationProvider>
-                  </ThoughtComposerProvider>
-                </ToastProvider>
-              </ActiveReadingProvider>
-            </AuthProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={offlineQueryPersistOptions}
+          onSuccess={() => setOfflineCacheRestored(true)}
+          onError={() => setOfflineCacheRestored(true)}
+        >
+          {startupReady ? (
+            <GestureHandlerRootView>
+              <AuthProvider>
+                <ActiveReadingProvider>
+                  <ToastProvider>
+                    <ThoughtComposerProvider>
+                      <NavigationProvider>
+                        <ReaderTransitionProvider>
+                          <AuthGuard />
+                          <ToastContainer />
+                          <ServerVersionGate />
+                        </ReaderTransitionProvider>
+                      </NavigationProvider>
+                    </ThoughtComposerProvider>
+                  </ToastProvider>
+                </ActiveReadingProvider>
+              </AuthProvider>
+            </GestureHandlerRootView>
+          ) : (
+            loadingView
+          )}
+        </PersistQueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );
