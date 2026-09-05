@@ -52,8 +52,24 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).toContain("event.nativeEvent.velocity?.y");
     expect(recordsScreen).toContain("restartRecordControlsTimer");
     expect(recordsScreen).toContain('pointerEvents={controlsVisible && !searchActive ? "box-none" : "none"}');
+    expect(recordsScreen).toContain("getRecordControlsScrollVisibility");
+    expect(recordsScreen).toContain("registerControlsActivity");
     expect(recordsScreen).toContain("removeFocusOutline");
     expect(searchBar).toContain('outlineStyle: "none"');
+  });
+
+  it("keeps the filter-bar layout space stable while only fading its controls", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+
+    expect(recordsScreen).toContain("height: FILTER_BAR_HEIGHT,");
+    expect(recordsScreen).toContain("marginBottom: -FILTER_GRADIENT_OVERLAP,");
+    expect(recordsScreen).toContain("style={[styles.filterControls, { opacity: controlsAnimation }]}");
+    expect(recordsScreen).toContain("<View style={styles.filtersAnimated}>");
+    expect(recordsScreen).not.toContain("outputRange: [0, FILTER_BAR_HEIGHT]");
+    expect(recordsScreen).not.toContain("outputRange: [0, -FILTER_GRADIENT_OVERLAP]");
   });
 
 });

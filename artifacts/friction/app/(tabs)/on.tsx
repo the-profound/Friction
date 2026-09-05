@@ -96,7 +96,8 @@ import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { isListSearchBoundaryGesture } from "@/lib/dateGroupVerticalSnap";
 import {
   clearRecordControlsTimer,
-  RECORD_CONTROLS_INACTIVITY_MS,
+  getNextRecordControlsVisibility,
+  getRecordControlsScrollVisibility,
   restartRecordControlsTimer,
   type RecordControlsTimer,
 } from "@/lib/recordControlsInactivity";
@@ -401,22 +402,41 @@ export default function OnScreen() {
     controlsTimerRef.current = clearRecordControlsTimer(controlsTimerRef.current);
   }, []);
 
-  const showControlsForActivity = useCallback(() => {
+  const applyControlsVisibility = useCallback((
+    action: "activity" | "show" | "hide" | "inactive",
+  ) => {
+    const nextVisible = getNextRecordControlsVisibility(
+      controlsVisibleRef.current,
+      action,
+      searchActiveRef.current,
+    );
+    if (controlsVisibleRef.current === nextVisible) return;
+    controlsVisibleRef.current = nextVisible;
+    setControlsVisible(nextVisible);
+  }, []);
+
+  const restartControlsInactivityTimer = useCallback(() => {
     clearControlsTimer();
     if (searchActiveRef.current) return;
-    if (!controlsVisibleRef.current) {
-      controlsVisibleRef.current = true;
-      setControlsVisible(true);
-    }
     controlsTimerRef.current = restartRecordControlsTimer(controlsTimerRef.current, () => {
       controlsTimerRef.current = null;
       if (searchActiveRef.current) return;
-      controlsVisibleRef.current = false;
-      setControlsVisible(false);
+      applyControlsVisibility("inactive");
     });
-  }, [clearControlsTimer]);
+  }, [applyControlsVisibility, clearControlsTimer]);
+
+  const showControlsForActivity = useCallback(() => {
+    applyControlsVisibility("show");
+    restartControlsInactivityTimer();
+  }, [applyControlsVisibility, restartControlsInactivityTimer]);
+
+  const registerControlsActivity = useCallback(() => {
+    applyControlsVisibility("activity");
+    restartControlsInactivityTimer();
+  }, [applyControlsVisibility, restartControlsInactivityTimer]);
 
   const closeSearch = useCallback(() => {
+    searchActiveRef.current = false;
     setSearchActive(false);
     setSearchQuery("");
     requestAnimationFrame(showControlsForActivity);
@@ -424,10 +444,10 @@ export default function OnScreen() {
 
   const openSearch = useCallback(() => {
     clearControlsTimer();
-    controlsVisibleRef.current = false;
-    setControlsVisible(false);
+    applyControlsVisibility("hide");
+    searchActiveRef.current = true;
     setSearchActive(true);
-  }, [clearControlsTimer]);
+  }, [applyControlsVisibility, clearControlsTimer]);
 
   const tryOpenListSearch = useCallback((
     startOffset: number,
@@ -448,10 +468,6 @@ export default function OnScreen() {
   useEffect(() => {
     closeOverlay();
     lastScrollOffsetRef.current = 0;
-    if (!controlsVisibleRef.current) {
-      controlsVisibleRef.current = true;
-      setControlsVisible(true);
-    }
     showControlsForActivity();
   }, [kind, view, closeOverlay, showControlsForActivity]);
 
@@ -698,11 +714,31 @@ export default function OnScreen() {
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       verticalDateSnap.onScroll(event);
       scrollPressGuard.onScroll();
-      showControlsForActivity();
       const offset = Math.max(0, event.nativeEvent.contentOffset.y);
+      const visibility = getRecordControlsScrollVisibility(
+        lastScrollOffsetRef.current,
+        offset,
+      );
       lastScrollOffsetRef.current = offset;
+      if (searchActiveRef.current) return;
+
+      if (visibility === "hide") {
+        clearControlsTimer();
+        applyControlsVisibility("hide");
+        return;
+      }
+      if (visibility === "show") {
+        applyControlsVisibility("show");
+      }
+      registerControlsActivity();
     },
-    [scrollPressGuard, showControlsForActivity, verticalDateSnap.onScroll],
+    [
+      clearControlsTimer,
+      registerControlsActivity,
+      scrollPressGuard,
+      applyControlsVisibility,
+      verticalDateSnap.onScroll,
+    ],
   );
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
@@ -1005,9 +1041,9 @@ export default function OnScreen() {
   return (
     <View
       style={styles.container}
-      onTouchStart={showControlsForActivity}
+      onTouchStart={registerControlsActivity}
       {...(Platform.OS === "web"
-        ? ({ onPointerDown: showControlsForActivity } as object)
+        ? ({ onPointerDown: registerControlsActivity } as object)
         : {})}
     >
       <PageHeader
@@ -1023,23 +1059,7 @@ export default function OnScreen() {
         backgroundColor={Colors.recordSearchBarBg}
         removeFocusOutline
       />
-      <Animated.View
-        pointerEvents={controlsVisible && !searchActive ? "box-none" : "none"}
-        style={[
-          styles.filtersAnimated,
-          {
-            height: controlsAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, FILTER_BAR_HEIGHT],
-            }),
-            marginBottom: controlsAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, -FILTER_GRADIENT_OVERLAP],
-            }),
-            opacity: controlsAnimation,
-          },
-        ]}
-      >
+      <View style={styles.filtersAnimated}>
         <Gradient
           colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
           start={{ x: 0.5, y: 0 }}
@@ -1047,27 +1067,32 @@ export default function OnScreen() {
           style={styles.filters}
           pointerEvents="box-none"
         >
-          <View style={styles.kindFilterGroup}>
-            <RecordKindButton label="단상" active={kind === "thought"} onPress={() => { showControlsForActivity(); setKind("thought"); }} />
-            <RecordKindButton label="편집" active={kind === "editing"} onPress={() => { showControlsForActivity(); setKind("editing"); }} />
-            <RecordKindButton label="편지" active={kind === "letter"} onPress={() => { showControlsForActivity(); setKind("letter"); }} />
-          </View>
-          <View style={styles.viewFilterGroup}>
-            <RecordViewButton
-              icon="list"
-              label="목록형으로 보기"
-              active={view === "content"}
-              onPress={() => { showControlsForActivity(); setView("content"); }}
-            />
-            <RecordViewButton
-              icon="layers"
-              label="하나씩 보기"
-              active={view === "card"}
-              onPress={() => { showControlsForActivity(); setView("card"); }}
-            />
-          </View>
+          <Animated.View
+            pointerEvents={controlsVisible && !searchActive ? "box-none" : "none"}
+            style={[styles.filterControls, { opacity: controlsAnimation }]}
+          >
+            <View style={styles.kindFilterGroup}>
+              <RecordKindButton label="단상" active={kind === "thought"} onPress={() => { showControlsForActivity(); setKind("thought"); }} />
+              <RecordKindButton label="편집" active={kind === "editing"} onPress={() => { showControlsForActivity(); setKind("editing"); }} />
+              <RecordKindButton label="편지" active={kind === "letter"} onPress={() => { showControlsForActivity(); setKind("letter"); }} />
+            </View>
+            <View style={styles.viewFilterGroup}>
+              <RecordViewButton
+                icon="list"
+                label="목록형으로 보기"
+                active={view === "content"}
+                onPress={() => { showControlsForActivity(); setView("content"); }}
+              />
+              <RecordViewButton
+                icon="layers"
+                label="하나씩 보기"
+                active={view === "card"}
+                onPress={() => { showControlsForActivity(); setView("card"); }}
+              />
+            </View>
+          </Animated.View>
         </Gradient>
-      </Animated.View>
+      </View>
 
       {isLoading ? (
         <View style={styles.center}><RecordListText style={styles.muted}>불러오는 중...</RecordListText></View>
@@ -1122,7 +1147,7 @@ export default function OnScreen() {
             onPointerDown: (event: { nativeEvent?: { clientY?: number } }) => {
               listPointerStartYRef.current = event.nativeEvent?.clientY ?? null;
               listPointerStartOffsetRef.current = lastScrollOffsetRef.current;
-              showControlsForActivity();
+              registerControlsActivity();
             },
             onPointerUp: (event: { nativeEvent?: { clientY?: number } }) => {
               const startY = listPointerStartYRef.current;
@@ -1137,7 +1162,7 @@ export default function OnScreen() {
             },
             onWheel: (event: { deltaY?: number }) => {
               if (!tryOpenListSearch(lastScrollOffsetRef.current, -(event.deltaY ?? 0))) {
-                showControlsForActivity();
+                registerControlsActivity();
               }
             },
           } : {})}
@@ -1168,7 +1193,7 @@ export default function OnScreen() {
             onScroll={handleRecordScroll}
             onScrollBeginDrag={(event) => {
               listDragStartOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
-              showControlsForActivity();
+              registerControlsActivity();
             }}
             onScrollEndDrag={(event) => {
               const endOffset = Math.max(0, event.nativeEvent.contentOffset.y);
@@ -1281,8 +1306,14 @@ export default function OnScreen() {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filtersAnimated: { height: FILTER_BAR_HEIGHT, overflow: "hidden", zIndex: 5 },
+  filtersAnimated: {
+    height: FILTER_BAR_HEIGHT,
+    marginBottom: -FILTER_GRADIENT_OVERLAP,
+    overflow: "hidden",
+    zIndex: 5,
+  },
   filters: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 28 },
+  filterControls: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
   kindButton: { height: FILTER_BUTTON_HEIGHT, alignSelf: "flex-start", flexGrow: 0, flexShrink: 0 },
   kindButtonContent: { height: FILTER_BUTTON_HEIGHT, flexGrow: 0, flexShrink: 0, paddingHorizontal: 14, borderRadius: FILTER_BUTTON_HEIGHT / 2, borderWidth: 1, borderColor: Colors.zinc200, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
