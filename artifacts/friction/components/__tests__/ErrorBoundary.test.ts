@@ -24,4 +24,13 @@ describe("root error boundary diagnostics", () => {
       "!__DEV__ ? formatErrorDetails()",
     );
   });
+
+  it("keeps the retry button at a fixed native height", () => {
+    expect(fallbackSource).toMatch(
+      /button:\s*\{[\s\S]*?width:\s*200,[\s\S]*?height:\s*52,[\s\S]*?flexGrow:\s*0,[\s\S]*?flexShrink:\s*0/,
+    );
+    expect(fallbackSource).toMatch(
+      /buttonContent:\s*\{[\s\S]*?width:\s*200,[\s\S]*?height:\s*52,[\s\S]*?flexGrow:\s*0,[\s\S]*?flexShrink:\s*0/,
+    );
+  });
 });
