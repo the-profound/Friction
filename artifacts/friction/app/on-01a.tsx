@@ -18,7 +18,7 @@ import { useRouter, useLocalSearchParams, Stack, useNavigation } from "expo-rout
 import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import type { NavigationAction } from "expo-router/build/react-navigation/routers";
 import { Feather } from "@expo/vector-icons";
-import { Colors, Typography, Spacing, Shadows } from "@/constants/tokens";
+import { Colors, Typography, Spacing, Shadows, Sizing } from "@/constants/tokens";
 import { useAutoSave, type AutoSaveRestoreContext } from "@/lib/useAutoSave";
 import { resolveDetailEntity } from "@/lib/detailEntityResolution";
 import { GuardedReturnSession } from "@/lib/guardedReturnSession";
