@@ -137,9 +137,9 @@ function scheduleTypeLabel(
 }
 
 // ─── Space Carousel ───────────────────────────────────────────────────────────
-// Card-snapping carousel. 2+ cards visible + 3rd peeking at right edge.
-//   Web  → PanResponder + Animated translate, snaps to card boundary on release
-//   Native → horizontal ScrollView with snapToInterval
+// Free-scrolling carousel (no snap). 2+ cards visible + 3rd peeking at right edge.
+//   Web    → PanResponder + Animated translate, clamps/rubber-bands at bounds
+//   Native → horizontal ScrollView, free scroll
 
 const SC_SNAP_STEP = SC_CARD_W + SC_CARD_GAP;
 
@@ -226,23 +226,16 @@ function SpaceCarousel({
       },
       onPanResponderRelease: () => {
         const max = maxScrollOffset();
-        // Snap to nearest card boundary, then clamp to valid scroll range
-        const rawOffset = Math.max(0, Math.min(scrollOffsetRef.current, max));
-        const snapIndex = Math.max(
+        // No snapping — just clamp to valid scroll range and stay put.
+        const clampedOffset = Math.max(0, Math.min(scrollOffsetRef.current, max));
+        const activeIndex = Math.max(
           0,
-          Math.min(Math.round(rawOffset / SC_SNAP_STEP), itemCount - 1),
+          Math.min(Math.round(clampedOffset / SC_SNAP_STEP), itemCount - 1),
         );
-        // Clamp snap target to max so we never animate past content end
-        const snapOffset = Math.min(snapIndex * SC_SNAP_STEP, max);
-        // Derive actual index from the clamped offset in case it differs
-        const actualIndex = Math.max(
-          0,
-          Math.min(Math.round(snapOffset / SC_SNAP_STEP), itemCount - 1),
-        );
-        scrollOffsetRef.current = snapOffset;
-        setCurrentIndexRef.current(actualIndex);
+        scrollOffsetRef.current = clampedOffset;
+        setCurrentIndexRef.current(activeIndex);
         Animated.spring(translateX, {
-          toValue: SC_LEFT_PAD - snapOffset,
+          toValue: SC_LEFT_PAD - clampedOffset,
           useNativeDriver: false,
           overshootClamping: true,
           tension: 120,
@@ -366,9 +359,6 @@ function SpaceCarousel({
           horizontal
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
-          snapToInterval={SC_SNAP_STEP}
-          snapToAlignment="start"
-          decelerationRate="fast"
           contentContainerStyle={spaceCarouselStyles.carouselContent}
           style={spaceCarouselStyles.carouselScroll}
           onScroll={(e) => {
