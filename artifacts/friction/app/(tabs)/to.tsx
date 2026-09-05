@@ -11,6 +11,7 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 
 import ScalePressable from "@/components/shared/ScalePressable";
+import HeaderButton from "@/components/shared/HeaderButton";
 import { myArticleToViewModel } from "@/hooks/useMyLetterCards";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -288,7 +289,7 @@ export default function MyScreen() {
   );
 
   const contentPadding = useMemo(
-    () => ({ paddingTop: 8, paddingBottom: navBottom + 24 }),
+    () => ({ paddingBottom: navBottom + 24 }),
     [navBottom],
   );
 
@@ -433,23 +434,28 @@ export default function MyScreen() {
             <PageHeader
               title="내 정보"
               centeredBrandTitle
-              showProfile
-              profileButtonVariant="settings"
-              onProfilePress={() => router.push("/mypage" as never)}
-              profileAccessibilityLabel="설정 및 활동 열기"
             />
 
-            <View style={styles.profileSection} pointerEvents="none">
-              {user?.avatarUrl ? (
-                <Image
-                  source={{ uri: user.avatarUrl }}
-                  style={styles.avatar}
-                />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Feather name="user" size={34} color={Colors.zinc500} />
+            <View style={styles.profileSection}>
+              <View style={styles.profileIdentityRow}>
+                {user?.avatarUrl ? (
+                  <Image
+                    source={{ uri: user.avatarUrl }}
+                    style={styles.avatar}
+                  />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarFallback]}>
+                    <Feather name="user" size={34} color={Colors.zinc500} />
+                  </View>
+                )}
+                <View style={styles.settingsButton}>
+                  <HeaderButton
+                    variant="settings"
+                    onPress={() => router.push("/mypage" as never)}
+                    accessibilityLabel="설정 및 활동 열기"
+                  />
                 </View>
-              )}
+              </View>
               <Text style={styles.profileName} numberOfLines={1}>
                 {displayName}
               </Text>
@@ -558,6 +564,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing.screenPx,
     paddingBottom: 20,
+  },
+  profileIdentityRow: {
+    position: "relative",
+    width: "100%",
+    alignItems: "center",
+  },
+  settingsButton: {
+    position: "absolute",
+    top: 0,
+    right: 0,
   },
   avatar: {
     width: 78,
