@@ -16,7 +16,15 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useReaderTransition } from "@/contexts/ReaderTransitionContext";
 import { Feather, AntDesign } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
+import {
+  Colors,
+  ReaderTokens,
+  Shadows,
+  Typography,
+  Spacing,
+  Sizing,
+  readerFontSize,
+} from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
 import { PageHeader } from "@/components/NavBar/PageHeader";
 import { useUser } from "@/contexts/UserContext";
@@ -67,7 +75,6 @@ export default function ArchiveScreen() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [sentenceScrollEnabled, setSentenceScrollEnabled] = useState(true);
-  const [favOverrides, setFavOverrides] = useState<Map<string, boolean>>(new Map());
   const sentenceOpenRowRef = useRef<SwipeableRowHandle | null>(null);
   const sentenceRowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
 
@@ -111,6 +118,10 @@ export default function ArchiveScreen() {
   }, [filteredMyCollections]);
 
   const cardWidth = Math.floor(windowWidth - Spacing.screenPx * 2);
+  const sentenceTextSize = readerFontSize(
+    ReaderTokens.typeScale.bodyCqi,
+    Math.max(1, cardWidth - 32),
+  );
 
   const filteredSentences = useMemo(() => {
     if (!searchQuery.trim()) return sentences;
@@ -242,14 +253,12 @@ export default function ArchiveScreen() {
   const handleSentenceToggleFavorite = useCallback(async (id: string, currentFav: boolean) => {
     if (toggleFavorite.isPending) return;
     const newFav = !currentFav;
-    setFavOverrides((prev) => new Map(prev).set(id, newFav));
     if (selectedSentence?.id === id) {
       setSelectedSentence((prev) => prev ? { ...prev, isFavorite: newFav } : null);
     }
     try {
       await toggleFavorite.mutateAsync({ id, data: { isFavorite: newFav } });
     } catch {
-      setFavOverrides((prev) => { const next = new Map(prev); next.delete(id); return next; });
       if (selectedSentence?.id === id) {
         setSelectedSentence((prev) => prev ? { ...prev, isFavorite: currentFav } : null);
       }
@@ -257,7 +266,6 @@ export default function ArchiveScreen() {
       return;
     }
     await sentencesQuery.refetch();
-    setFavOverrides((prev) => { const next = new Map(prev); next.delete(id); return next; });
   }, [toggleFavorite, sentencesQuery, selectedSentence, showToast]);
 
   const handleSentenceQuoteAsMemo = useCallback(async (sentence: StoredSentence) => {
@@ -384,37 +392,30 @@ export default function ArchiveScreen() {
           closeSentenceOpenRow();
           setSelectedSentence(item);
         }}
-      contentStyle={styles.sentenceItemRow}
+        contentStyle={styles.sentenceItemRow}
+        accessibilityRole="button"
+        accessibilityLabel="수집한 문장 상세 열기"
       >
         <View style={styles.sentenceItemContent}>
-          <Text style={styles.sentenceText} numberOfLines={2}>
+          <View style={styles.sentenceMeta}>
+            <Text style={styles.sentenceSource} numberOfLines={1}>
+              {item.articleTitle || "출처 없음"}
+            </Text>
+            <Text style={styles.sentenceDate}>
+              {new Date(item.createdAt).toLocaleDateString("ko-KR")}
+            </Text>
+          </View>
+          <Text
+            style={[styles.sentenceText, { fontSize: sentenceTextSize, lineHeight: sentenceTextSize * 1.7 }]}
+            numberOfLines={3}
+            ellipsizeMode="tail"
+          >
             &ldquo;{item.text}&rdquo;
           </Text>
-          {item.articleTitle ? (
-            <Text style={styles.sentenceSource} numberOfLines={1}>{item.articleTitle}</Text>
-          ) : null}
-          <View style={styles.sentenceMeta}>
-            <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
-            {(favOverrides.has(item.id) ? favOverrides.get(item.id) : item.isFavorite) && (
-              <AntDesign name="star" size={12} color="#F59E0B" />
-            )}
-          </View>
         </View>
-        <ScalePressable
-          onPress={() => handleSentenceToggleFavorite(item.id, favOverrides.has(item.id) ? favOverrides.get(item.id)! : item.isFavorite)}
-          hitSlop={8}
-          style={styles.sentenceStarBtn}
-          contentStyle={styles.sentenceStarBtnContent}
-        >
-          {(favOverrides.has(item.id) ? favOverrides.get(item.id) : item.isFavorite) ? (
-            <AntDesign name="star" size={22} color="#F59E0B" />
-          ) : (
-            <Feather name="star" size={22} color={Colors.zinc300} />
-          )}
-        </ScalePressable>
       </ScalePressable>
     </SwipeableRow>
-  ), [handleSentenceToggleFavorite, closeSentenceOpenRow, handleSentenceSwipeOpen, favOverrides]);
+  ), [closeSentenceOpenRow, handleSentenceSwipeOpen, sentenceTextSize]);
 
   const renderSentenceSelectionItem = useCallback(({ item }: { item: StoredSentence }) => {
     const isSelected = selectedIds.has(item.id);
@@ -422,26 +423,36 @@ export default function ArchiveScreen() {
       <ScalePressable
         style={styles.selectionRow}
         onPress={() => toggleSelect(item.id)}
-      contentStyle={styles.selectionRowContent}
+        contentStyle={styles.selectionRowContent}
+        accessibilityRole="checkbox"
+        accessibilityLabel="수집한 문장 선택"
+        accessibilityState={{ checked: isSelected }}
       >
-        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-          {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+        <View style={styles.checkboxTouchTarget}>
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Feather name="check" size={14} color={Colors.white} />}
+          </View>
         </View>
         <View style={styles.sentenceItemContent}>
-          <Text style={styles.sentenceText} numberOfLines={2}>
+          <View style={styles.sentenceMeta}>
+            <Text style={styles.sentenceSource} numberOfLines={1}>
+              {item.articleTitle || "출처 없음"}
+            </Text>
+            <Text style={styles.sentenceDate}>
+              {new Date(item.createdAt).toLocaleDateString("ko-KR")}
+            </Text>
+          </View>
+          <Text
+            style={[styles.sentenceText, { fontSize: sentenceTextSize, lineHeight: sentenceTextSize * 1.7 }]}
+            numberOfLines={3}
+            ellipsizeMode="tail"
+          >
             &ldquo;{item.text}&rdquo;
           </Text>
-          {item.articleTitle ? (
-            <Text style={styles.sentenceSource} numberOfLines={1}>{item.articleTitle}</Text>
-          ) : null}
-          <View style={styles.sentenceMeta}>
-            <Text style={styles.sentenceDate}>{new Date(item.createdAt).toLocaleDateString("ko-KR")}</Text>
-            {item.isFavorite && <AntDesign name="star" size={12} color="#F59E0B" />}
-          </View>
         </View>
       </ScalePressable>
     );
-  }, [selectedIds, toggleSelect]);
+  }, [selectedIds, sentenceTextSize, toggleSelect]);
 
   const renderEmptyPersonal = () => (
     <RefreshableEmpty
@@ -940,55 +951,61 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   sentenceItem: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
+    marginHorizontal: Spacing.screenPx,
+    marginBottom: Spacing.cardGap,
   },
   sentenceItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    ...Shadows.card,
   },
   sentenceItemContent: {
     flex: 1,
-    gap: 4,
+    minWidth: 0,
+    gap: 7,
   },
   sentenceText: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.zinc800,
-    lineHeight: 20,
+    fontFamily: ReaderTokens.fontFamily.serif,
+    color: Colors.zinc600,
   },
   sentenceSource: {
     ...Typography.caption,
-    fontSize: 12,
     color: Colors.zinc500,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
   },
   sentenceMeta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
   },
   sentenceDate: {
     ...Typography.caption,
-    fontSize: 12,
     color: Colors.zinc500,
-  },
-  sentenceStarBtn: {},
-  sentenceStarBtnContent: {
-    padding: 4,
+    flexShrink: 0,
   },
   selectionRow: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.zinc100,
+    marginHorizontal: Spacing.screenPx,
+    marginBottom: Spacing.cardGap,
   },
   selectionRowContent: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 16,
+    paddingLeft: 10,
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    ...Shadows.card,
+  },
+  checkboxTouchTarget: {
+    width: 44,
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: Spacing.screenPx,
+    justifyContent: "center",
   },
   checkbox: {
     width: 22,

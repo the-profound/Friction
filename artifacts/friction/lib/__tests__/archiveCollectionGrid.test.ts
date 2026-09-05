@@ -30,3 +30,48 @@ describe("archive personal collection grid", () => {
     );
   });
 });
+
+describe("archive collected sentence list", () => {
+  const regularRenderer = archiveScreen.slice(
+    archiveScreen.indexOf("const renderSentenceItem"),
+    archiveScreen.indexOf("const renderSentenceSelectionItem"),
+  );
+  const selectionRenderer = archiveScreen.slice(
+    archiveScreen.indexOf("const renderSentenceSelectionItem"),
+    archiveScreen.indexOf("const renderEmptyPersonal"),
+  );
+
+  it("uses the record-list card surface and metadata layout", () => {
+    expect(archiveScreen).toContain("marginHorizontal: Spacing.screenPx");
+    expect(archiveScreen).toContain("marginBottom: Spacing.cardGap");
+    expect(archiveScreen).toContain("borderRadius: 16");
+    expect(archiveScreen).toContain("...Shadows.card");
+    expect(archiveScreen).toContain("fontFamily: ReaderTokens.fontFamily.serif");
+    expect(archiveScreen).toContain('justifyContent: "space-between"');
+  });
+
+  it("keeps source and sentence previews safely truncated", () => {
+    expect(regularRenderer).toContain('style={styles.sentenceSource} numberOfLines={1}');
+    expect(regularRenderer).toContain("numberOfLines={3}");
+    expect(regularRenderer).toContain('ellipsizeMode="tail"');
+    expect(selectionRenderer).toContain('style={styles.sentenceSource} numberOfLines={1}');
+    expect(selectionRenderer).toContain("numberOfLines={3}");
+  });
+
+  it("does not render favorite indicators or actions in either list renderer", () => {
+    expect(regularRenderer).not.toContain('name="star"');
+    expect(regularRenderer).not.toContain("handleSentenceToggleFavorite");
+    expect(selectionRenderer).not.toContain('name="star"');
+    expect(selectionRenderer).not.toContain("isFavorite");
+  });
+
+  it("preserves detail, swipe delete, and accessible multi-selection interactions", () => {
+    expect(regularRenderer).toContain("setSelectedSentence(item)");
+    expect(regularRenderer).toContain("onDeletePress");
+    expect(regularRenderer).toContain("onSwipeOpen");
+    expect(selectionRenderer).toContain('accessibilityRole="checkbox"');
+    expect(selectionRenderer).toContain("accessibilityState={{ checked: isSelected }}");
+    expect(selectionRenderer).toContain("toggleSelect(item.id)");
+    expect(archiveScreen).toContain("handleSentenceToggleFavorite(selectedSentence.id");
+  });
+});
