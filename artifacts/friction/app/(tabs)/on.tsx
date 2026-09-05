@@ -101,6 +101,7 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { isListSearchBoundaryGesture } from "@/lib/dateGroupVerticalSnap";
+import { useIsOnline } from "@/lib/useIsOnline";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
 const FILTER_GRADIENT_OVERLAP = 12;
@@ -352,6 +353,7 @@ export default function OnScreen() {
   const { userId } = useUser();
   const { isLoading: authIsLoading } = useAuth();
   const { showToast } = useToast();
+  const isOnline = useIsOnline();
   // ── Letter overlay (shared 편지 선택 모드) ─────────────────────────────────
   // One hook replaces the previous inline CardSelectOverlay + visibility-toggle
   // confirm modal. spaceLetterByArticleId is re-used for card badges.
@@ -776,13 +778,20 @@ export default function OnScreen() {
 
   const handleRefresh = useCallback(async () => {
     if (isManualRefreshing) return;
+    // Offline: a refetch would just sit paused with no visible feedback —
+    // tell the user why instead of spinning the RefreshControl indefinitely
+    // (same pattern as the 마이 탭's handleManualRefresh).
+    if (!isOnline) {
+      showToast({ message: "오프라인 상태예요. 네트워크 연결 후 다시 시도해주세요.", type: "info" });
+      return;
+    }
     setIsManualRefreshing(true);
     try {
       await refreshAll(kind === "thought");
     } finally {
       setIsManualRefreshing(false);
     }
-  }, [isManualRefreshing, kind, refreshAll]);
+  }, [isManualRefreshing, isOnline, kind, refreshAll, showToast]);
 
   const openRecord = useCallback((record: UnifiedRecord) => {
     if (record.kind === "thought") {
@@ -929,14 +938,19 @@ export default function OnScreen() {
   }, [addToCollection, archiveArticleId, queryClient, router, selectedCollectionId, showToast, sortedCollections]);
 
 
+  // Question queue is a supplemental query (records already tolerate it
+  // failing/being slow — see questionLoadFailed/emptyTitle below), so it is
+  // deliberately excluded from the full-screen loading gate: a slow or
+  // still-generating queue must never keep the whole record feed spinning
+  // once the primary 단상/편지 lists are in.
   const isLoading =
     (articlesQuery.isLoading && !articlesQuery.data) ||
-    (thoughtsQuery.isLoading && !thoughtsQuery.data) ||
-    // While auth is loading the query is disabled (enabled=false) so
-    // questionQuery.isLoading is false even though no data has arrived yet.
-    // Include authIsLoading so the screen keeps its loading state rather than
-    // briefly showing an empty question area before the query fires.
-    ((questionQuery.isLoading || authIsLoading) && !questionQuery.data);
+    (thoughtsQuery.isLoading && !thoughtsQuery.data);
+  // Offline with nothing ever cached for the primary lists (e.g. very first
+  // launch offline) — say so explicitly instead of falling through to the
+  // ordinary "아직 없어요" empty copy, which reads as a permanent empty result.
+  const isOfflineWithoutCache =
+    !isOnline && (articlesQuery.isPending || thoughtsQuery.isPending);
   const questionLoadFailed =
     kind === "thought" &&
     questionQuery.isError &&
@@ -1086,6 +1100,12 @@ export default function OnScreen() {
 
       {isLoading ? (
         <View style={styles.center}><RecordListText style={styles.muted}>불러오는 중...</RecordListText></View>
+      ) : isOfflineWithoutCache ? (
+        <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
+          <Feather name="wifi-off" size={22} color={Colors.zinc400} />
+          <RecordListText style={styles.emptyTitle}>오프라인 상태예요</RecordListText>
+          <RecordListText style={styles.muted}>네트워크에 연결하면 데이터를 불러올 수 있어요</RecordListText>
+        </RefreshableEmpty>
       ) : view === "card" && cardGroups.length > 0 ? (
         <View
           style={styles.recordListViewport}

@@ -8,11 +8,13 @@ import type { QueryKey } from "@tanstack/react-query";
  * Offline-first disk cache for React Query.
  *
  * Scope: only "light bumper data" needed to paint a screen instantly on cold
- * start / while offline is written to disk — the 수신함 표지 목록 (inbox list)
- * and everything the 마이 탭 renders (profile, my letters list, my spaces
- * list, send records, neighbors). Everything else (letter bodies, memos,
- * drafts, team collections, ...) stays memory-only exactly as before; it is
- * simply never dehydrated, so it never touches AsyncStorage.
+ * start / while offline is written to disk — the 수신함 표지 목록 (inbox list),
+ * everything the 마이 탭 renders (profile, my letters list, my spaces
+ * list, send records, neighbors), and everything the 기록함 탭 renders (my
+ * thoughts list, thought question queue, my collections list). Everything
+ * else (letter bodies, memos, drafts, team collections, ...) stays
+ * memory-only exactly as before; it is simply never dehydrated, so it never
+ * touches AsyncStorage.
  *
  * Bump `PERSISTED_QUERY_CACHE_SCHEMA_VERSION` whenever a persisted query's
  * response shape changes in a way that would make an old cached payload
@@ -39,6 +41,9 @@ const PERSISTED_LIST_PATHS = new Set<string>([
   "/api/spaces", // 내 공간 목록 - useListSpaces
   "/api/send-records", // 발송기록 - useListSendRecords
   "/api/neighbors", // 이웃 목록 - useListNeighbors
+  "/api/thoughts", // 단상 목록 - useListThoughts
+  "/api/thoughts/question-queue", // 단상 질문 큐 - useGetThoughtQuestionQueue
+  "/api/my-collections", // 내 모음 목록 - useListMyCollections
 ]);
 
 // "/api/users/<id>" (profile - useGetUser) exactly, but not a nested
