@@ -5,10 +5,10 @@ import {
   reportRenderError,
 } from "@/lib/crashDiagnostics";
 import {
+  getComponentStackDiagnostic,
   getRenderDiagnostic,
   type RenderDiagnosticCode,
 } from "@/lib/renderErrorDiagnostics";
-import { captureException } from "@/lib/posthog";
 
 export type ErrorBoundaryProps = PropsWithChildren<{
   FallbackComponent?: ComponentType<ErrorFallbackProps>;
@@ -44,9 +44,11 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
-    captureException(error);
-    reportRenderError(error);
+    const componentDiagnostic = getComponentStackDiagnostic(info.componentStack);
+    reportRenderError(error, componentDiagnostic);
     if (typeof this.props.onError === "function") {
+      // Keep the raw component stack local for developer-provided callbacks.
+      // reportRenderError receives only the non-reversible fingerprint above.
       this.props.onError(error, info.componentStack);
     }
   }

@@ -86,6 +86,14 @@ const RENDER_DIAGNOSTIC_CODE_BY_CLASS = new Map([
   ["EvalError", "RND-EVAL"],
   ["UnknownError", "RND-UNKNOWN"],
 ]);
+const ACTIONABLE_RENDER_DIAGNOSTIC_CODES = new Set([
+  "RND-QUERY-CLIENT",
+  "RND-USER-CONTEXT",
+  "RND-HOOK-ORDER",
+  "RND-UPDATE-DEPTH",
+  "RND-INVALID-CHILD",
+  "RND-INVALID-ELEMENT",
+]);
 function recordFatalCrashSignal(
   diagnostic: ReturnType<typeof safeDiagnosticLog>,
 ): void {
@@ -195,8 +203,9 @@ export function getSafeAuthFlowDiagnostic(input: {
 export function getSafeRenderErrorDiagnostic(input: {
   message?: unknown;
   name?: unknown;
-  stack?: unknown;
   diagnosticCode?: unknown;
+  componentFingerprint?: unknown;
+  componentDepth?: unknown;
   platform?: unknown;
   appVersion?: unknown;
   buildNumber?: unknown;
@@ -205,11 +214,17 @@ export function getSafeRenderErrorDiagnostic(input: {
 }) {
   if (
     input.message !== "render-error" ||
-    input.stack != null ||
     typeof input.name !== "string" ||
     !RENDER_ERROR_CLASSES.has(input.name) ||
     typeof input.diagnosticCode !== "string" ||
-    RENDER_DIAGNOSTIC_CODE_BY_CLASS.get(input.name) !== input.diagnosticCode
+    (!ACTIONABLE_RENDER_DIAGNOSTIC_CODES.has(input.diagnosticCode) &&
+      RENDER_DIAGNOSTIC_CODE_BY_CLASS.get(input.name) !== input.diagnosticCode) ||
+    typeof input.componentFingerprint !== "string" ||
+    !/^[a-f0-9]{8}$/.test(input.componentFingerprint) ||
+    typeof input.componentDepth !== "number" ||
+    !Number.isInteger(input.componentDepth) ||
+    input.componentDepth < 0 ||
+    input.componentDepth > 64
   ) {
     return null;
   }
@@ -217,6 +232,8 @@ export function getSafeRenderErrorDiagnostic(input: {
   return {
     errorClass: input.name,
     diagnosticCode: input.diagnosticCode,
+    componentFingerprint: input.componentFingerprint,
+    componentDepth: input.componentDepth,
     platform:
       input.platform === "ios" || input.platform === "android"
         ? input.platform
@@ -342,7 +359,7 @@ router.post("/client-logs", (req, res) => {
 
   if (parsed.data.source === "auth-flow") {
     const authFlow = getSafeAuthFlowDiagnostic(parsed.data);
-    if (!authFlow || parsed.data.stack) {
+    if (!authFlow) {
       logger.warn("client-logs: discarded malformed auth-flow diagnostic");
       res.status(204).send();
       return;

@@ -13,13 +13,12 @@
  */
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
-import { useRouter, usePathname } from "expo-router";
+import { useRouter } from "expo-router";
 import { getNotificationsModule } from "@/lib/safeNotifications";
 import type * as NotificationsType from "expo-notifications";
 
 export function useNotificationDeepLink(userId: string | null | undefined): void {
   const router = useRouter();
-  const pathname = usePathname();
   const consumedInitialRef = useRef(false);
 
   useEffect(() => {
@@ -37,10 +36,10 @@ export function useNotificationDeepLink(userId: string | null | undefined): void
 
       if (data?.type !== "LETTER_ARRIVED") return;
 
-      // Navigate only if not already on the inbox tab
-      if (!pathname.startsWith("/(tabs)")) {
-        router.replace("/(tabs)");
-      }
+      // Use the explicit tab route. The normal initial tab is the record
+      // screen, so relying on the tab navigator's initial route would send a
+      // notification tap to the wrong place.
+      router.replace("/(tabs)/index");
     }
 
     // Cold-start: check for the response that launched the app
@@ -63,5 +62,5 @@ export function useNotificationDeepLink(userId: string | null | undefined): void
     return () => {
       subscription.remove();
     };
-  }, [userId, pathname, router]);
+  }, [userId, router]);
 }

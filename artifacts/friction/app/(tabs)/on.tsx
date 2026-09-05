@@ -1,6 +1,6 @@
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 // hint: Logic changed on both sides. Requires understanding intent of each change.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -16,7 +16,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { QueryClientContext, useQueryClient } from "@tanstack/react-query";
 import {
   getGetThoughtQuestionQueueQueryKey,
   getListArticlesQueryKey,
@@ -345,7 +345,7 @@ function RecordSourceCard({
     </ScalePressable>
   );
 }
-export default function OnScreen() {
+function OnScreenContent() {
   const router = useRouter();
   const { tabReselectVersion } = useNavigation();
   const queryClient = useQueryClient();
@@ -483,6 +483,7 @@ export default function OnScreen() {
   const thoughtsQuery = useListThoughts();
   const questionQuery = useGetThoughtQuestionQueue({
     query: {
+      queryKey: getGetThoughtQuestionQueueQueryKey(),
       // Wait for auth restore to complete before firing so the request always
       // has a valid bearer token in memory. On native, SecureStore restore can
       // lag several seconds; firing without a token causes a 401 whose internal
@@ -1333,6 +1334,18 @@ export default function OnScreen() {
       </BottomSheet>
     </View>
   );
+}
+
+/**
+ * react-native-screens can pre-render a tab during a native transition outside
+ * the app-level QueryClientProvider tree. Never run generated query hooks in
+ * that detached preview; the real mounted screen renders as soon as context is
+ * available.
+ */
+export default function OnScreen() {
+  const queryClient = useContext(QueryClientContext);
+  if (!queryClient) return null;
+  return <OnScreenContent />;
 }
 
 // hint: Logic changed on both sides. Requires understanding intent of each change.

@@ -8,11 +8,11 @@ const rootLayoutSource = readFileSync(
 );
 
 describe("production startup query provider", () => {
-  it("does not restore the disk query cache while the production regression is under investigation", () => {
+  it("does not hydrate account-independent authenticated queries from disk", () => {
     expect(rootLayoutSource).toContain(
       "<QueryClientProvider client={queryClient}>",
     );
     expect(rootLayoutSource).not.toContain("<PersistQueryClientProvider");
-    expect(rootLayoutSource).not.toContain("offlineCacheRestored");
+    expect(rootLayoutSource).not.toContain("offlineQueryPersistOptions");
   });
 });

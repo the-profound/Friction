@@ -162,7 +162,7 @@ function AuthConfigurationErrorView({ message }: { message: string }) {
 
 function ProtectedRouteStack({ userId }: { userId: string }) {
   return (
-    <UserProvider key={userId}>
+    <UserProvider key={userId} userId={userId}>
       <ActiveReadingGuard userId={userId}>
         <Stack key={`protected-${userId}`} screenOptions={{ headerShown: false, headerBackTitle: "Back" }}>
           <Stack.Screen name="(tabs)" />
@@ -225,7 +225,6 @@ function AuthGuard() {
   const { activeSession, clearActiveSession } = useActiveReading();
   const router = useRouter();
   const segments = useSegments();
-  const hasRedirectedRef = useRef(false);
   const previousUserIdRef = useRef<string | null>(null);
 
   const firstSegment = segments[0] as string | undefined;
@@ -246,16 +245,6 @@ function AuthGuard() {
       navigationKind === "protected" &&
       (firstSegment === "login" || firstSegment === "login-callback")
     ) {
-      hasRedirectedRef.current = true;
-      router.replace("/(tabs)/on");
-    } else if (
-      navigationKind === "protected" &&
-      Platform.OS !== "web" &&
-      firstSegment === "(tabs)" &&
-      (segments[1] == null || (segments[1] as string) === "index") &&
-      !hasRedirectedRef.current
-    ) {
-      hasRedirectedRef.current = true;
       router.replace("/(tabs)/on");
     }
   }, [clearActiveSession, configurationError, firstSegment, isLoading, navigationKind, router, segments]);
@@ -497,9 +486,9 @@ export default function RootLayout() {
           )
         : null}
       <ErrorBoundary>
-        {/* Disk persistence is temporarily disabled after a production-only
-            startup regression. React Query's in-memory cache and NetInfo
-            reconnect behavior remain active. */}
+        {/* Keep authenticated disk persistence disabled until its storage key
+            and hydrated queries are scoped to the resolved user identity.
+            In-memory caching and NetInfo reconnect behavior remain active. */}
         <QueryClientProvider client={queryClient}>
           {startupReady ? (
             <GestureHandlerRootView>

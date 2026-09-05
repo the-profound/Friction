@@ -23,6 +23,7 @@ export type { ArticleStyle } from "./types/articleStyle";
 export type { CheckArticleRead200 } from "./types/checkArticleRead200";
 export type { CheckArticleReadParams } from "./types/checkArticleReadParams";
 export type { ClientLogBody } from "./types/clientLogBody";
+export type { ClientLogBodySource } from "./types/clientLogBodySource";
 export type { CreateSpaceBodyScheduleType } from "./types/createSpaceBodyScheduleType";
 export type { CreateSpaceLetterBodyLetterType } from "./types/createSpaceLetterBodyLetterType";
 export type { CreateStoredSentenceBodyPosition } from "./types/createStoredSentenceBodyPosition";

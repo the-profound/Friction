@@ -12,9 +12,17 @@ const fallbackSource = fs.readFileSync(
 );
 
 describe("root error boundary diagnostics", () => {
-  it("reports the caught error without forwarding the component stack", () => {
-    expect(boundarySource).toContain("reportRenderError(error)");
-    expect(boundarySource).not.toContain("reportRenderError(error, info.componentStack)");
+  it("fingerprints the component stack before reporting", () => {
+    expect(boundarySource).toContain(
+      "getComponentStackDiagnostic(info.componentStack)",
+    );
+    expect(boundarySource).toContain(
+      "reportRenderError(error, componentDiagnostic)",
+    );
+    expect(boundarySource).not.toContain("captureException(error)");
+    expect(boundarySource).toContain(
+      "this.props.onError(error, info.componentStack)",
+    );
   });
 
   it("shows only the bounded diagnostic code in production", () => {

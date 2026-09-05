@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ClientLogBodySource } from "./clientLogBodySource";
 import type { ReleaseDiagnosticContext } from "./releaseDiagnosticContext";
 
 /**
@@ -13,10 +14,11 @@ import type { ReleaseDiagnosticContext } from "./releaseDiagnosticContext";
  */
 export interface ClientLogBody {
   /** Where this log came from, e.g. "fatal-js-error" or "render-error" */
-  source: string;
+  source: ClientLogBodySource;
+  /** @pattern ^(fatal-js-error|render-error|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$ */
   message: string;
+  /** @pattern ^[A-Za-z0-9_-]{1,64}$ */
   name?: string | null;
-  stack?: string | null;
   isFatal?: boolean | null;
   /** ISO timestamp captured on-device */
   timestamp?: string | null;
@@ -31,8 +33,19 @@ export interface ClientLogBody {
   requestId?: string | null;
   /**
    * Allowlisted support code shown on the production render-error fallback.
-   * @pattern ^RND-(ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$
+   * @pattern ^RND-(QUERY-CLIENT|USER-CONTEXT|HOOK-ORDER|UPDATE-DEPTH|INVALID-CHILD|INVALID-ELEMENT|ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$
    */
   diagnosticCode?: string | null;
+  /**
+   * Compact fingerprint of the React component stack; no raw frames are transmitted.
+   * @pattern ^[a-f0-9]{8}$
+   */
+  componentFingerprint?: string | null;
+  /**
+   * Bounded number of frames in the React component stack.
+   * @minimum 0
+   * @maximum 64
+   */
+  componentDepth?: number | null;
   release?: ReleaseDiagnosticContext;
 }

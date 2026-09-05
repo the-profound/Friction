@@ -34,7 +34,9 @@
 import { Platform } from "react-native";
 import {
   getRenderDiagnostic,
+  getRenderDiagnosticDedupeKey,
   shouldSendRenderDiagnostic,
+  type ComponentStackDiagnostic,
   type RenderDiagnosticCode,
 } from "./renderErrorDiagnostics";
 
@@ -48,7 +50,10 @@ export {
  * Best-effort privacy-safe reporting for errors caught by the root boundary.
  * Raw messages, stacks, component stacks, and user data never enter the payload.
  */
-export function reportRenderError(error: unknown): RenderDiagnosticCode {
+export function reportRenderError(
+  error: unknown,
+  component: ComponentStackDiagnostic,
+): RenderDiagnosticCode {
   const diagnostic = getRenderDiagnostic(error);
 
   void (async () => {
@@ -60,12 +65,21 @@ export function reportRenderError(error: unknown): RenderDiagnosticCode {
       const { getReleaseDiagnosticContext } = await import("./authDiagnostics");
       const buildNumber =
         Platform.OS === "android"
-          ? Constants.expoConfig?.android?.versionCode != null
-            ? String(Constants.expoConfig.android.versionCode)
-            : null
-          : Constants.expoConfig?.ios?.buildNumber ?? null;
+          ? Constants.platform?.android?.versionCode != null
+            ? String(Constants.platform.android.versionCode)
+            : Constants.expoConfig?.android?.versionCode != null
+              ? String(Constants.expoConfig.android.versionCode)
+              : null
+          : Constants.platform?.ios?.buildNumber ??
+            Constants.expoConfig?.ios?.buildNumber ??
+            null;
+      const appVersion = Constants.expoConfig?.version ?? null;
       const requestId = getLastRequestId();
-      const dedupeKey = [diagnostic.diagnosticCode, buildNumber ?? "none"].join(":");
+      const dedupeKey = getRenderDiagnosticDedupeKey(
+         diagnostic.diagnosticCode,
+         component.componentFingerprint,
+        buildNumber,
+      );
       if (!shouldSendRenderDiagnostic(dedupeKey)) return;
 
       await customFetch("/api/client-logs", {
@@ -79,10 +93,12 @@ export function reportRenderError(error: unknown): RenderDiagnosticCode {
           timestamp: new Date().toISOString(),
           platform: Platform.OS,
           platformVersion: String(Platform.Version),
-          appVersion: Constants.expoConfig?.version ?? null,
+          appVersion,
           buildNumber,
           requestId,
           diagnosticCode: diagnostic.diagnosticCode,
+          componentFingerprint: component.componentFingerprint,
+          componentDepth: component.componentDepth,
           release: getReleaseDiagnosticContext(),
         }),
       });
@@ -260,10 +276,14 @@ export async function uploadPendingCrashLogIfAny(): Promise<void> {
       appVersion: Constants.expoConfig?.version ?? null,
       buildNumber:
         Platform.OS === "android"
-          ? Constants.expoConfig?.android?.versionCode != null
-            ? String(Constants.expoConfig.android.versionCode)
-            : null
-          : Constants.expoConfig?.ios?.buildNumber ?? null,
+          ? Constants.platform?.android?.versionCode != null
+            ? String(Constants.platform.android.versionCode)
+            : Constants.expoConfig?.android?.versionCode != null
+              ? String(Constants.expoConfig.android.versionCode)
+              : null
+          : Constants.platform?.ios?.buildNumber ??
+            Constants.expoConfig?.ios?.buildNumber ??
+            null,
       release: getReleaseDiagnosticContext(),
     };
 

@@ -5821,6 +5821,7 @@ components:
 
     ClientLogBody:
       type: object
+      additionalProperties: false
       description: >
         A diagnostic event captured on-device. Release diagnostics deliberately contain
         only a deployment track, host names, short configuration fingerprint, outcome,
@@ -5829,15 +5830,15 @@ components:
       properties:
         source:
           type: string
+          enum: [fatal-js-error, render-error, auth-flow]
           description: Where this log came from, e.g. "fatal-js-error" or "render-error"
         message:
           type: string
+          pattern: "^(fatal-js-error|render-error|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$"
         name:
           type: string
           nullable: true
-        stack:
-          type: string
-          nullable: true
+          pattern: "^[A-Za-z0-9_-]{1,64}$"
         isFatal:
           type: boolean
           nullable: true
@@ -5865,8 +5866,19 @@ components:
         diagnosticCode:
           type: string
           nullable: true
-          pattern: "^RND-(ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$"
+          pattern: "^RND-(QUERY-CLIENT|USER-CONTEXT|HOOK-ORDER|UPDATE-DEPTH|INVALID-CHILD|INVALID-ELEMENT|ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$"
           description: Allowlisted support code shown on the production render-error fallback.
+        componentFingerprint:
+          type: string
+          nullable: true
+          pattern: "^[a-f0-9]{8}$"
+          description: Compact fingerprint of the React component stack; no raw frames are transmitted.
+        componentDepth:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 64
+          description: Bounded number of frames in the React component stack.
         release:
           $ref: "#/components/schemas/ReleaseDiagnosticContext"
       required: [source, message]

@@ -5025,12 +5025,24 @@ export const ExpandThoughtsResponse = zod.object({
 
  * @summary Report a client-side diagnostic event
  */
+export const reportClientLogBodyMessageRegExp = new RegExp(
+  "^(fatal-js-error|render-error|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$",
+);
+export const reportClientLogBodyNameRegExp = new RegExp(
+  "^[A-Za-z0-9_-]{1,64}$",
+);
 export const reportClientLogBodyRequestIdRegExp = new RegExp(
   "^req_[a-z0-9]{20,32}$",
 );
 export const reportClientLogBodyDiagnosticCodeRegExp = new RegExp(
-  "^RND-(ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$",
+  "^RND-(QUERY-CLIENT|USER-CONTEXT|HOOK-ORDER|UPDATE-DEPTH|INVALID-CHILD|INVALID-ELEMENT|ERROR|TYPE|REFERENCE|SYNTAX|RANGE|URI|EVAL|UNKNOWN)$",
 );
+export const reportClientLogBodyComponentFingerprintRegExp = new RegExp(
+  "^[a-f0-9]{8}$",
+);
+export const reportClientLogBodyComponentDepthMin = 0;
+export const reportClientLogBodyComponentDepthMax = 64;
+
 export const reportClientLogBodyReleaseConfigurationFingerprintRegExp =
   new RegExp("^[a-f0-9]{16}$");
 export const reportClientLogBodyReleaseSupabaseHostMax = 253;
@@ -5040,13 +5052,12 @@ export const reportClientLogBodyReleaseApiHostMax = 253;
 export const ReportClientLogBody = zod
   .object({
     source: zod
-      .string()
+      .enum(["fatal-js-error", "render-error", "auth-flow"])
       .describe(
         'Where this log came from, e.g. \"fatal-js-error\" or \"render-error\"',
       ),
-    message: zod.string(),
-    name: zod.string().nullish(),
-    stack: zod.string().nullish(),
+    message: zod.string().regex(reportClientLogBodyMessageRegExp),
+    name: zod.string().regex(reportClientLogBodyNameRegExp).nullish(),
     isFatal: zod.boolean().nullish(),
     timestamp: zod
       .string()
@@ -5070,6 +5081,19 @@ export const ReportClientLogBody = zod
       .describe(
         "Allowlisted support code shown on the production render-error fallback.",
       ),
+    componentFingerprint: zod
+      .string()
+      .regex(reportClientLogBodyComponentFingerprintRegExp)
+      .nullish()
+      .describe(
+        "Compact fingerprint of the React component stack; no raw frames are transmitted.",
+      ),
+    componentDepth: zod
+      .number()
+      .min(reportClientLogBodyComponentDepthMin)
+      .max(reportClientLogBodyComponentDepthMax)
+      .nullish()
+      .describe("Bounded number of frames in the React component stack."),
     release: zod
       .object({
         track: zod.enum(["development", "preview", "production"]),
