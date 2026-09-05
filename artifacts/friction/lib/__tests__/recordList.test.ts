@@ -668,6 +668,7 @@ describe("record preview normalization", () => {
     expect(getThoughtCardContent(markdown)).toEqual({
       title: "첫 제목\n둘째 제목\n셋째 제목",
       body: "실제 본문",
+      bodyBlocks: expect.any(Array),
       hasTitle: true,
     });
   });
@@ -684,6 +685,7 @@ describe("record preview normalization", () => {
     expect(getThoughtCardContent("# 긴 제목\n\n첫 줄\n둘째 줄\n\n\n셋째 줄")).toEqual({
       title: "긴 제목",
       body: "첫 줄\n둘째 줄\n\n\n셋째 줄",
+      bodyBlocks: expect.any(Array),
       hasTitle: true,
     });
   });
@@ -692,19 +694,44 @@ describe("record preview normalization", () => {
     expect(getThoughtCardContent("# 제목\n\n**굵게**와 *기울임*, [링크](https://example.com)\n\n- 첫 항목\n- 둘째 <u>항목</u>")).toEqual({
       title: "제목",
       body: "굵게와 기울임, 링크\n\n첫 항목\n\n둘째 항목",
+      bodyBlocks: expect.any(Array),
       hasTitle: true,
     });
+  });
+
+  it("preserves supported block and inline tokens for card formatting without link URLs", () => {
+    const content = getThoughtCardContent(
+      "# 제목\n\n## 소제목\n\n**굵게** *기울임* <u>밑줄</u> [문구](https://example.com)\n\n> 인용\n\n- 항목\n\n1. 순서",
+    );
+    expect(content.bodyBlocks.map((block) => block.type)).toEqual([
+      "h2", "paragraph", "blockquote", "ul_item", "ol_item",
+    ]);
+    expect(content.bodyBlocks[1]?.tokens.map((token) => token.kind)).toEqual(
+      expect.arrayContaining(["bold", "italic", "underline"]),
+    );
+    expect(content.body).toContain("문구");
+    expect(content.body).not.toContain("https://example.com");
+  });
+
+  it("preserves a non-leading H1 and paragraph boundaries as card blocks", () => {
+    const content = getThoughtCardContent("첫 문단\n\n# 본문 제목\n\n둘째 문단");
+    expect(content.hasTitle).toBe(false);
+    expect(content.bodyBlocks.map((block) => block.type)).toEqual([
+      "paragraph", "h1", "paragraph",
+    ]);
   });
 
   it("removes every parsed H1 form from the body instead of duplicating it", () => {
     expect(getThoughtCardContent("제목\n====\n\n본문")).toEqual({
       title: "제목",
       body: "본문",
+      bodyBlocks: expect.any(Array),
       hasTitle: true,
     });
     expect(getThoughtCardContent("  # 들여쓴 제목\n\n본문")).toEqual({
       title: "들여쓴 제목",
       body: "본문",
+      bodyBlocks: expect.any(Array),
       hasTitle: true,
     });
   });
@@ -722,6 +749,7 @@ describe("record preview normalization", () => {
     expect(getRecordCardContent(record)).toEqual({
       title: "긴 제목\n둘째 줄",
       body: "첫 줄  \n\n  둘째 줄",
+      bodyBlocks: expect.any(Array),
       hasTitle: true,
     });
   });

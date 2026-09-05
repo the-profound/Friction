@@ -86,4 +86,26 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).not.toContain("outputRange: [0, -FILTER_GRADIENT_OVERLAP]");
   });
 
+  it("formats thought and editing card markdown while leaving question cards unchanged", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+    const markdownPreview = readFileSync(
+      join(__dirname, "../../components/RecordCardMarkdownPreview/RecordCardMarkdownPreview.tsx"),
+      "utf8",
+    );
+
+    expect(recordsScreen).toContain("<RecordCardMarkdownPreview");
+    expect(recordsScreen).toContain("{question ? (");
+    expect(recordsScreen).toContain("maxLines={bodyLines}");
+    expect(markdownPreview).toContain('textAlign: "justify"');
+    expect(markdownPreview).toContain('numberOfLines={maxLines}');
+    expect(markdownPreview).toContain('ellipsizeMode="tail"');
+    expect(markdownPreview).toContain('block.type === "h1"');
+    expect(markdownPreview).not.toContain("headingScale");
+    expect(markdownPreview).toContain('block.type === "blockquote"');
+    expect(markdownPreview).toContain('block.type === "ul_item"');
+    expect(markdownPreview).toContain('block.type === "ol_item"');
+  });
 });

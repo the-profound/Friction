@@ -52,7 +52,23 @@ function expandUnderlines(tokens: InlineToken[]): InlineToken[] {
 
 function parseInlineMarkedTokens(markedTokens: Token[]): InlineToken[] {
   const result: InlineToken[] = [];
-  for (const token of markedTokens) {
+  for (let index = 0; index < markedTokens.length; index++) {
+    const token = markedTokens[index];
+    if (token.type === "html" && /^<u>$/i.test((token as { raw: string }).raw.trim())) {
+      const underlined: InlineToken[] = [];
+      index++;
+      while (index < markedTokens.length) {
+        const child = markedTokens[index];
+        if (child.type === "html" && /^<\/u>$/i.test((child as { raw: string }).raw.trim())) break;
+        underlined.push(...parseInlineMarkedTokens([child]));
+        index++;
+      }
+      result.push({
+        kind: "underline",
+        value: tokensToPlainText(underlined),
+      });
+      continue;
+    }
     if (token.type === "text") {
       const t = token as Tokens.Text;
       if (t.tokens && t.tokens.length > 0) {

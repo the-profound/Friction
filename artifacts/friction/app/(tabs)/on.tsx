@@ -41,6 +41,7 @@ import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { recordArticleToViewModel } from "@/hooks/useRecordLetterCards";
 import RecordRow from "@/components/RecordRow/RecordRow";
 import SwipeableRow, { type SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
+import RecordCardMarkdownPreview from "@/components/RecordCardMarkdownPreview/RecordCardMarkdownPreview";
 import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
@@ -315,23 +316,36 @@ function RecordSourceCard({
               {content.title}
             </RecordListText>
           ) : null}
-          <RecordListText
-            style={[
-              styles.thoughtCardBody,
-              textStyle,
-              {
-                fontSize: bodySize,
-                lineHeight: bodyLineHeight,
-                letterSpacing: layout.bodyLetterSpacing,
-                marginTop: content.hasTitle ? Spacing.md : 0,
-                color: question ? Colors.white : Colors.zinc800,
-              },
-            ]}
-            numberOfLines={bodyLines}
-            ellipsizeMode="tail"
-          >
-            {content.body || "아직 적힌 내용이 없어요."}
-          </RecordListText>
+          {question ? (
+            <RecordListText
+              style={[
+                styles.thoughtCardBody,
+                textStyle,
+                {
+                  fontSize: bodySize,
+                  lineHeight: bodyLineHeight,
+                  letterSpacing: layout.bodyLetterSpacing,
+                  marginTop: content.hasTitle ? Spacing.md : 0,
+                  color: Colors.white,
+                },
+              ]}
+              numberOfLines={bodyLines}
+              ellipsizeMode="tail"
+            >
+              {content.body || "아직 적힌 내용이 없어요."}
+            </RecordListText>
+          ) : (
+            <View style={{ marginTop: content.hasTitle ? Spacing.md : 0 }}>
+              <RecordCardMarkdownPreview
+                blocks={content.bodyBlocks}
+                fallback="아직 적힌 내용이 없어요."
+                fontSize={bodySize}
+                lineHeight={bodyLineHeight}
+                letterSpacing={layout.bodyLetterSpacing}
+                maxLines={bodyLines}
+              />
+            </View>
+          )}
         </View>
       </View>
     </ScalePressable>

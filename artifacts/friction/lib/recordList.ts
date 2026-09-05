@@ -1,5 +1,9 @@
 import { ApiError, type Article, type Thought } from "@workspace/api-client-react";
-import { parseMarkdownBlocks, tokensToPlainText } from "../utils/markdownParser";
+import {
+  parseMarkdownBlocks,
+  tokensToPlainText,
+  type MarkdownBlockType,
+} from "../utils/markdownParser";
 import { toKstCalendarDateKey } from "./kstDate";
 
 export type RecordKind = "thought" | "editing" | "letter";
@@ -32,6 +36,7 @@ export interface RecordPreview {
 export interface RecordCardContent {
   title: string;
   body: string;
+  bodyBlocks: MarkdownBlockType[];
   hasTitle: boolean;
 }
 
@@ -559,9 +564,11 @@ export function recordMatchesQuery(record: UnifiedRecord, rawQuery: string): boo
 export function getRecordCardContent(record: UnifiedRecord): RecordCardContent {
   if (record.kind === "thought") return getThoughtCardContent(record.thought.content);
   const title = normalizeDisplayLineEndings(record.article.title);
+  const body = normalizeDisplayLineEndings(record.article.content);
   return {
     title,
-    body: normalizeDisplayLineEndings(record.article.content),
+    body,
+    bodyBlocks: parseMarkdownBlocks(body),
     hasTitle: Boolean(title),
   };
 }
@@ -591,6 +598,7 @@ export function getThoughtCardContent(markdown: string | null | undefined): Reco
   return {
     title,
     body,
+    bodyBlocks,
     hasTitle: Boolean(title),
   };
 }
