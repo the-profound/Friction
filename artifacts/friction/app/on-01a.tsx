@@ -383,6 +383,7 @@ export default function WritingScreen() {
   const thoughtCreationIdRef = useRef<string | undefined>(
     isLocalDirectDraft ? createThoughtClientId() : undefined,
   );
+  const thoughtCreationGenerationRef = useRef(1);
   const createThoughtPromiseRef = useRef<Promise<string> | null>(null);
   const firstCreatedContentRef = useRef<string | null>(null);
   const localDraftExitedRef = useRef(false);
@@ -718,6 +719,7 @@ export default function WritingScreen() {
       title: string;
       content: string;
       expectedServerContent?: string;
+      creationGeneration?: number;
     }) => {
       if (isThoughtModeRef.current && modeRef.current === "draft") {
         if (!isMeaningfulThoughtMarkdown(data.content)) return;
@@ -741,6 +743,9 @@ export default function WritingScreen() {
               .mutateAsync({
                 data: {
                   clientId: thoughtCreationIdRef.current ?? createThoughtClientId(),
+                  requestGeneration:
+                    data.creationGeneration
+                    ?? thoughtCreationGenerationRef.current,
                   content: data.content,
                   createdFrom: "direct",
                   status: "PRELIMINARY",
@@ -879,8 +884,12 @@ export default function WritingScreen() {
     content: string;
     entityId?: string;
     creationId?: string;
+    creationGeneration?: number;
   }) => {
     if (data.creationId) thoughtCreationIdRef.current = data.creationId;
+    if (data.creationGeneration) {
+      thoughtCreationGenerationRef.current = data.creationGeneration;
+    }
     if (data.entityId) {
       thoughtIdRef.current = data.entityId;
       if (isLocalDirectDraft && !hasPersistedLocalDraftRouteRef.current) {
@@ -957,6 +966,7 @@ export default function WritingScreen() {
       return (error as { status?: unknown })?.status !== 409;
     },
     creationId: thoughtCreationIdRef.current,
+    creationGeneration: thoughtCreationGenerationRef.current,
     entityId: !isLocalDirectDraft ? id : undefined,
     entityMode: isThoughtMode ? "draft" : "dividing",
     restoreContext: reviewRestoreContext,
@@ -1807,6 +1817,7 @@ export default function WritingScreen() {
 
     thoughtIdRef.current = restoredThought.id;
     thoughtCreationIdRef.current = undefined;
+    thoughtCreationGenerationRef.current = 1;
     isNavigatingRef.current = false;
     setIsNavigating(false);
 

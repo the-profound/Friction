@@ -140,7 +140,7 @@ DB와 API에서 Thought는 `content`, `createdFrom`, 선택적 `sourceArticleId`
 
 #### DB 제약과 현재 생성 방식의 직접 충돌
 
-`thoughts_writing_source_unique_idx`는 같은 사용자·같은 `sourceArticleId`에 대해 삭제되지 않은 `PRELIMINARY` Thought를 하나만 허용한다.
+`thoughts_writing_source_unique_idx`는 같은 사용자·같은 `sourceArticleId`에 대해 역승격으로 복원된 활성 Thought만 하나로 제한한다. 일반 읽기·질문 출처의 `PRELIMINARY` Thought는 여러 개 저장할 수 있다.
 
 - 읽기 중 새 단상은 항상 같은 글 ID와 `PRELIMINARY` 상태로 생성된다.
 - 질문 답변도 답변마다 같은 글 ID와 `PRELIMINARY` 상태로 생성된다.

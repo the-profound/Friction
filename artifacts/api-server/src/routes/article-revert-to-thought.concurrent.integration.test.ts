@@ -114,7 +114,7 @@ describe("review reverse-promotion database serialization", () => {
     expect(patched).toHaveLength(0);
   });
 
-  it("lets a deleted thought release its source while rejecting a second active writing thought", async () => {
+  it("allows multiple active reading thoughts while restored thoughts retain source uniqueness", async () => {
     const userId = randomUUID();
     const sourceArticleId = randomUUID();
     const deletedThoughtId = randomUUID();
@@ -153,15 +153,43 @@ describe("review reverse-promotion database serialization", () => {
       status: "PRELIMINARY",
     });
 
-    await expect(
-      db.insert(thoughtsTable).values({
+    const [secondReadingThought] = await db
+      .insert(thoughtsTable)
+      .values({
         authorId: userId,
-        content: "# 충돌 단상\n\n본문",
+        content: "# 두 번째 읽기 단상\n\n본문",
         createdFrom: "reading",
         sourceArticleId,
         status: "PRELIMINARY",
-      }),
-    ).rejects.toMatchObject({ cause: { code: "23505", constraint: "thoughts_writing_source_unique_idx" } });
+      })
+      .returning({ id: thoughtsTable.id });
+    createdThoughtIds.push(secondReadingThought.id);
+
+    const restoredArticleIds = [randomUUID(), randomUUID()];
+    createdArticleIds.push(...restoredArticleIds);
+    await db.insert(articlesTable).values(restoredArticleIds.map((id, index) => ({
+      id,
+      authorId: userId,
+      title: `복원 글 ${index}`,
+      content: "복원 본문",
+      status: "DIVIDING" as const,
+    })));
+    await db
+      .update(thoughtsTable)
+      .set({ migratedFromArticleId: restoredArticleIds[0] })
+      .where(eq(thoughtsTable.id, activeThoughtId));
+
+    await expect(
+      db
+        .update(thoughtsTable)
+        .set({ migratedFromArticleId: restoredArticleIds[1] })
+        .where(eq(thoughtsTable.id, secondReadingThought.id)),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23505",
+        constraint: "thoughts_writing_source_unique_idx",
+      },
+    });
   });
 
   it("allows multiple cite targets but rejects a second promote origin and invalid foreign keys", async () => {
@@ -218,7 +246,7 @@ describe("review reverse-promotion database serialization", () => {
     });
   });
 
-  it("rolls back the article deletion when an active source thought blocks the revert", async () => {
+  it("allows a revert beside active reading thoughts without losing provenance", async () => {
     const userId = randomUUID();
     const sourceArticleId = randomUUID();
     const reviewArticleId = randomUUID();
@@ -274,8 +302,7 @@ describe("review reverse-promotion database serialization", () => {
       promotionType: "promote",
     });
 
-    await expect(
-      db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
         await tx
           .update(articlesTable)
           .set({ deletedAt: new Date() })
@@ -290,9 +317,6 @@ describe("review reverse-promotion database serialization", () => {
         await tx
           .delete(thoughtPromotionsTable)
           .where(eq(thoughtPromotionsTable.fromThoughtId, originalThoughtId));
-      }),
-    ).rejects.toMatchObject({
-      cause: { code: "23505", constraint: "thoughts_writing_source_unique_idx" },
     });
 
     const [articleAfterConflict] = await db
@@ -311,11 +335,11 @@ describe("review reverse-promotion database serialization", () => {
       .from(thoughtPromotionsTable)
       .where(eq(thoughtPromotionsTable.fromThoughtId, originalThoughtId));
 
-    expect(articleAfterConflict.deletedAt).toBeNull();
+    expect(articleAfterConflict.deletedAt).not.toBeNull();
     expect(thoughtAfterConflict).toEqual({
-      status: "NORMAL",
-      migratedFromArticleId: null,
+      status: "PRELIMINARY",
+      migratedFromArticleId: reviewArticleId,
     });
-    expect(promotionsAfterConflict).toHaveLength(1);
+    expect(promotionsAfterConflict).toHaveLength(0);
   });
 });

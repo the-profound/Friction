@@ -34,7 +34,7 @@ describe("review article reverse-promotion contract", () => {
     );
     expect(handler).toContain("promotions.length !== 1");
     expect(handler).toContain(
-      "Another active thought already uses this source article",
+      "Another restored thought already uses this source article",
     );
     expect(handler).toContain(
       "formatThoughtMarkdown(article.title, article.content)",

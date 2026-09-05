@@ -39,6 +39,7 @@ import {
   formatPreliminaryQuestionMarkdown,
   isQuestionThoughtMarkdown,
 } from "../services/preliminary-question-format";
+import { getThoughtCreateRetryAction } from "../lib/thoughtCreateIdempotency";
 
 const router: IRouter = Router();
 
@@ -1037,8 +1038,6 @@ router.post("/thoughts/:id/activate", requireAuth, async (req, res) => {
       )
       .limit(1);
 
-    // A network retry after a successful activation sees the same normal
-    // thought and returns the queue snapshot without a second refill.
     if (
       !queued &&
       thought.status === "NORMAL" &&
@@ -1160,6 +1159,7 @@ router.post("/thoughts", requireAuth, async (req, res) => {
   }
   const {
     clientId,
+    requestGeneration = 1,
     content,
     createdFrom,
     sourceArticleId,
@@ -1182,13 +1182,14 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     sourceArticleId: sourceArticleId ?? null,
     sourceStoredSentenceId: sourceStoredSentenceId ?? null,
     status: (status ?? "NORMAL") as ThoughtStatus,
+    createRequestGeneration: requestGeneration,
   };
 
   let thought;
   if (clientId) {
     const result = await db.transaction(async (tx) => {
       await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${clientId}`}))`,
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-create:${clientId}`}))`,
       );
       const [inserted] = await tx
         .insert(thoughtsTable)
@@ -1225,14 +1226,47 @@ router.post("/thoughts", requireAuth, async (req, res) => {
         } as const;
       }
 
+      if (
+        existing.createdFrom !== createdFrom ||
+        existing.sourceArticleId !== (sourceArticleId ?? null) ||
+        existing.sourceStoredSentenceId !==
+          (sourceStoredSentenceId ?? null) ||
+        existing.status !== (status ?? "NORMAL")
+      ) {
+        return {
+          status: 409,
+          error: "Thought create retry does not match the original request",
+        } as const;
+      }
+
+      const retryAction = getThoughtCreateRetryAction({
+        existingGeneration: existing.createRequestGeneration,
+        incomingGeneration: requestGeneration,
+        contentMatches: existing.content === content,
+      });
+      if (retryAction === "return-existing") {
+        return { status: 201, thought: existing } as const;
+      }
+      if (retryAction === "conflict") {
+        return {
+          status: 409,
+          error: "Thought create retry generation conflicts with existing content",
+        } as const;
+      }
+
       const [updated] = await tx
         .update(thoughtsTable)
-        .set({ content, updatedAt: new Date() })
+        .set({
+          content,
+          createRequestGeneration: requestGeneration,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(thoughtsTable.id, clientId),
             eq(thoughtsTable.authorId, authorId),
             isNull(thoughtsTable.deletedAt),
+            sql`${thoughtsTable.createRequestGeneration} < ${requestGeneration}`,
           ),
         )
         .returning();
@@ -1511,8 +1545,6 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
             body: { error: "Thought promotion result is unavailable" },
           } as const;
         }
-        // The promotion row is the durable completion marker. Returning its
-        // article makes a response-loss retry safe without another insert.
         return { status: 200, body: existingArticle } as const;
       }
 
@@ -1558,8 +1590,6 @@ router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {
         } as const;
       }
 
-      // Always create a fresh DIVIDING article. Legacy DRAFT rows are
-      // soft-deactivated by migration 0033 and are never reused.
       const [article] = await tx
         .insert(articlesTable)
         .values({

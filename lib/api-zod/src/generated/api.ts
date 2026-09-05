@@ -4736,6 +4736,7 @@ export const ListThoughtsResponse = zod.array(ListThoughtsResponseItem);
 /**
  * @summary Create a thought (단상)
  */
+export const createThoughtBodyRequestGenerationDefault = 1;
 
 export const CreateThoughtBody = zod.object({
   clientId: zod
@@ -4744,6 +4745,14 @@ export const CreateThoughtBody = zod.object({
     .optional()
     .describe(
       "Optional client-generated ID used to make retried creates idempotent.",
+    ),
+  requestGeneration: zod
+    .number()
+    .int()
+    .min(1)
+    .default(createThoughtBodyRequestGenerationDefault)
+    .describe(
+      "Monotonic generation for retries that reuse clientId. Older generations never replace newer content.",
     ),
   content: zod
     .string()

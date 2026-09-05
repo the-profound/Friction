@@ -16,6 +16,9 @@ describe("thought create idempotency contract", () => {
     expect(createThoughtSchema).toContain("clientId: zod");
     expect(createThoughtSchema).toContain(".uuid()");
     expect(createThoughtSchema).toContain(".optional()");
+    expect(createThoughtSchema).toContain("requestGeneration: zod");
+    expect(createThoughtSchema).toContain(".int()");
+    expect(createThoughtSchema).toContain(".min(1)");
   });
 
   it("reuses an owned client id and applies the retry's newest content", () => {
@@ -30,7 +33,18 @@ describe("thought create idempotency contract", () => {
     expect(createRoute).toContain("pg_advisory_xact_lock");
     expect(createRoute).toContain("activePromotion");
     expect(createRoute).toContain("existing.migratedFromArticleId");
-    expect(createRoute).toContain(".set({ content, updatedAt: new Date() })");
+    expect(createRoute).toContain("existing.createdFrom !== createdFrom");
+    expect(createRoute).toContain(
+      "existing.sourceArticleId !== (sourceArticleId ?? null)",
+    );
+    expect(createRoute).toContain(
+      '"Thought create retry does not match the original request"',
+    );
+    expect(createRoute).toContain("getThoughtCreateRetryAction");
+    expect(createRoute).toContain("createRequestGeneration: requestGeneration");
+    expect(createRoute).toContain(
+      "thoughtsTable.createRequestGeneration} < ${requestGeneration}",
+    );
     expect(createRoute).toContain('error: "Thought id is already in use"');
   });
 });

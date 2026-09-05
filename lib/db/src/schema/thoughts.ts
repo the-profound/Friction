@@ -56,6 +56,7 @@ export const thoughtsTable = pgTable("thoughts", {
   sourceStoredSentenceId: uuid("source_stored_sentence_id").references(() => storedSentencesTable.id),
   textEmbeddingDense: vector("text_embedding_dense", 1024),
   textEmbeddingSparse: jsonb("text_embedding_sparse").$type<Record<string, number>>(),
+  createRequestGeneration: integer("create_request_generation").notNull().default(1),
   createdFrom: thoughtCreatedFromEnum("created_from").notNull(),
 }, (t) => [
   uniqueIndex("thoughts_migrated_from_article_unique_idx")
@@ -63,11 +64,15 @@ export const thoughtsTable = pgTable("thoughts", {
     .where(sql`${t.migratedFromArticleId} IS NOT NULL`),
     uniqueIndex("thoughts_writing_source_unique_idx")
       .on(t.authorId, t.sourceArticleId)
-      .where(sql`${t.sourceArticleId} IS NOT NULL AND ${t.deletedAt} IS NULL AND (${t.status} = 'PRELIMINARY' OR ${t.migratedFromArticleId} IS NOT NULL)`),
+      .where(sql`${t.sourceArticleId} IS NOT NULL AND ${t.deletedAt} IS NULL AND ${t.migratedFromArticleId} IS NOT NULL`),
     check(
       "thoughts_content_meaningful_check",
       sql`length(regexp_replace(regexp_replace(${t.content}, '!\\[[^]]*\\]\\([^)]*\\)?', '', 'g'), '[[:space:]#*_~\`>|[\](){},.!+\-=]', '', 'g')) > 0
         OR ${t.content} ~ '!\\[[^]]*\\]\\([[:space:]]*[^)[:space:]][^)]*\\)'`,
+    ),
+    check(
+      "thoughts_create_request_generation_positive_check",
+      sql`${t.createRequestGeneration} > 0`,
     ),
 ]);
 

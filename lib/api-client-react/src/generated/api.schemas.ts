@@ -1554,6 +1554,11 @@ export interface CreateThoughtBody {
   /** Optional client-generated ID used to make retried creates idempotent. */
   clientId?: string;
   /**
+   * Monotonic generation for retries that reuse clientId. Older generations never replace newer content.
+   * @minimum 1
+   */
+  requestGeneration?: number;
+  /**
    * Must include visible text or a non-empty Markdown image; whitespace and Markdown formatting alone are rejected.
    * @minLength 1
    */

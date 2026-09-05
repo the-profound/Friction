@@ -484,10 +484,7 @@ router.post(
                 eq(thoughtsTable.sourceArticleId, thought.sourceArticleId),
                 ne(thoughtsTable.id, thought.id),
                 isNull(thoughtsTable.deletedAt),
-                or(
-                  eq(thoughtsTable.status, "PRELIMINARY"),
-                  isNotNull(thoughtsTable.migratedFromArticleId),
-                ),
+                isNotNull(thoughtsTable.migratedFromArticleId),
               ),
             )
             .limit(1);
@@ -496,7 +493,7 @@ router.post(
               status: 409,
               body: {
                 error:
-                  "Another active thought already uses this source article",
+                  "Another restored thought already uses this source article",
               },
             } as const;
           }

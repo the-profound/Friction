@@ -5725,6 +5725,11 @@ components:
           type: string
           format: uuid
           description: Optional client-generated ID used to make retried creates idempotent.
+        requestGeneration:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Monotonic generation for retries that reuse clientId. Older generations never replace newer content.
         content:
           type: string
           minLength: 1

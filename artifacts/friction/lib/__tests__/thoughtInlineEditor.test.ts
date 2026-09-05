@@ -136,6 +136,24 @@ describe("inline reading thought lifecycle", () => {
     expect(isCurrentOptimisticRequest(retrying, 2)).toBe(true);
   });
 
+  it("keeps independent cards isolated when save responses finish in either order", () => {
+    const first = optimistic({ id: "first", content: "첫 단상" });
+    const second = optimistic({ id: "second", content: "둘째 단상" });
+    const afterSecond = [first, { ...second, saveState: "confirmed" as const }];
+    const afterFirst = afterSecond.map((item) =>
+      item.id === first.id ? { ...item, saveState: "confirmed" as const } : item
+    );
+
+    expect(afterFirst).toEqual([
+      expect.objectContaining({ id: "first", content: "첫 단상", saveState: "confirmed" }),
+      expect.objectContaining({ id: "second", content: "둘째 단상", saveState: "confirmed" }),
+    ]);
+    expect(reconcileConfirmedThoughts(
+      [{ id: "second", content: "둘째 단상" }],
+      afterFirst,
+    )).toEqual([expect.objectContaining({ id: "first", content: "첫 단상" })]);
+  });
+
   it("rejects a save result after a different editor session opens", () => {
     expect(isCurrentEditorCommit("new-session", "old-session")).toBe(false);
     expect(isCurrentEditorCommit("same-session", "same-session")).toBe(true);

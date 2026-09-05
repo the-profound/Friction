@@ -99,6 +99,7 @@ type EditorState = {
   thought?: Thought;
   text: string;
   initialText: string;
+  requestGeneration: number;
   error?: string;
   pending: boolean;
 };
@@ -505,6 +506,7 @@ export default function ThoughtsBottomSheet({
         key: createClientId(),
         text: pendingQuote ?? "",
         initialText: "",
+        requestGeneration: 1,
         pending: false,
       });
       // 시트는 defaultPanelHeight(50% = mid) 높이로 열린다 → snapStage = "mid"
@@ -625,6 +627,7 @@ export default function ThoughtsBottomSheet({
           const saved = await createThought.mutateAsync({
             data: {
               clientId: current.key,
+              requestGeneration: current.requestGeneration,
               content: current.text,
               createdFrom: "reading",
               sourceArticleId: articleId,
@@ -655,6 +658,10 @@ export default function ThoughtsBottomSheet({
         setEditor((value) => isCurrentEditorCommit(value?.key, current.key) ? {
           ...value,
           pending: false,
+          requestGeneration:
+            !current.thought && action === "create"
+              ? current.requestGeneration + 1
+              : current.requestGeneration,
           error: current.thought
             ? (action === "delete" ? "삭제하지 못했어요. 다시 시도해 주세요." : "수정하지 못했어요. 다시 시도해 주세요.")
             : "저장하지 못했어요. 다시 시도해 주세요.",
@@ -685,6 +692,7 @@ export default function ThoughtsBottomSheet({
         saved = await createThought.mutateAsync({
           data: {
             clientId: optimistic.id,
+            requestGeneration,
             content: optimistic.content,
             createdFrom: "reading",
             sourceArticleId: optimistic.sourceArticleId,
@@ -789,6 +797,7 @@ export default function ThoughtsBottomSheet({
       key: nextKey,
       text: "",
       initialText: "",
+      requestGeneration: 1,
       pending: false,
     });
     setTimeout(() => {
@@ -804,7 +813,14 @@ export default function ThoughtsBottomSheet({
     if (openSession !== sessionTokenRef.current) return;
     const key = thought?.id ?? createClientId();
     const text = thought?.content ?? "";
-    setEditor({ key, thought, text, initialText: text, pending: false });
+    setEditor({
+      key,
+      thought,
+      text,
+      initialText: text,
+      requestGeneration: 1,
+      pending: false,
+    });
     setTimeout(() => {
       inputRef.current?.focus();
       const layout = cardLayoutRef.current[key];

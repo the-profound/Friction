@@ -12,6 +12,7 @@ export interface PendingPayload {
   cleanupId?: string;
   entityId?: string;
   creationId?: string;
+  creationGeneration?: number;
   aliasQueueKeys?: string[];
   entityMode?: AutoSaveEntityMode;
   serverUpdatedAt?: string;
@@ -98,6 +99,7 @@ interface UseAutoSaveOptions {
   storageTimeoutMs?: number;
   storageKey?: string;
   creationId?: string;
+  creationGeneration?: number;
   entityId?: string;
   entityMode?: AutoSaveEntityMode;
   restoreContext?: AutoSaveRestoreContext;
@@ -105,6 +107,7 @@ interface UseAutoSaveOptions {
     title: string;
     content: string;
     expectedServerContent?: string;
+    creationGeneration?: number;
   }) => Promise<
     | {
         serverUpdatedAt?: string;
@@ -119,6 +122,7 @@ interface UseAutoSaveOptions {
     content: string;
     entityId?: string;
     creationId?: string;
+    creationGeneration?: number;
   }) => void;
   onRestoreConflict?: () => void;
 }
@@ -164,6 +168,7 @@ export function useAutoSave({
   storageTimeoutMs = 3_000,
   storageKey,
   creationId,
+  creationGeneration,
   entityId,
   entityMode,
   restoreContext,
@@ -180,6 +185,7 @@ export function useAutoSave({
     title: "",
     content: "",
     creationId,
+    creationGeneration,
     entityId,
     entityMode,
   });
@@ -196,6 +202,12 @@ export function useAutoSave({
   }
   if (creationId && !latestDataRef.current.creationId) {
     latestDataRef.current.creationId = creationId;
+  }
+  if (
+    creationGeneration
+    && !latestDataRef.current.creationGeneration
+  ) {
+    latestDataRef.current.creationGeneration = creationGeneration;
   }
   if (!committedTransitionRef.current) {
     if (entityId) latestDataRef.current.entityId = entityId;
@@ -321,6 +333,7 @@ export function useAutoSave({
       title: latestDataRef.current.title,
       content: latestDataRef.current.content,
       expectedServerContent: latestDataRef.current.serverContentBaseline,
+      creationGeneration: latestDataRef.current.creationGeneration,
     };
     const id = ++requestIdRef.current;
     // Snapshot the dirty epoch so we can detect if markDirty was called
@@ -423,6 +436,13 @@ export function useAutoSave({
 
           // New input can arrive while this request is failing. Persist and
           // retry the newest payload, never the stale save-start snapshot.
+          if (
+            latestDataRef.current.creationId
+            && !latestDataRef.current.entityId
+          ) {
+            latestDataRef.current.creationGeneration =
+              (latestDataRef.current.creationGeneration ?? 1) + 1;
+          }
           void writeQueue({ ...latestDataRef.current }).catch(() => undefined);
           if (isRetryableErrorRef.current?.(error) === false) {
             setStatus("error");
@@ -553,6 +573,10 @@ export function useAutoSave({
         ...queued,
         creationId:
           queued.creationId ?? queued.entityId ?? latestDataRef.current.creationId,
+        creationGeneration:
+          queued.creationGeneration
+          ?? latestDataRef.current.creationGeneration
+          ?? 1,
       };
       localGenerationRef.current = Math.max(
         localGenerationRef.current,

@@ -86,3 +86,4 @@
 - [Focus-effect query recovery](focus-effect-query-recovery.md) — never make a focused effect depend on fetching flags when it starts refetches; read volatile query state through refs.
 - [React Native cursor color limits](react-native-cursor-color-limits.md) — RN 0.86 cannot independently tint an iOS TextInput caret while preserving selection handles.
 - [Atomic account deletion](friction-atomic-account-deletion.md) — app rows and auth.users delete in one DB transaction; detach cross-user provenance and converge lost-response retries to logout.
+- [Create retry generations](create-retry-generations.md) — response-loss retries that reuse a client ID must durably persist a monotonic generation beside that ID.

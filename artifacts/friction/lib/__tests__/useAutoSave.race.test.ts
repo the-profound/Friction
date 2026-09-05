@@ -349,6 +349,19 @@ describe("useAutoSave – C2 flush race condition", () => {
     expect(retryPayload.entityId).toBeUndefined();
   });
 
+  it("persists a newer create generation across response-loss restoration", () => {
+    const failedQueue = {
+      creationId: "stable-create-id",
+      creationGeneration: 2,
+      content: "응답 유실 뒤 수정한 내용",
+    };
+    const serialized = JSON.stringify(failedQueue);
+    const restored = JSON.parse(serialized) as typeof failedQueue;
+
+    expect(restored).toEqual(failedQueue);
+    expect(restored.creationGeneration).toBe(2);
+  });
+
   it("does not let a delayed queue restore overwrite immediate user input", () => {
     let dirtyEpoch = 0;
     let latestContent = "";

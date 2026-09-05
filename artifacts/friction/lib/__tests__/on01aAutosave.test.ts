@@ -450,6 +450,15 @@ describe("useAutoSave pending-content preservation", () => {
 
     expect(screen).toContain("const thoughtCreationIdRef = useRef<string | undefined>");
     expect(screen).toContain("clientId: thoughtCreationIdRef.current ?? createThoughtClientId()");
+    expect(screen).toContain(
+      "data.creationGeneration",
+    );
+    expect(screen).toContain(
+      "creationGeneration: thoughtCreationGenerationRef.current",
+    );
+    expect(screen).toContain(
+      "thoughtCreationGenerationRef.current = data.creationGeneration",
+    );
     expect(screen).toContain("if (data.creationId) thoughtCreationIdRef.current = data.creationId;");
     expect(screen).toContain("creationId: thoughtCreationIdRef.current");
     expect(autoSave).toContain("creationId?: string;");
