@@ -151,7 +151,7 @@ export default function MyPageScreen() {
       >
         <Section title="활동">
           <SettingRow
-            label="수신자 공개 처리한 편지"
+            label="수신자만 볼 수 있는 편지"
             onPress={() => router.push("/user-profile/recipient-only-letters" as never)}
             showChevron
             isLast

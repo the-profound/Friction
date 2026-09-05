@@ -102,3 +102,4 @@
 - [WebViewMarkdownEditor hideTitle flash](friction-editor-init-flash-hidetitle.md) — bake hideTitle into initial WebView HTML/CSS (frozen at mount), not a postMessage round-trip; every hideTitle-changing flow already fully remounts via router.replace.
 - [Friction offline-first React Query persistence](friction-offline-query-persistence.md) — queryKey[0] exact-path allowlist for disk cache; NetInfo→onlineManager wiring; persist-client version pin; cold-start gate design.
 - [Friction offline-aware list screen pattern](friction-offline-list-screen-pattern.md) — `useIsOnline()` only gates network-triggered actions; cached `data` + `isPending`/`isLoading` already handle instant-show correctly.
+- [Friction letter-list source-label pattern](friction-letter-list-source-label-pattern.md) — reuse spaceLetterByArticleId (PUBLIC wins) + buildSentLetterSourceMetadataByArticleId + isSpaceSendRecord for any new sent-letter list screen.

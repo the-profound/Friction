@@ -658,7 +658,7 @@ export default function UserProfileScreen() {
             }}
           >
             <Feather name="eye-off" size={18} color={Colors.zinc600} />
-            <Text style={styles.menuItemText}>수신자 공개 처리한 편지</Text>
+            <Text style={styles.menuItemText}>수신자만 볼 수 있는 편지</Text>
             <Feather name="chevron-right" size={16} color={Colors.zinc400} />
           </ScalePressable>
         </View>

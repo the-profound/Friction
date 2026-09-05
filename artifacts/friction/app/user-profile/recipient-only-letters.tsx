@@ -22,9 +22,15 @@ import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useListArticles,
+  useListSendRecords,
   SpaceLetterVisibility,
   type Article,
+  type SendRecordWithDetails,
 } from "@workspace/api-client-react";
+import {
+  buildSentLetterSourceMetadataByArticleId,
+  isSpaceSendRecord,
+} from "@/lib/sentLetterVisibility";
 
 const GRID_COLS = 3;
 const GRID_PAD = Spacing.screenPx;
@@ -48,6 +54,10 @@ export default function RecipientOnlyLettersScreen() {
     { authorId: userId },
     { query: { enabled: !authIsLoading } },
   );
+  const sendRecordsQuery = useListSendRecords(
+    { senderId: userId ?? "" },
+    { query: { enabled: !authIsLoading } },
+  );
 
   const {
     isSourceHidden,
@@ -58,20 +68,48 @@ export default function RecipientOnlyLettersScreen() {
 
   // Re-fetch on focus so visibility changes made elsewhere are reflected immediately.
   const refetchArticles = articlesQuery.refetch;
+  const refetchSendRecords = sendRecordsQuery.refetch;
   useFocusEffect(
     useCallback(() => {
       refetchArticles();
-    }, [refetchArticles]),
+      refetchSendRecords();
+    }, [refetchArticles, refetchSendRecords]),
   );
 
-  // Only RECIPIENT_ONLY letters (must be in spaceLetterByArticleId map to confirm status).
+  // Source-name lookup shared with 편지 tab / 프로필 — resolves the label
+  // (space name or personal collection name) for each sent article.
+  const sendRecordByArticleId = useMemo(
+    () =>
+      buildSentLetterSourceMetadataByArticleId(
+        (sendRecordsQuery.data ?? []) as SendRecordWithDetails[],
+      ),
+    [sendRecordsQuery.data],
+  );
+
+  // Personal/reply sends never have a space_letter row and are always
+  // recipient-only (there is no visibility toggle for them).
+  const personalSentArticleIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const record of (sendRecordsQuery.data ?? []) as SendRecordWithDetails[]) {
+      if (!isSpaceSendRecord(record)) ids.add(record.articleId);
+    }
+    return ids;
+  }, [sendRecordsQuery.data]);
+
+  // Every letter that only the recipient(s) can read: space-sent letters
+  // explicitly set to RECIPIENT_ONLY, plus personal/reply sends. A letter
+  // that is PUBLIC through any other route (e.g. a public space) is excluded
+  // — "PUBLIC wins" is preserved via spaceLetterByArticleId.
   const recipientOnlyLetters = useMemo<Article[]>(() => {
     return ((articlesQuery.data ?? []) as Article[]).filter((a) => {
       if (a.status !== "LETTER") return false;
       const sl = spaceLetterByArticleId.get(a.id);
-      return sl?.visibility === SpaceLetterVisibility.RECIPIENT_ONLY;
+      if (sl?.visibility === SpaceLetterVisibility.PUBLIC) return false;
+      const isSpaceRecipientOnly =
+        sl?.visibility === SpaceLetterVisibility.RECIPIENT_ONLY;
+      return isSpaceRecipientOnly || personalSentArticleIds.has(a.id);
     });
-  }, [articlesQuery.data, spaceLetterByArticleId]);
+  }, [articlesQuery.data, spaceLetterByArticleId, personalSentArticleIds]);
 
   // Chunk into rows of GRID_COLS so we can use a simple FlatList without numColumns.
   const rows = useMemo<Row[]>(() => {
@@ -87,15 +125,22 @@ export default function RecipientOnlyLettersScreen() {
 
   const handleLetterPress = useCallback(
     (article: Article) => {
+      const rec = sendRecordByArticleId[article.id];
       const slotRef = cardSlotRefs.current.get(article.id);
       openLetterOverlay(article, {
+        meta: {
+          collectionName: rec?.name ?? null,
+          collectionId: rec?.collectionId ?? null,
+          date: rec?.deliverySlot ?? null,
+        },
         measureRef: slotRef
           ? (slotRef as unknown as { measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => void })
           : null,
         fallbackOrigin: { x: 0, y: 0, width: cellWidth, height: cellHeight },
+        currentAuthorId: userId,
       });
     },
-    [openLetterOverlay, cellWidth, cellHeight],
+    [openLetterOverlay, cellWidth, cellHeight, sendRecordByArticleId, userId],
   );
 
   const renderRow = useCallback(
@@ -105,6 +150,9 @@ export default function RecipientOnlyLettersScreen() {
           const hidden = isSourceHidden(article.id);
           // ViewModel extracts spaceName when the API embeds it on the article.
           const vm = profileArticleToViewModel(article);
+          // Send-record name takes priority so personal sends show their
+          // collection label instead of an empty collectionName.
+          const collectionName = sendRecordByArticleId[article.id]?.name ?? vm.collectionName;
           return (
             <View
               key={article.id}
@@ -120,7 +168,7 @@ export default function RecipientOnlyLettersScreen() {
                 <ArticleCardItem
                   title={vm.article?.title ?? "제목 없음"}
                   authorName={vm.authorName ?? undefined}
-                  collectionName={vm.collectionName}
+                  collectionName={collectionName}
                   spaceName={vm.spaceName}
                   cover={vm.cover ?? undefined}
                   visibility="RECIPIENT_ONLY"
@@ -137,7 +185,7 @@ export default function RecipientOnlyLettersScreen() {
         ))}
       </View>
     ),
-    [isSourceHidden, cellWidth, cellHeight, handleLetterPress],
+    [isSourceHidden, cellWidth, cellHeight, handleLetterPress, sendRecordByArticleId],
   );
 
   const isLoading =
@@ -150,9 +198,9 @@ export default function RecipientOnlyLettersScreen() {
         <HeaderButton
           variant="back"
           onPress={() => router.back()}
-          accessibilityLabel="수신자 공개 편지에서 돌아가기"
+          accessibilityLabel="수신자만 볼 수 있는 편지에서 돌아가기"
         />
-        <Text style={styles.headerTitle}>수신자 공개 편지</Text>
+        <Text style={styles.headerTitle}>수신자만 볼 수 있는 편지</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -182,10 +230,10 @@ export default function RecipientOnlyLettersScreen() {
             <View style={styles.emptyWrap}>
               <Feather name="eye-off" size={40} color={Colors.zinc300} />
               <Text style={styles.emptyTitle}>
-                수신자 공개 처리한 편지가 없어요
+                수신자만 볼 수 있는 편지가 없어요
               </Text>
               <Text style={styles.emptyText}>
-                공간에서 보낸 편지를 수신자 공개로 설정하면{"\n"}여기에 표시됩니다.
+                개인에게 보낸 편지와, 공간에서 수신자 공개로{"\n"}설정한 편지가 여기에 모여요.
               </Text>
             </View>
           )
