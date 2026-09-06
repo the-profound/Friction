@@ -2,7 +2,6 @@
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Animated,
   FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -42,7 +41,6 @@ import { recordArticleToViewModel } from "@/hooks/useRecordLetterCards";
 import RecordRow from "@/components/RecordRow/RecordRow";
 import SwipeableRow, { type SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import RecordCardMarkdownPreview from "@/components/RecordCardMarkdownPreview/RecordCardMarkdownPreview";
-import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -86,7 +84,6 @@ import {
   getRecordCardTitleLineCount,
   isPendingQueueQuestionThought,
   mergeRecordSession,
-  recordMatchesQuery,
   resolveQuestionPlacementAnchors,
   shouldRefetchQuestionQueue,
   shouldShowQuestionErrorToast,
@@ -100,7 +97,6 @@ import type { ArticleStatus } from "@/lib/policies";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
-import { isListSearchBoundaryGesture } from "@/lib/dateGroupVerticalSnap";
 import { useIsOnline } from "@/lib/useIsOnline";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
@@ -380,11 +376,6 @@ function OnScreenContent() {
   const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
   const [view, setView] = useState<RecordView>("card");
   const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
-  const [searchActive, setSearchActive] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  // The filter/view menu bar stays visible at all times; the only exception
-  // is while search is active (an explicit user action, not scroll/inactivity).
-  const controlsVisible = !searchActive;
   const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
   const recordSessionRef = useRef<UnifiedRecord[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
@@ -411,15 +402,6 @@ function OnScreenContent() {
     seed: string;
     anchors: QuestionPlacementAnchors;
   } | null>(null);
-  const controlsAnimation = useRef(new Animated.Value(1)).current;
-  const lastScrollOffsetRef = useRef(0);
-  const listDragStartOffsetRef = useRef(0);
-  const listPointerStartYRef = useRef<number | null>(null);
-  const listPointerStartOffsetRef = useRef(0);
-  const searchActiveRef = useRef(false);
-
-  searchActiveRef.current = searchActive;
-
   const closeOpenRecordRow = useCallback(() => {
     openRecordRowRef.current?.close();
     openRecordRowRef.current = null;
@@ -434,52 +416,10 @@ function OnScreenContent() {
     openRecordRowRef.current = next;
   }, []);
 
-  const closeSearch = useCallback(() => {
-    closeOpenRecordRow();
-    searchActiveRef.current = false;
-    setSearchActive(false);
-    setSearchQuery("");
-  }, [closeOpenRecordRow]);
-
-  const openSearch = useCallback(() => {
-    closeOpenRecordRow();
-    searchActiveRef.current = true;
-    setSearchActive(true);
-  }, [closeOpenRecordRow]);
-
-  const tryOpenListSearch = useCallback((
-    startOffset: number,
-    distanceY: number,
-    velocityY = 0,
-  ) => {
-    const shouldOpen = isListSearchBoundaryGesture(
-      startOffset,
-      distanceY,
-      Sizing.swipeThreshold,
-      velocityY,
-      0.5,
-    );
-    if (shouldOpen) openSearch();
-    return shouldOpen;
-  }, [openSearch]);
-
   useEffect(() => {
     closeOpenRecordRow();
     closeOverlay();
-    lastScrollOffsetRef.current = 0;
   }, [kind, view, closeOpenRecordRow, closeOverlay]);
-
-  useEffect(() => {
-    closeOpenRecordRow();
-  }, [searchQuery, closeOpenRecordRow]);
-
-  useEffect(() => {
-    Animated.timing(controlsAnimation, {
-      toValue: controlsVisible ? 1 : 0,
-      duration: 180,
-      useNativeDriver: false,
-    }).start();
-  }, [controlsAnimation, controlsVisible]);
 
   const articlesQuery = useListArticles({ authorId: userId });
   const thoughtsQuery = useListThoughts();
@@ -521,7 +461,6 @@ function OnScreenContent() {
     setKind("thought");
     setView("card");
     setRecordResetVersion(tabReselectVersion.ON);
-    closeSearch();
     if (shouldRefetchQuestionQueue({
       userId,
       authIsLoading,
@@ -554,16 +493,6 @@ function OnScreenContent() {
         hasFocusedRecordScreenRef.current = true;
       }
     }, [userId]),
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      closeSearch();
-      return () => {
-        setSearchActive(false);
-        setSearchQuery("");
-      };
-    }, [closeSearch]),
   );
 
   useEffect(() => {
@@ -637,10 +566,7 @@ function OnScreenContent() {
     },
     [articlesQuery.data, cardMixSeed, kind, listedThoughts, pendingDeleteIds, queuedIds],
   );
-  const records = useMemo(
-    () => allRecords.filter((record) => recordMatchesQuery(record, searchQuery)),
-    [allRecords, searchQuery],
-  );
+  const records = allRecords;
   const queuedQuestionRecords = useMemo<CardRecord[]>(
     () => kind === "thought"
       ? queuedThoughts.map((thought, index) => ({
@@ -729,15 +655,11 @@ function OnScreenContent() {
     resetKey: recordResetVersion,
     estimatedGroupHeight,
     onPageGestureStart: scrollPressGuard.onScroll,
-    onSearchBoundaryGesture: openSearch,
   });
   const handleRecordScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       verticalDateSnap.onScroll(event);
       scrollPressGuard.onScroll();
-      // Offset tracking still feeds the search-boundary gesture below; the
-      // filter/view menu bar itself no longer hides on scroll.
-      lastScrollOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
     },
     [scrollPressGuard, verticalDateSnap.onScroll],
   );
@@ -1060,15 +982,6 @@ function OnScreenContent() {
         title="기록함"
         centeredBrandTitle
       />
-      <AnimatedSearchBar
-        active={searchActive}
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        onDismiss={closeSearch}
-        placeholder="제목과 내용으로 검색"
-        backgroundColor={Colors.recordSearchBarBg}
-        removeFocusOutline
-      />
       <View style={styles.filtersAnimated}>
         <Gradient
           colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
@@ -1077,9 +990,9 @@ function OnScreenContent() {
           style={styles.filters}
           pointerEvents="box-none"
         >
-          <Animated.View
-            pointerEvents={controlsVisible && !searchActive ? "box-none" : "none"}
-            style={[styles.filterControls, { opacity: controlsAnimation }]}
+          <View
+            pointerEvents="box-none"
+            style={styles.filterControls}
           >
             <View style={styles.kindFilterGroup}>
               <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
@@ -1100,7 +1013,7 @@ function OnScreenContent() {
                 onPress={() => setView("card")}
               />
             </View>
-          </Animated.View>
+          </View>
         </Gradient>
       </View>
 
@@ -1146,7 +1059,6 @@ function OnScreenContent() {
             refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
             onScroll={handleRecordScroll}
             onScrollBeginDrag={verticalDateSnap.onScrollBeginDrag}
-            onScrollEndDrag={verticalDateSnap.onScrollEndDrag}
             scrollEventThrottle={16}
             snapToInterval={estimatedGroupHeight}
             snapToAlignment="start"
@@ -1157,29 +1069,7 @@ function OnScreenContent() {
           />
         </View>
       ) : visibleRecords.length > 0 ? (
-        <View
-          style={styles.recordListViewport}
-          {...(Platform.OS === "web" ? {
-            onPointerDown: (event: { nativeEvent?: { clientY?: number } }) => {
-              listPointerStartYRef.current = event.nativeEvent?.clientY ?? null;
-              listPointerStartOffsetRef.current = lastScrollOffsetRef.current;
-            },
-            onPointerUp: (event: { nativeEvent?: { clientY?: number } }) => {
-              const startY = listPointerStartYRef.current;
-              listPointerStartYRef.current = null;
-              const endY = event.nativeEvent?.clientY;
-              if (startY !== null && endY !== undefined) {
-                tryOpenListSearch(listPointerStartOffsetRef.current, endY - startY);
-              }
-            },
-            onPointerCancel: () => {
-              listPointerStartYRef.current = null;
-            },
-            onWheel: (event: { deltaY?: number }) => {
-              tryOpenListSearch(lastScrollOffsetRef.current, -(event.deltaY ?? 0));
-            },
-          } : {})}
-        >
+        <View style={styles.recordListViewport}>
           <FlatList
             data={visibleRecords}
             keyExtractor={(record) => `${record.kind}-${record.id}`}
@@ -1228,19 +1118,7 @@ function OnScreenContent() {
             }}
             refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
             onScroll={handleRecordScroll}
-            onScrollBeginDrag={(event) => {
-              closeOpenRecordRow();
-              listDragStartOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
-            }}
-            onScrollEndDrag={(event) => {
-              const endOffset = Math.max(0, event.nativeEvent.contentOffset.y);
-              const upwardDistance = endOffset - listDragStartOffsetRef.current;
-              tryOpenListSearch(
-                listDragStartOffsetRef.current,
-                -upwardDistance,
-                -(event.nativeEvent.velocity?.y ?? 0),
-              );
-            }}
+            onScrollBeginDrag={closeOpenRecordRow}
             scrollEventThrottle={16}
             scrollEnabled={recordListScrollEnabled}
             contentContainerStyle={{ paddingBottom: navBottom + 16 }}
@@ -1249,8 +1127,8 @@ function OnScreenContent() {
       ) : (
         <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
           <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
-          <RecordListText style={styles.emptyTitle}>{searchQuery.trim() ? "검색 결과가 없습니다" : emptyTitle}</RecordListText>
-          {!searchQuery.trim() && kind === "thought" && !questionLoadFailed ? (
+          <RecordListText style={styles.emptyTitle}>{emptyTitle}</RecordListText>
+          {kind === "thought" && !questionLoadFailed ? (
             <ScalePressable
               style={styles.createButton}
               contentStyle={styles.createButtonContent}

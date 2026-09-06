@@ -45,11 +45,6 @@ describe("list swipe delete wiring", () => {
     expect(on).toMatch(
       /useEffect\(\(\) => \{\s*closeOpenRecordRow\(\);\s*closeOverlay\(\);[\s\S]*\}, \[kind, view,/,
     );
-    expect(on).toMatch(
-      /useEffect\(\(\) => \{\s*closeOpenRecordRow\(\);\s*\}, \[searchQuery,/,
-    );
-    expect(on).toMatch(
-      /onScrollBeginDrag=\{\(event\) => \{\s*closeOpenRecordRow\(\);/,
-    );
+    expect(on).toContain("onScrollBeginDrag={closeOpenRecordRow}");
   });
 });

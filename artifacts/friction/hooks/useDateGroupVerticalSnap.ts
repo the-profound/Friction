@@ -10,7 +10,6 @@ import {
 import {
   findDateGroupAtOffset,
   getDateGroupPageDecision,
-  isDateGroupSearchBoundaryGesture,
   resolveDateGroupAnchor,
   type DateGroupLayout,
 } from "@/lib/dateGroupVerticalSnap";
@@ -38,8 +37,6 @@ interface UseDateGroupVerticalSnapOptions {
   estimatedGroupHeight?: number;
   /** Starts the shared press guard before a vertical page transition. */
   onPageGestureStart?: () => void;
-  /** Opens the owning screen's search UI after a short upward pull at the first group. */
-  onSearchBoundaryGesture?: () => void;
   /** Moves back to the first date group when the owning tab is reselected. */
   resetKey?: string | number;
 }
@@ -69,7 +66,6 @@ export function useDateGroupVerticalSnap({
   enabled,
   estimatedGroupHeight,
   onPageGestureStart,
-  onSearchBoundaryGesture,
   resetKey,
 }: UseDateGroupVerticalSnapOptions) {
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -86,7 +82,6 @@ export function useDateGroupVerticalSnap({
   const restoreFrameRef = useRef<number | null>(null);
   const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wheelDistanceRef = useRef(0);
-  const nativeDragStartOffsetRef = useRef(0);
   const resetKeyRef = useRef(resetKey);
   const finishGestureRef = useRef((
     _distanceY: number,
@@ -221,19 +216,6 @@ export function useDateGroupVerticalSnap({
     if (!enabled) return;
     onPageGestureStart?.();
     const currentKey = gestureStartKeyRef.current ?? currentKeyRef.current;
-    if (isDateGroupSearchBoundaryGesture(
-      currentKey,
-      groupKeysRef.current,
-      distanceY,
-      Sizing.swipeThreshold,
-      undefined,
-      velocityY,
-      FLING_VELOCITY,
-    )) {
-      onSearchBoundaryGesture?.();
-      moveToDateKey(currentKey, animated);
-      return;
-    }
     const decision = getDateGroupPageDecision(
       currentKey,
       groupKeysRef.current,
@@ -244,7 +226,7 @@ export function useDateGroupVerticalSnap({
       FLING_VELOCITY,
     );
     moveToDateKey(decision.dateKey, animated);
-  }, [enabled, moveToDateKey, onPageGestureStart, onSearchBoundaryGesture]);
+  }, [enabled, moveToDateKey, onPageGestureStart]);
   finishGestureRef.current = finishPageGesture;
 
   const beginPageGesture = useCallback(() => {
@@ -319,32 +301,11 @@ export function useDateGroupVerticalSnap({
     }
   }, [estimatedGroupHeight]);
 
-  const onScrollBeginDrag = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const onScrollBeginDrag = useCallback(() => {
     if (!enabled || Platform.OS === "web") return;
-    nativeDragStartOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
     gestureStartKeyRef.current = currentKeyRef.current;
     onPageGestureStart?.();
   }, [enabled, onPageGestureStart]);
-
-  const onScrollEndDrag = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!enabled || Platform.OS === "web") return;
-    const endOffset = Math.max(0, event.nativeEvent.contentOffset.y);
-    const distanceY = nativeDragStartOffsetRef.current - endOffset;
-    const velocityY = -(event.nativeEvent.velocity?.y ?? 0);
-    const currentKey = gestureStartKeyRef.current ?? currentKeyRef.current;
-    if (isDateGroupSearchBoundaryGesture(
-      currentKey,
-      groupKeysRef.current,
-      distanceY,
-      Sizing.swipeThreshold,
-      undefined,
-      velocityY,
-      FLING_VELOCITY,
-    )) {
-      onSearchBoundaryGesture?.();
-      moveToDateKey(currentKey, true);
-    }
-  }, [enabled, moveToDateKey, onSearchBoundaryGesture]);
 
   useEffect(() => () => {
     clearWheelTimer();
@@ -355,7 +316,6 @@ export function useDateGroupVerticalSnap({
     onLayout,
     onScroll,
     onScrollBeginDrag,
-    onScrollEndDrag,
     onWheel,
     panHandlers: panResponder.panHandlers,
   };

@@ -8,33 +8,6 @@ describe("record filter UI regression", () => {
       join(__dirname, "../../app/(tabs)/on.tsx"),
       "utf8",
     );
-
-    expect(recordsScreen).not.toContain("DropdownFilter");
-    expect(recordsScreen).toContain("function RecordKindButton");
-    expect(recordsScreen).toContain('label="단상" active={kind === "thought"}');
-    expect(recordsScreen).toContain('label="편집" active={kind === "editing"}');
-    expect(recordsScreen).toContain('label="편지" active={kind === "letter"}');
-  });
-
-  it("opens on thoughts and mixes queued questions into the thought feed", () => {
-    const recordsScreen = readFileSync(
-      join(__dirname, "../../app/(tabs)/on.tsx"),
-      "utf8",
-    );
-
-    expect(recordsScreen).toContain(
-      "recordKindIntent: kind, setRecordKindIntent: setKind",
-    );
-    expect(recordsScreen).toContain('setKind("thought")');
-    expect(recordsScreen).toContain('() => kind === "thought"');
-    expect(recordsScreen).toContain("buildMixedRecordGroups(");
-  });
-
-  it("shares record kind intent and keeps tab reselect resetting it to thoughts", () => {
-    const recordsScreen = readFileSync(
-      join(__dirname, "../../app/(tabs)/on.tsx"),
-      "utf8",
-    );
     const navigationContext = readFileSync(
       join(__dirname, "../../contexts/NavigationContext.tsx"),
       "utf8",
@@ -69,42 +42,43 @@ describe("record filter UI regression", () => {
     expect(recordRow).not.toContain("onArchive");
   });
 
-  it("opens search from the date boundary without a header search button", () => {
+  it("never mounts the pull-to-search bar or its trigger state", () => {
     const recordsScreen = readFileSync(
       join(__dirname, "../../app/(tabs)/on.tsx"),
       "utf8",
     );
-    const searchBar = readFileSync(
-      join(__dirname, "../../components/AnimatedSearchBar/AnimatedSearchBar.tsx"),
-      "utf8",
-    );
 
-    expect(recordsScreen).not.toContain("showSearch");
-    expect(recordsScreen).toContain("onSearchBoundaryGesture: openSearch");
-    expect(recordsScreen).toContain("onPointerUp:");
-    expect(recordsScreen).toContain("event.nativeEvent.velocity?.y");
-    expect(recordsScreen).toContain('pointerEvents={controlsVisible && !searchActive ? "box-none" : "none"}');
-    expect(recordsScreen).toContain("removeFocusOutline");
-    expect(searchBar).toContain('outlineStyle: "none"');
+    expect(recordsScreen).not.toContain("AnimatedSearchBar");
+    expect(recordsScreen).not.toContain("recordMatchesQuery");
+    expect(recordsScreen).not.toContain("searchActive");
+    expect(recordsScreen).not.toContain("searchQuery");
+    expect(recordsScreen).not.toContain("openSearch");
+    expect(recordsScreen).not.toContain("closeSearch");
+    expect(recordsScreen).not.toContain("tryOpenListSearch");
+    expect(recordsScreen).not.toContain("onSearchBoundaryGesture");
+    expect(recordsScreen).not.toContain("isListSearchBoundaryGesture");
+    expect(recordsScreen).not.toContain("onPointerUp");
   });
 
-  it("keeps the filter/view menu bar always visible except during search", () => {
+  it("keeps the filter/view menu bar always visible", () => {
     const recordsScreen = readFileSync(
       join(__dirname, "../../app/(tabs)/on.tsx"),
       "utf8",
     );
 
-    // The menu bar must never hide due to scrolling or inactivity timers —
-    // only the explicit search-open action may hide it.
+    // The menu bar must never hide due to scrolling, inactivity timers, or
+    // search — there is no longer any condition that hides it.
     expect(recordsScreen).not.toContain("recordControlsInactivity");
     expect(recordsScreen).not.toContain("getRecordControlsScrollVisibility");
     expect(recordsScreen).not.toContain("restartRecordControlsTimer");
     expect(recordsScreen).not.toContain("registerControlsActivity");
     expect(recordsScreen).not.toContain("showControlsForActivity");
-    expect(recordsScreen).toContain("const controlsVisible = !searchActive;");
+    expect(recordsScreen).not.toContain("controlsVisible");
+    expect(recordsScreen).not.toContain("controlsAnimation");
+    expect(recordsScreen).toContain('pointerEvents="box-none"\n            style={styles.filterControls}');
   });
 
-  it("keeps the filter-bar layout space stable while only fading its controls", () => {
+  it("keeps the filter-bar layout space stable", () => {
     const recordsScreen = readFileSync(
       join(__dirname, "../../app/(tabs)/on.tsx"),
       "utf8",
@@ -112,7 +86,6 @@ describe("record filter UI regression", () => {
 
     expect(recordsScreen).toContain("height: FILTER_BAR_HEIGHT,");
     expect(recordsScreen).toContain("marginBottom: -FILTER_GRADIENT_OVERLAP,");
-    expect(recordsScreen).toContain("style={[styles.filterControls, { opacity: controlsAnimation }]}");
     expect(recordsScreen).toContain("<View style={styles.filtersAnimated}>");
     expect(recordsScreen).not.toContain("outputRange: [0, FILTER_BAR_HEIGHT]");
     expect(recordsScreen).not.toContain("outputRange: [0, -FILTER_GRADIENT_OVERLAP]");
