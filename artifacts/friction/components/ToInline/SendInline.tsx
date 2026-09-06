@@ -340,10 +340,10 @@ export function SendInline({
         showToast({
           message:
             mode === "person"
-              ? `${selectedNeighbor!.user?.nickname ?? "받는 사람"}에게 발송됐어요 · ${arrivalTime} 도착 예정`
+              ? `${selectedNeighbor!.user?.nickname ?? "받는 사람"}에게 발신됐어요 · ${arrivalTime} 도착 예정`
               : mode === "reply"
-                ? `답장을 발송했어요 · ${arrivalTime} 도착 예정`
-                : `'${selectedSpace!.name}'에 발송됐어요 · ${arrivalTime} 도착 예정`,
+                ? `답장을 발신했어요 · ${arrivalTime} 도착 예정`
+                : `'${selectedSpace!.name}'에 발신됐어요 · ${arrivalTime} 도착 예정`,
           type: "success",
         });
         setSelectedArticle(null);

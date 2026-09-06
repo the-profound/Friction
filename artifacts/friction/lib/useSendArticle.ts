@@ -38,7 +38,7 @@ export function useSendArticleFlow({ senderId }: UseSendArticleOptions) {
         const deliveryTime = formatDeliveryTime(visibleAt);
         return { success: true, deliveryTime };
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "발송에 실패했습니다.";
+        const msg = e instanceof Error ? e.message : "발신에 실패했습니다.";
         return { success: false, error: msg };
       }
     },

@@ -96,6 +96,7 @@ export type ArticleScheduleSheetProps = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 export function ArticleScheduleSheet({
   mode,
   spaceId,
@@ -192,7 +193,7 @@ export function ArticleScheduleSheet({
 
   const handleSave = useCallback(async () => {
     if (!selectedArticleId) {
-      showToast({ message: "발송할 글을 선택해주세요.", type: "error", duration: 5000, position: "top" });
+      showToast({ message: SpaceCopy.scheduledSend_selectArticleWarning, type: "error", duration: 5000, position: "top" });
       return;
     }
     if (!isOpeningLetter && !selectedCenterSlot) {
@@ -307,9 +308,9 @@ export function ArticleScheduleSheet({
     openingRoundId, maxDate, minDate, showToast,
   ]);
 
-  const title = isOpeningLetter ? "여는 편지 글 선택" : "글 예약 발송";
+  const title = isOpeningLetter ? "여는 편지 글 선택" : "글 예약 발신";
   const saveLabel = isOpeningLetter ? "여는 편지로 등록" : "예약 등록";
-  const dateLabel = isOpeningLetter ? "발송 예약 날짜 (06:00 발송)" : "발송 예약 일시";
+  const dateLabel = isOpeningLetter ? "발신 예약 날짜 (06:00 발신)" : "발신 예약 일시";
 
   return (
     <View style={styles.overlay}>
@@ -322,7 +323,7 @@ export function ArticleScheduleSheet({
           </ScalePressable>
         </View>
 
-        <Text style={styles.fieldLabel}>발송할 글 선택</Text>
+        <Text style={styles.fieldLabel}>발신할 글 선택</Text>
 
         <ScalePressable
           style={styles.selectBtnOuter}
@@ -408,7 +409,7 @@ export function ArticleScheduleSheet({
 
         {selectedArticleId && !isOpeningLetter ? (
           <>
-            <Text style={styles.fieldLabel}>발송 예정일 (06:00 고정 발송)</Text>
+            <Text style={styles.fieldLabel}>{SpaceCopy.scheduledSend_dateFieldLabel}</Text>
 
             {isLoadingCenterDates ? (
               <View style={styles.centerDatesLoading}>

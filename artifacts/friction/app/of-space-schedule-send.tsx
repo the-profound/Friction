@@ -109,9 +109,9 @@ function slotLabel(send: SpaceScheduledSendWithLetter): string {
 
 function sendStatusLabel(status: string): string {
   if (status === "PENDING") return "대기 중";
-  if (status === "SENT") return "발송 완료";
+  if (status === "SENT") return SpaceCopy.scheduledSend_statusSent;
   if (status === "CANCELLED") return "취소됨";
-  if (status === "FAILED") return "발송 실패";
+  if (status === "FAILED") return SpaceCopy.scheduledSend_statusFailed;
   return status;
 }
 
@@ -162,7 +162,7 @@ function SendRow({
         <View style={styles.failedBanner}>
           <Feather name="alert-circle" size={12} color="#EF4444" />
           <Text style={styles.failedBannerText}>
-            {send.failureReason ?? "예약 시각에 발송되지 않았어요."} {isCenter ? "취소하세요." : "다시 예약하거나 취소하세요."}
+            {send.failureReason ?? "예약 시각에 발신되지 않았어요."} {isCenter ? "취소하세요." : "다시 예약하거나 취소하세요."}
           </Text>
         </View>
       )}
@@ -185,7 +185,7 @@ function SendRow({
         <Text style={styles.sendAuthor}>{send.authorNickname}</Text>
       )}
       {isSent && send.sentAt && (
-        <Text style={styles.sentAtText}>발송: {formatDateTime(send.sentAt)}</Text>
+        <Text style={styles.sentAtText}>발신: {formatDateTime(send.sentAt)}</Text>
       )}
       <View style={styles.sendRowActions}>
         {isPending && (
@@ -430,7 +430,7 @@ function ResendSheet({
           </Text>
         )}
 
-        <Text style={sheetStyles.fieldLabel}>새 발송 예정일 (06:00 고정 발송)</Text>
+        <Text style={sheetStyles.fieldLabel}>{SpaceCopy.scheduledSend_newDateFieldLabel}</Text>
         <FixedTimeDatePicker
           send={send}
           selectedDate={selectedDate}
@@ -542,7 +542,7 @@ function ChangeSheet({
           </Text>
         )}
 
-        <Text style={sheetStyles.fieldLabel}>새 발송 예정일 (06:00 고정 발송)</Text>
+        <Text style={sheetStyles.fieldLabel}>{SpaceCopy.scheduledSend_newDateFieldLabel}</Text>
         <FixedTimeDatePicker
           send={send}
           selectedDate={selectedDate}
@@ -566,6 +566,7 @@ function ChangeSheet({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 export default function SpaceScheduleSendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -1081,7 +1082,7 @@ export default function SpaceScheduleSendScreen() {
           {failedSends.length > 0 && (
             <>
               <Text style={[styles.sectionHeader, styles.sectionHeaderFailed]}>
-                발송 실패 {failedSends.length}
+                {SpaceCopy.scheduledSend_statusFailed} {failedSends.length}
               </Text>
               <View style={styles.sendList}>
                 {failedSends.map((send) => (
@@ -1223,7 +1224,7 @@ export default function SpaceScheduleSendScreen() {
       <ConfirmModal
         visible={cancelTarget !== null}
         title="예약 취소"
-        description="이 예약 발송을 취소하시겠어요?"
+        description="이 예약 발신을 취소하시겠어요?"
         confirmLabel="취소"
         cancelLabel="돌아가기"
         destructive

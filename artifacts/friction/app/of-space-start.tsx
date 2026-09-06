@@ -851,6 +851,7 @@ function ScheduleCalendarStep({
   );
 }
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 function OpeningLetterStep({
   isLoading,
   isArticlesLoading,
@@ -899,7 +900,7 @@ function OpeningLetterStep({
   const [showArticleList, setShowArticleList] = useState(() => !openingLetterExists || openingScheduledSend === null);
   const [pickerVisible, setPickerVisible] = useState(false);
 
-  // KST 기준: 06:00 이전이면 오늘, 이후면 내일부터 발송 예약 가능
+  // KST 기준: 06:00 이전이면 오늘, 이후면 내일부터 발신 예약 가능
   const minSendDate = useMemo(() => minOpeningSendDate(), []);
   const hasReservableOpeningDate = minSendDate <= maxScheduledAt;
 
@@ -912,7 +913,7 @@ function OpeningLetterStep({
   const [saving, setSaving] = useState(false);
 
   const existingArticleTitle = openingScheduledSend?.articleTitle ?? null;
-  // 저장된 발송 instant를 KST 달력 날짜로 변환해 표시 (기기 시간대 무관)
+  // 저장된 발신 instant를 KST 달력 날짜로 변환해 표시 (기기 시간대 무관)
   const existingScheduledDate = openingScheduledSend
     ? toKstCalendarDate(new Date(openingScheduledSend.scheduledAt))
     : null;
@@ -929,7 +930,7 @@ function OpeningLetterStep({
       return;
     }
     if (!selectedArticleId) {
-      showToast({ message: "발송할 글을 선택해주세요.", type: "error", duration: 5000, position: "top" });
+      showToast({ message: SpaceCopy.scheduledSend_selectArticleWarning, type: "error", duration: 5000, position: "top" });
       return;
     }
     setSaving(true);
@@ -949,7 +950,7 @@ function OpeningLetterStep({
       }
 
       const chosenDate = scheduledDate > maxScheduledAt ? maxScheduledAt : scheduledDate;
-      // 발송 시각은 기기 시간대와 무관하게 항상 "해당 날짜의 KST 06:00"
+      // 발신 시각은 기기 시간대와 무관하게 항상 "해당 날짜의 KST 06:00"
       const finalScheduledAt = kstDateAt6(chosenDate);
       await createSend.mutateAsync({ id: spaceId, letterId: spaceLetterId, data: { scheduledAt: finalScheduledAt.toISOString() } });
       queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(spaceId) });
@@ -969,11 +970,11 @@ function OpeningLetterStep({
       <Text style={stepStyles.stepTitle}>첫 여는 편지 보내기</Text>
       <Text style={stepStyles.stepDesc}>공간 시작과 함께 전송될 1회차 여는 편지를 선택해요.</Text>
 
-      {/* 발송 가능 기간 안내 */}
+      {/* 발신 가능 기간 안내 */}
       <View style={olStyles.deadlineInfo}>
         <Feather name="calendar" size={13} color={Colors.zinc400} />
         <Text style={olStyles.deadlineInfoText}>
-          발송 예정일은 첫 중심글 시작일({formatMonthDay(startDate)}) 하루 전인{" "}
+          발신 예정일은 첫 중심글 시작일({formatMonthDay(startDate)}) 하루 전인{" "}
           <Text style={olStyles.deadlineEmphasis}>{formatMonthDay(deadline)} 06:00</Text>
           까지 설정할 수 있어요.
         </Text>
@@ -994,7 +995,7 @@ function OpeningLetterStep({
           <Text style={olStyles.savedCardArticle} numberOfLines={1}>
             {existingArticleTitle ?? "제목 없음"}
           </Text>
-          <Text style={olStyles.savedCardDate}>{formatMonthDay(existingScheduledDate)} 06:00 발송 예정</Text>
+          <Text style={olStyles.savedCardDate}>{formatMonthDay(existingScheduledDate)} 06:00 발신 예정</Text>
           {!showArticleList && (
             <ScalePressable
               contentStyle={olStyles.reSelectBtn}
@@ -1037,10 +1038,10 @@ function OpeningLetterStep({
             <Text style={olStyles.writeNewBtnText}>새로 작성하기</Text>
           </ScalePressable>
 
-          {/* 선택된 글 — 발송일 선택 */}
+          {/* 선택된 글 — 발신일 선택 */}
           {selectedArticleId && hasReservableOpeningDate && (
             <View style={olStyles.sendDateSection}>
-              <Text style={olStyles.sendDateLabel}>발송 예정일 (06:00 발송)</Text>
+              <Text style={olStyles.sendDateLabel}>발신 예정일 (06:00 발신)</Text>
               <CollapsibleDatePicker
                 value={scheduledDate}
                 onChange={(date) => setScheduledDate(date)}
@@ -1222,7 +1223,7 @@ function StartConfirmStep({
           </View>
           {openingLetterExists && openingScheduledDate && (
             <View style={confirmStyles.summaryRow}>
-              <Text style={confirmStyles.summaryKey}>발송 예정일</Text>
+              <Text style={confirmStyles.summaryKey}>발신 예정일</Text>
               <Text style={confirmStyles.summaryVal}>{formatMonthDay(openingScheduledDate)} 06:00</Text>
             </View>
           )}

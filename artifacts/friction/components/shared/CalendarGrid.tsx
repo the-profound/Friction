@@ -200,7 +200,7 @@ export interface CollapsibleDatePickerProps {
 
 /**
  * A date field that shows the current selection as plain text by default and
- * only reveals the month grid when tapped, matching the "발송 예정일" pattern.
+ * only reveals the month grid when tapped, matching the "발신 예정일" pattern.
  * Use this instead of always-mounted inline calendars.
  */
 export function CollapsibleDatePicker({
