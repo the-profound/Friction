@@ -41,6 +41,13 @@ interface ColorPickerProps {
   label: string;
   testID: string;
   disabled?: boolean;
+  /**
+   * Optional element rendered at the trailing end of the label/hex-code row,
+   * vertically centered alongside it (e.g. the cover editor's "사진 추가"
+   * button, which must sit on the same line as "배경 색상 #FAFAFA" rather
+   * than in its own row above the picker).
+   */
+  accessory?: React.ReactNode;
 }
 
 interface PickerSize {
@@ -54,6 +61,7 @@ export default function ColorPicker({
   label,
   testID,
   disabled = false,
+  accessory,
 }: ColorPickerProps) {
   const [hsv, setHsv] = useState<HsvColor>(() =>
     getHsvFromHex(value, DEFAULT_HSV),
@@ -179,15 +187,18 @@ export default function ColorPicker({
       accessibilityState={{ disabled }}
     >
       <View style={styles.valueRow}>
-        <View
-          style={[styles.valueSwatch, { backgroundColor: normalizedValue }]}
-          accessible
-          accessibilityLabel={`${label} 미리보기 ${normalizedValue}`}
-        />
-        <View style={styles.valueTextGroup}>
-          <Text style={styles.valueLabel}>{label}</Text>
-          <Text style={styles.valueText}>{normalizedValue}</Text>
+        <View style={styles.valueMain}>
+          <View
+            style={[styles.valueSwatch, { backgroundColor: normalizedValue }]}
+            accessible
+            accessibilityLabel={`${label} 미리보기 ${normalizedValue}`}
+          />
+          <View style={styles.valueTextGroup}>
+            <Text style={styles.valueLabel}>{label}</Text>
+            <Text style={styles.valueText}>{normalizedValue}</Text>
+          </View>
         </View>
+        {accessory ? <View style={styles.valueAccessory}>{accessory}</View> : null}
       </View>
 
       <View
@@ -316,7 +327,17 @@ const styles = StyleSheet.create({
     minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 10,
+  },
+  valueMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 1,
+  },
+  valueAccessory: {
+    flexShrink: 0,
   },
   valueSwatch: {
     width: 38,

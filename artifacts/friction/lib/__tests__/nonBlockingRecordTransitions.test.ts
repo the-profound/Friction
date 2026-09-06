@@ -49,7 +49,7 @@ describe("non-blocking editor transitions", () => {
     expect(screen).toContain("<WritingStateBar");
   });
 
-  it("lets every closing-screen back action navigate once while saves continue", () => {
+  it("lets every closing-screen back action navigate once while list invalidation continues", () => {
     const screen = readScreen("app/on-01c.tsx");
     const backHandler = screen.slice(
       screen.indexOf("const handleBack"),
@@ -60,8 +60,12 @@ describe("non-blocking editor transitions", () => {
       screen.indexOf("const hasCoverPage"),
     );
 
-    expect(backHandler).toContain("Promise.allSettled([flushCoverSave()])");
-    expect(backHandler).not.toContain("await flushCoverSave()");
+    // Cover editing (and its debounced save) now lives entirely on the
+    // dedicated cover-edit page (app/on-01c-cover.tsx), which flushes its own
+    // save before returning here — so the closing screen's own back action
+    // only needs to invalidate lists, not flush a cover save.
+    expect(backHandler).not.toContain("flushCoverSave");
+    expect(backHandler).toContain("void invalidateArticleLists(queryClient)");
     expect(backHandler).toContain('navigateAfterRemovingGuard(() => router.replace("/(tabs)/on"))');
     expect(removalGuard).toContain(
       "usePreventRemove(shouldPreventRemoval, handlePreventedRemoval);",
@@ -83,7 +87,9 @@ describe("non-blocking editor transitions", () => {
     expect(stepBackHandler).toContain('mode: "dividing"');
     expect(stepBackHandler).not.toContain('pathname: "/on-01b"');
     expect(stepBackHandler).toContain("status: \"DIVIDING\"");
-    expect(stepBackHandler).toContain("Promise.allSettled([flushCoverSave()])");
+    // Cover is no longer edited on this screen, so stepping back no longer
+    // needs to flush a cover save — only the title/status transition.
+    expect(stepBackHandler).not.toContain("flushCoverSave");
     expect(stepBackHandler).toContain("const completeStepBackTransition = () =>");
     expect(stepBackHandler).toContain("onPress: completeStepBackTransition");
     expect(stepBackHandler.indexOf("stageArticleTransitionSnapshot(")).toBeLessThan(

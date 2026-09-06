@@ -4,7 +4,6 @@ import { Feather } from "@expo/vector-icons";
 import type { ArticleCover } from "@workspace/api-client-react";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, ReaderTokens, Typography } from "@/constants/tokens";
-import BottomSheet from "../BottomSheet/BottomSheet";
 import ColorPicker from "../ColorPicker/ColorPicker";
 import { resolveArticleCover } from "@/utils/articleCover";
 import {
@@ -17,29 +16,27 @@ import { CoverPhotoUploadError, uploadCoverPhoto } from "@/lib/coverPhotoUpload"
 type Panel = "text" | "background" | null;
 
 interface CoverEditorProps {
-  visible: boolean;
-  onClose: () => void;
   cover: ArticleCover;
   onChange: (cover: ArticleCover) => void;
-  title: string;
-  author?: string;
   articleId: string;
   onPhotoOperationStateChange?: (active: boolean) => void;
   onCommitPhotoCover: (cover: ArticleCover) => Promise<void>;
-  sheetTranslateYAnim?: import("react-native").Animated.Value;
 }
 
 const CONTROL_HEIGHT = 56;
 
+/**
+ * Plain, fixed-layout content for editing a cover's font/text color/background
+ * color/photo. Previously this rendered inside its own BottomSheet; it now
+ * lives permanently on the dedicated cover-edit page (app/on-01c-cover.tsx),
+ * so it owns no modal/sheet chrome and is not conditionally shown/hidden.
+ */
 export default function CoverEditor({
-  visible,
-  onClose,
   cover,
   onChange,
   articleId,
   onPhotoOperationStateChange,
   onCommitPhotoCover,
-  sheetTranslateYAnim,
 }: CoverEditorProps) {
   const [local, setLocal] = useState<ArticleCover>(() => resolveArticleCover(cover));
   const localRef = useRef(local);
@@ -52,19 +49,23 @@ export default function CoverEditor({
   const retryPhotoRef = useRef<SelectedCoverPhoto | null>(null);
   const retryUploadedImageUrlRef = useRef<string | null>(null);
 
+  // The editor mounts fresh exactly once per visit to the dedicated cover-edit
+  // page, so this is the equivalent of the old "re-sanitize on open" effect —
+  // it only needs to run once, on mount, instead of reacting to a `visible`
+  // prop transition.
+  const didSanitizeRef = useRef(false);
   useEffect(() => {
-    if (!visible) return;
+    if (didSanitizeRef.current) return;
+    didSanitizeRef.current = true;
     const next = resolveArticleCover(cover);
-    setLocal(next);
-    localRef.current = next;
-    setPanel(null);
-    setPhotoError(null);
-    retryPhotoRef.current = null;
-    retryUploadedImageUrlRef.current = null;
     if (next.textColor !== cover.textColor || next.bgColor !== cover.bgColor) {
+      localRef.current = next;
+      setLocal(next);
       onChange(next);
     }
-  }, [visible]); // Each opening is a new editor session; live edits stay local.
+    // Sanitize exactly once against the cover this screen was opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(
     () => () => {
@@ -162,31 +163,30 @@ export default function CoverEditor({
   const backgroundColor = local.bgColor ?? Colors.zinc50;
 
   return (
-    <BottomSheet
-      visible={visible}
-      onClose={onClose}
-      snapPoints={[0.58]}
-      translateYAnim={sheetTranslateYAnim}
-    >
-      <View style={styles.container}>
-        <ScrollView
-          style={styles.panelScroll}
-          contentContainerStyle={styles.panelContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {panel === "text" ? (
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.panelScroll}
+        contentContainerStyle={styles.panelContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {panel === "text" ? (
+          <ColorPicker
+            value={local.textColor}
+            onChange={(textColor) => update({ textColor })}
+            label="글자 색상"
+            testID="cover-text-color-picker"
+            disabled={isPhotoBusy}
+          />
+        ) : panel === "background" ? (
+          <>
             <ColorPicker
-              value={local.textColor}
-              onChange={(textColor) => update({ textColor })}
-              label="글자 색상"
-              testID="cover-text-color-picker"
+              value={backgroundColor}
+              onChange={(bgColor) => update({ type: "color", bgColor })}
+              label="배경 색상"
+              testID="cover-background-color-picker"
               disabled={isPhotoBusy}
-            />
-          ) : panel === "background" ? (
-            <>
-              <View style={styles.panelHeader}>
-                <Text style={styles.panelTitle}>배경</Text>
+              accessory={
                 <ScalePressable
                   style={styles.photoButton}
                   contentStyle={styles.photoButtonContent}
@@ -206,107 +206,100 @@ export default function CoverEditor({
                     {isUploading ? "업로드 중" : "사진 추가"}
                   </Text>
                 </ScalePressable>
+              }
+            />
+            {photoError ? (
+              <View style={styles.photoErrorBox} accessibilityLiveRegion="polite">
+                <Text style={styles.photoErrorText}>{photoError}</Text>
+                <ScalePressable
+                  style={styles.retryButton}
+                  contentStyle={styles.retryButtonContent}
+                  onPress={() => void retryUpload()}
+                  disabled={isPhotoBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="사진 업로드 다시 시도"
+                  accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}
+                >
+                  <Text style={styles.retryButtonLabel}>다시 시도</Text>
+                </ScalePressable>
               </View>
-              <ColorPicker
-                value={backgroundColor}
-                onChange={(bgColor) => update({ type: "color", bgColor })}
-                label="배경 색상"
-                testID="cover-background-color-picker"
-                disabled={isPhotoBusy}
-              />
-              {photoError ? (
-                <View style={styles.photoErrorBox} accessibilityLiveRegion="polite">
-                  <Text style={styles.photoErrorText}>{photoError}</Text>
-                  <ScalePressable
-                    style={styles.retryButton}
-                    contentStyle={styles.retryButtonContent}
-                    onPress={() => void retryUpload()}
-                    disabled={isPhotoBusy}
-                    accessibilityRole="button"
-                    accessibilityLabel="사진 업로드 다시 시도"
-                    accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}
-                  >
-                    <Text style={styles.retryButtonLabel}>다시 시도</Text>
-                  </ScalePressable>
-                </View>
-              ) : null}
-            </>
-          ) : (
-            <View style={styles.hintWrap}>
-              <Text style={styles.hint}>아래 설정을 눌러 표지를 꾸며보세요.</Text>
-            </View>
-          )}
-        </ScrollView>
+            ) : null}
+          </>
+        ) : (
+          <View style={styles.hintWrap}>
+            <Text style={styles.hint}>아래 설정을 눌러 표지를 꾸며보세요.</Text>
+          </View>
+        )}
+      </ScrollView>
 
-        <View style={styles.controlRow}>
-          <ScalePressable
-            style={styles.controlButton}
-            contentStyle={styles.controlButtonContent}
-            onPress={() => update({ fontFamily: fontFamily === "sans" ? "serif" : "sans" })}
-            disabled={isPhotoBusy}
-            accessibilityRole="button"
-            accessibilityLabel={`서체 ${fontFamily === "sans" ? "고딕" : "명조"}`}
-            accessibilityHint="누르면 고딕과 명조가 전환됩니다."
-            accessibilityState={{ disabled: isPhotoBusy }}
-            testID="cover-font-toggle"
-          >
-            <Text
-              style={[
-                styles.controlValue,
-                {
-                  fontFamily:
-                    fontFamily === "serif"
-                      ? ReaderTokens.fontFamily.serifBold
-                      : ReaderTokens.fontFamily.sansSemiBold,
-                },
-              ]}
-            >
-              {fontFamily === "sans" ? "고딕" : "명조"}
-            </Text>
-            <Text style={styles.controlLabel}>서체</Text>
-          </ScalePressable>
-
-          <ScalePressable
-            style={styles.controlButton}
-            contentStyle={[styles.controlButtonContent, panel === "text" && styles.controlActive]}
-            onPress={() => setPanel((current) => (current === "text" ? null : "text"))}
-            disabled={isPhotoBusy}
-            accessibilityRole="button"
-            accessibilityLabel={`글자 색상 ${local.textColor}`}
-            accessibilityState={{ selected: panel === "text", disabled: isPhotoBusy }}
-            testID="cover-text-color-button"
-          >
-            <View style={[styles.swatch, { backgroundColor: local.textColor }]} />
-            <Text style={styles.controlLabel}>글자</Text>
-          </ScalePressable>
-
-          <ScalePressable
-            style={styles.controlButton}
-            contentStyle={[
-              styles.controlButtonContent,
-              panel === "background" && styles.controlActive,
+      <View style={styles.controlRow}>
+        <ScalePressable
+          style={styles.controlButton}
+          contentStyle={styles.controlButtonContent}
+          onPress={() => update({ fontFamily: fontFamily === "sans" ? "serif" : "sans" })}
+          disabled={isPhotoBusy}
+          accessibilityRole="button"
+          accessibilityLabel={`서체 ${fontFamily === "sans" ? "고딕" : "명조"}`}
+          accessibilityHint="누르면 고딕과 명조가 전환됩니다."
+          accessibilityState={{ disabled: isPhotoBusy }}
+          testID="cover-font-toggle"
+        >
+          <Text
+            style={[
+              styles.controlValue,
+              {
+                fontFamily:
+                  fontFamily === "serif"
+                    ? ReaderTokens.fontFamily.serifBold
+                    : ReaderTokens.fontFamily.sansSemiBold,
+              },
             ]}
-            onPress={() =>
-              setPanel((current) => (current === "background" ? null : "background"))
-            }
-            disabled={isPhotoBusy}
-            accessibilityRole="button"
-            accessibilityLabel={
-              local.type === "image" ? "사진 배경 설정" : `배경 색상 ${backgroundColor}`
-            }
-            accessibilityState={{ selected: panel === "background", disabled: isPhotoBusy }}
-            testID="cover-background-button"
           >
-            {local.type === "image" ? (
-              <Feather name="image" size={22} color={Colors.zinc800} />
-            ) : (
-              <View style={[styles.swatch, { backgroundColor }]} />
-            )}
-            <Text style={styles.controlLabel}>배경</Text>
-          </ScalePressable>
-        </View>
+            {fontFamily === "sans" ? "고딕" : "명조"}
+          </Text>
+          <Text style={styles.controlLabel}>서체</Text>
+        </ScalePressable>
+
+        <ScalePressable
+          style={styles.controlButton}
+          contentStyle={[styles.controlButtonContent, panel === "text" && styles.controlActive]}
+          onPress={() => setPanel((current) => (current === "text" ? null : "text"))}
+          disabled={isPhotoBusy}
+          accessibilityRole="button"
+          accessibilityLabel={`글자 색상 ${local.textColor}`}
+          accessibilityState={{ selected: panel === "text", disabled: isPhotoBusy }}
+          testID="cover-text-color-button"
+        >
+          <View style={[styles.swatch, { backgroundColor: local.textColor }]} />
+          <Text style={styles.controlLabel}>글자</Text>
+        </ScalePressable>
+
+        <ScalePressable
+          style={styles.controlButton}
+          contentStyle={[
+            styles.controlButtonContent,
+            panel === "background" && styles.controlActive,
+          ]}
+          onPress={() =>
+            setPanel((current) => (current === "background" ? null : "background"))
+          }
+          disabled={isPhotoBusy}
+          accessibilityRole="button"
+          accessibilityLabel={
+            local.type === "image" ? "사진 배경 설정" : `배경 색상 ${backgroundColor}`
+          }
+          accessibilityState={{ selected: panel === "background", disabled: isPhotoBusy }}
+          testID="cover-background-button"
+        >
+          {local.type === "image" ? (
+            <Feather name="image" size={22} color={Colors.zinc800} />
+          ) : (
+            <View style={[styles.swatch, { backgroundColor }]} />
+          )}
+          <Text style={styles.controlLabel}>배경</Text>
+        </ScalePressable>
       </View>
-    </BottomSheet>
+    </View>
   );
 }
 
@@ -316,14 +309,9 @@ const styles = StyleSheet.create({
   panelContent: { paddingTop: 8, paddingBottom: 16 },
   hintWrap: { minHeight: 180, alignItems: "center", justifyContent: "center" },
   hint: { ...Typography.body, fontSize: 14, color: Colors.zinc500 },
-  panelHeader: {
-    height: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  panelTitle: { ...Typography.bodySemiBold, fontSize: 15, color: Colors.zinc900 },
+  // Title text intentionally removed. The photo button is rendered as the
+  // background ColorPicker's row accessory, so it sits on the same line as
+  // the "배경 색상 #FAFAFA" label/hex text instead of in its own row above it.
   photoButton: { height: 44, flexGrow: 0, flexShrink: 0 },
   photoButtonContent: {
     height: 44,
