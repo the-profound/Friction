@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
   RefreshControl,
   Platform,
@@ -17,6 +16,8 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import { useToast } from "@/contexts/ToastContext";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import {
@@ -79,6 +80,7 @@ function RoundEditSheet({
   );
   const [saving, setSaving] = useState(false);
   const updateRound = useUpdateSpaceRound();
+  const { showToast } = useToast();
 
   // ── Slot management (shown for UPCOMING rounds) ────────────────────────────
   const isUpcoming = round.status === "UPCOMING";
@@ -96,6 +98,8 @@ function RoundEditSheet({
   const [showEditMemberPicker, setShowEditMemberPicker] = useState(false);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [savingSlot, setSavingSlot] = useState(false);
+  const [slotPendingDeleteId, setSlotPendingDeleteId] = useState<string | null>(null);
+  const [deletingSlot, setDeletingSlot] = useState(false);
 
   const slotsQuery = useListSpaceRoundSlots(round.spaceId, round.id, {
     query: {
@@ -124,7 +128,7 @@ function RoundEditSheet({
 
   const handleAddSlot = useCallback(async () => {
     if (!newSlotMember) {
-      Alert.alert("알림", "멤버를 선택해주세요.");
+      showToast({ message: "멤버를 선택해주세요.", type: "error" });
       return;
     }
     setAddingSlot(true);
@@ -146,11 +150,11 @@ function RoundEditSheet({
       setNewSlotDate(null);
       setShowAddSlot(false);
     } catch {
-      Alert.alert("오류", "슬롯 추가에 실패했어요.");
+      showToast({ message: "슬롯 추가에 실패했어요.", type: "error" });
     } finally {
       setAddingSlot(false);
     }
-  }, [newSlotMember, newSlotDate, round, slots.length, createSlot, queryClient, slotsQuery]);
+  }, [newSlotMember, newSlotDate, round, slots.length, createSlot, queryClient, slotsQuery, showToast]);
 
   const handleOpenEdit = useCallback(
     (slot: SpaceRoundSlotWithUser) => {
@@ -185,39 +189,37 @@ function RoundEditSheet({
       slotsQuery.refetch();
       setEditingSlotId(null);
     } catch {
-      Alert.alert("오류", "슬롯 저장에 실패했어요.");
+      showToast({ message: "슬롯 저장에 실패했어요.", type: "error" });
     } finally {
       setSavingSlot(false);
     }
-  }, [editingSlotId, editSlotMember, editSlotDate, round, updateSlot, queryClient, slotsQuery]);
+  }, [editingSlotId, editSlotMember, editSlotDate, round, updateSlot, queryClient, slotsQuery, showToast]);
 
-  const handleDeleteSlot = useCallback(
-    (slotId: string) => {
-      Alert.alert("슬롯 삭제", "이 슬롯을 삭제하시겠어요?", [
-        { text: "취소", style: "cancel" },
-        {
-          text: "삭제",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteSlot.mutateAsync({
-                id: round.spaceId,
-                roundId: round.id,
-                slotId,
-              });
-              queryClient.invalidateQueries({
-                queryKey: getListSpaceRoundSlotsQueryKey(round.spaceId, round.id),
-              });
-              slotsQuery.refetch();
-            } catch {
-              Alert.alert("오류", "슬롯 삭제에 실패했어요.");
-            }
-          },
-        },
-      ]);
-    },
-    [round, deleteSlot, queryClient, slotsQuery],
-  );
+  const handleDeleteSlot = useCallback((slotId: string) => {
+    setSlotPendingDeleteId(slotId);
+  }, []);
+
+  const confirmDeleteSlot = useCallback(async () => {
+    if (!slotPendingDeleteId) return;
+    setDeletingSlot(true);
+    try {
+      await deleteSlot.mutateAsync({
+        id: round.spaceId,
+        roundId: round.id,
+        slotId: slotPendingDeleteId,
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListSpaceRoundSlotsQueryKey(round.spaceId, round.id),
+      });
+      slotsQuery.refetch();
+      setSlotPendingDeleteId(null);
+    } catch {
+      setSlotPendingDeleteId(null);
+      showToast({ message: "슬롯 삭제에 실패했어요.", type: "error" });
+    } finally {
+      setDeletingSlot(false);
+    }
+  }, [round, deleteSlot, queryClient, slotsQuery, slotPendingDeleteId, showToast]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -234,11 +236,11 @@ function RoundEditSheet({
       onSaved();
       onClose();
     } catch {
-      Alert.alert("오류", "저장에 실패했어요. 다시 시도해주세요.");
+      showToast({ message: "저장에 실패했어요. 다시 시도해주세요.", type: "error" });
     } finally {
       setSaving(false);
     }
-  }, [round, title, description, status, updateRound, onSaved, onClose]);
+  }, [round, title, description, status, updateRound, onSaved, onClose, showToast]);
 
   return (
     <View style={editStyles.overlay}>
@@ -576,6 +578,18 @@ function RoundEditSheet({
           </ScalePressable>
         </ScrollView>
       </View>
+
+      <ConfirmModal
+        visible={slotPendingDeleteId !== null}
+        title="슬롯 삭제"
+        description="이 슬롯을 삭제하시겠어요?"
+        onCancel={() => setSlotPendingDeleteId(null)}
+        onConfirm={confirmDeleteSlot}
+        confirmLabel="삭제"
+        destructive
+        confirmDisabled={deletingSlot}
+        cancelDisabled={deletingSlot}
+      />
     </View>
   );
 }

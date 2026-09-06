@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -11,6 +10,8 @@ import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import { useToast } from "@/contexts/ToastContext";
 import {
   useUpdateSpace,
   getListSpacesQueryKey,
@@ -25,43 +26,38 @@ export default function SpaceArchiveScreen() {
   const { id, spaceName } = useLocalSearchParams<{ id: string; spaceName?: string }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [archiving, setArchiving] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   const updateSpace = useUpdateSpace();
 
-  const handleArchive = useCallback(async () => {
-    Alert.alert(
-      "공간 보관",
-      `'${spaceName ?? "이 공간"}'을 보관 상태로 전환하시겠어요?\n보관 후에는 새 편지나 참여자를 추가할 수 없어요.`,
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "보관하기",
-          style: "destructive",
-          onPress: async () => {
-            setArchiving(true);
-            try {
-              await updateSpace.mutateAsync({
-                id,
-                data: { status: "ARCHIVED" },
-              });
-              await Promise.all([
-                queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey({ userId }) }),
-                queryClient.invalidateQueries({
-                  queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId),
-                }),
-              ]);
-              router.back();
-            } catch {
-              Alert.alert("오류", "보관 처리에 실패했어요. 다시 시도해주세요.");
-            } finally {
-              setArchiving(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [id, spaceName, userId, updateSpace, queryClient, router]);
+  const handleArchive = useCallback(() => {
+    setShowArchiveConfirm(true);
+  }, []);
+
+  const confirmArchive = useCallback(async () => {
+    setArchiving(true);
+    try {
+      await updateSpace.mutateAsync({
+        id,
+        data: { status: "ARCHIVED" },
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListSpacesQueryKey({ userId }) }),
+        queryClient.invalidateQueries({
+          queryKey: getUserScopedSpaceJoinContextQueryKey(id, userId),
+        }),
+      ]);
+      setShowArchiveConfirm(false);
+      router.back();
+    } catch {
+      setShowArchiveConfirm(false);
+      showToast({ message: "보관 처리에 실패했어요. 다시 시도해주세요.", type: "error" });
+    } finally {
+      setArchiving(false);
+    }
+  }, [id, userId, updateSpace, queryClient, router, showToast]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -123,6 +119,18 @@ export default function SpaceArchiveScreen() {
           </ScalePressable>
         </View>
       </View>
+
+      <ConfirmModal
+        visible={showArchiveConfirm}
+        title="공간 보관"
+        description={`'${spaceName ?? "이 공간"}'을 보관 상태로 전환하시겠어요?\n보관 후에는 새 편지나 참여자를 추가할 수 없어요.`}
+        onCancel={() => setShowArchiveConfirm(false)}
+        onConfirm={confirmArchive}
+        confirmLabel="보관하기"
+        destructive
+        confirmDisabled={archiving}
+        cancelDisabled={archiving}
+      />
     </View>
   );
 }

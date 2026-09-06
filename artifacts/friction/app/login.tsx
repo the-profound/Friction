@@ -4,7 +4,6 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import {
   getSignupFailureAlertContent,
   getSignupFailureInlineMessage,
@@ -106,6 +106,10 @@ export default function LoginScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [signupDone, setSignupDone] = useState(false);
   const [signupFailurePopup, setSignupFailurePopup] = useState<SignupFailure | null>(null);
+  const [failureAlertContent, setFailureAlertContent] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const lastShownSignupDiagnosticIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -116,8 +120,7 @@ export default function LoginScreen() {
     }
 
     lastShownSignupDiagnosticIdRef.current = signupFailurePopup.diagnosticId;
-    const alertContent = getSignupFailureAlertContent(signupFailurePopup);
-    Alert.alert(alertContent.title, alertContent.message, [{ text: "확인" }]);
+    setFailureAlertContent(getSignupFailureAlertContent(signupFailurePopup));
     setSignupFailurePopup(null);
   }, [isLoading, signupFailurePopup]);
 
@@ -134,6 +137,7 @@ export default function LoginScreen() {
     setShowPasswordConfirm(false);
     setSignupDone(false);
     setSignupFailurePopup(null);
+    setFailureAlertContent(null);
   }
 
   async function handleLogin() {
@@ -606,6 +610,14 @@ export default function LoginScreen() {
           </View>
         )}
       </ScrollView>
+
+      <ConfirmModal
+        visible={!!failureAlertContent}
+        title={failureAlertContent?.title ?? ""}
+        description={failureAlertContent?.message}
+        cancelLabel="확인"
+        onCancel={() => setFailureAlertContent(null)}
+      />
     </KeyboardAvoidingView>
   );
 }

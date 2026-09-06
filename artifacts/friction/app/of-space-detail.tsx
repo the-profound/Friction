@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   TextInput,
   ActivityIndicator,
   RefreshControl,
@@ -26,6 +25,7 @@ import { normalizeSpaceRouteId } from "@/lib/spaceBasicSettingsAccess";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
@@ -889,10 +889,12 @@ function DescriptionSection({
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [measuredLines, setMeasuredLines] = useState<number | null>(null);
   const hasMore = measuredLines !== null && measuredLines > 3;
   const updateSpace = useUpdateSpace();
+  const { showToast } = useToast();
 
   const handleStart = useCallback(() => {
     setDraft(space.description ?? "");
@@ -900,32 +902,26 @@ function DescriptionSection({
   }, [space.description]);
 
   const handleSave = useCallback(() => {
-    Alert.alert(
-      "설명 변경",
-      "저장하면 현재 참여자 모두에게 변경된 설명이 바로 보입니다.",
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "저장",
-          onPress: async () => {
-            setSaving(true);
-            try {
-              await updateSpace.mutateAsync({
-                id: space.id,
-                data: { description: draft.trim() || null },
-              });
-              setIsEditing(false);
-              onSaved();
-            } catch {
-              Alert.alert("오류", "저장에 실패했어요. 다시 시도해주세요.");
-            } finally {
-              setSaving(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [space.id, draft, updateSpace, onSaved]);
+    setShowSaveConfirm(true);
+  }, []);
+
+  const confirmSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      await updateSpace.mutateAsync({
+        id: space.id,
+        data: { description: draft.trim() || null },
+      });
+      setShowSaveConfirm(false);
+      setIsEditing(false);
+      onSaved();
+    } catch {
+      setShowSaveConfirm(false);
+      showToast({ message: "저장에 실패했어요. 다시 시도해주세요.", type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }, [space.id, draft, updateSpace, onSaved, showToast]);
 
   if (isEditing) {
     return (
@@ -959,6 +955,17 @@ function DescriptionSection({
             </Text>
           </ScalePressable>
         </View>
+
+        <ConfirmModal
+          visible={showSaveConfirm}
+          title="설명 변경"
+          description="저장하면 현재 참여자 모두에게 변경된 설명이 바로 보입니다."
+          onCancel={() => setShowSaveConfirm(false)}
+          onConfirm={confirmSave}
+          confirmLabel="저장"
+          confirmDisabled={saving}
+          cancelDisabled={saving}
+        />
       </View>
     );
   }
@@ -1100,13 +1107,10 @@ export default function SpaceDetailScreen() {
     spaceScrollRef.current?.scrollTo({ y: offset, animated: false });
   }, []);
 
+  const [showInviteGuideModal, setShowInviteGuideModal] = useState(false);
   useEffect(() => {
     if (showInviteGuide === "1") {
-      Alert.alert(
-        "공간이 만들어졌어요 🎉",
-        "초대 문구로 초대하거나 아이디로 직접 초대할 수 있어요.",
-        [{ text: "확인" }],
-      );
+      setShowInviteGuideModal(true);
     }
   }, [showInviteGuide]);
 
@@ -1771,6 +1775,14 @@ export default function SpaceDetailScreen() {
 
       {/* ── Card select overlay (shared 편지 선택 모드) ── */}
       {renderLetterOverlay()}
+
+      <ConfirmModal
+        visible={showInviteGuideModal}
+        title="공간이 만들어졌어요 🎉"
+        description="초대 문구로 초대하거나 아이디로 직접 초대할 수 있어요."
+        cancelLabel="확인"
+        onCancel={() => setShowInviteGuideModal(false)}
+      />
     </View>
   );
 }
