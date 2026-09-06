@@ -1,10 +1,14 @@
 import React from "react";
 import {
   StyleSheet,
-  Animated,
   Platform,
   type ViewStyle,
 } from "react-native";
+import RAnimated, {
+  useAnimatedStyle,
+  interpolate,
+  type SharedValue,
+} from "react-native-reanimated";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { Colors, Shadows, Sizing } from "../../constants/tokens";
@@ -42,66 +46,30 @@ interface ArticleCardItemProps {
   /** Removes the card surface shadow entirely, e.g. for compact previews stacked inside another shadowed container. */
   noShadow?: boolean;
   /**
-   * Selection overlays use the same hero progress to blend a carousel card's
-   * raised surface into the selected-card treatment and back on close.
+   * Selection overlays use the same hero progress (Reanimated shared value,
+   * UI thread) to blend a carousel card's raised surface into the
+   * selected-card treatment and back on close.
    */
-  shadowProgress?: Animated.Value | Animated.AnimatedInterpolation<number>;
+  shadowProgress?: SharedValue<number>;
   /** Called after the image, or its explicit fallback, is visibly rendered. */
   onImageReady?: () => void;
 }
 
 const DEFAULT_BG = Colors.zinc50;
 
-function getCardSurfaceShadowStyle(
+/**
+ * Static base shadow style for the two non-interpolated cases. When
+ * `shadowProgress` is provided, the per-frame interpolated values are layered
+ * on top via `useAnimatedCardSurfaceShadowStyle` below (UI thread).
+ */
+function getStaticCardSurfaceShadowStyle(
   carouselShadow: boolean,
-  shadowProgress?: Animated.Value | Animated.AnimatedInterpolation<number>,
-): ViewStyle {
+  hasShadowProgress: boolean,
+): ViewStyle | undefined {
   if (!carouselShadow) return styles.standardCardSurface;
-  if (!shadowProgress) return styles.carouselCardSurface;
-
-  const interpolateNumber = (outputRange: number[]) =>
-    shadowProgress.interpolate({
-      inputRange: [0, 1],
-      outputRange,
-    });
-  const interpolateString = (outputRange: string[]) =>
-    shadowProgress.interpolate({
-      inputRange: [0, 1],
-      outputRange,
-    });
-
-  // The card surface itself owns the interpolation. Avoid an opaque shadow
-  // sibling: it can show up as a same-sized white card while the cover moves.
-  if (Platform.OS === "ios") {
-    return {
-      shadowColor: "#000",
-      shadowOffset: {
-        width: 0,
-        height: interpolateNumber([2, 4]) as unknown as number,
-      },
-      shadowOpacity: interpolateNumber([0.1, 0.12]) as unknown as number,
-      shadowRadius: interpolateNumber([6, 12]) as unknown as number,
-    };
-  }
-
-  if (Platform.OS === "android") {
-    return {
-      elevation: interpolateNumber([3, 5]) as unknown as number,
-    };
-  }
-
-  if (Platform.OS === "web") {
-    return {
-      boxShadow: interpolateString([
-        "0px 2px 8px rgba(0,0,0,0.10)",
-        "0px 4px 14px rgba(0,0,0,0.12)",
-      ]) as unknown as string,
-    } as ViewStyle;
-  }
-
-  return styles.standardCardSurface;
+  if (!hasShadowProgress) return styles.carouselCardSurface;
+  return undefined;
 }
-
 function ArticleCardItem({
   title,
   authorName,
@@ -127,6 +95,14 @@ function ArticleCardItem({
   const h = w * Sizing.cardRatio;
   const scale = w / CARD_W;
   const borderRadius = cardRadius ?? Math.max(8, Math.round(16 * scale));
+  const staticShadowStyle = getStaticCardSurfaceShadowStyle(
+    carouselShadow,
+    !!shadowProgress,
+  );
+  const animatedShadowStyle = useAnimatedCardSurfaceShadowStyle(
+    carouselShadow,
+    shadowProgress,
+  );
 
   return (
     <ScalePressable
@@ -140,10 +116,11 @@ function ArticleCardItem({
       onLongPress={onLongPress}
       disabled={disabled}
     >
-      <Animated.View
+      <RAnimated.View
         style={[
           styles.cardSurface,
-          !noShadow && getCardSurfaceShadowStyle(carouselShadow, shadowProgress),
+          !noShadow && staticShadowStyle,
+          !noShadow && animatedShadowStyle,
           { width: w, height: h, borderRadius },
         ]}
       >
@@ -161,7 +138,7 @@ function ArticleCardItem({
           borderRadius={borderRadius}
           onImageLoad={onImageReady}
         />
-      </Animated.View>
+      </RAnimated.View>
     </ScalePressable>
   );
 }
@@ -195,3 +172,47 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
 });
+
+/**
+ * The card surface itself owns the interpolation. Avoid an opaque shadow
+ * sibling: it can show up as a same-sized white card while the cover moves.
+ * Runs entirely on the UI thread via Reanimated so the carousel-shadow
+ * cross-fade never drops frames during the hero open/close transition.
+ */
+function useAnimatedCardSurfaceShadowStyle(
+  carouselShadow: boolean,
+  shadowProgress?: SharedValue<number>,
+) {
+  return useAnimatedStyle(() => {
+    if (!carouselShadow || !shadowProgress) return {};
+
+    if (Platform.OS === "ios") {
+      return {
+        shadowColor: "#000",
+        shadowOffset: {
+          width: 0,
+          height: interpolate(shadowProgress.value, [0, 1], [2, 4]),
+        },
+        shadowOpacity: interpolate(shadowProgress.value, [0, 1], [0.1, 0.12]),
+        shadowRadius: interpolate(shadowProgress.value, [0, 1], [6, 12]),
+      };
+    }
+
+    if (Platform.OS === "android") {
+      return {
+        elevation: interpolate(shadowProgress.value, [0, 1], [3, 5]),
+      };
+    }
+
+    if (Platform.OS === "web") {
+      const offsetY = interpolate(shadowProgress.value, [0, 1], [2, 4]);
+      const blur = interpolate(shadowProgress.value, [0, 1], [8, 14]);
+      const alpha = interpolate(shadowProgress.value, [0, 1], [0.1, 0.12]);
+      return {
+        boxShadow: `0px ${offsetY}px ${blur}px rgba(0,0,0,${alpha})`,
+      } as ViewStyle;
+    }
+
+    return {};
+  });
+}

@@ -46,7 +46,7 @@ describe("selection-mode read entry", () => {
     expect(articleCard).toContain("...Shadows.card");
     expect(articleCard).toContain("...Shadows.carouselCard");
     expect(articleCard).toContain("shadowProgress?:");
-    expect(articleCard).toContain("shadowProgress.interpolate");
+    expect(articleCard).toContain("interpolate(shadowProgress.value");
     expect(articleCard).not.toContain("StyleSheet.absoluteFill");
     expect(overlay).toContain("shadowProgress={");
     expect(overlay).toContain("? progress");

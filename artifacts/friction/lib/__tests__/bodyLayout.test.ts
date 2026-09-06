@@ -981,10 +981,10 @@ describe("selectable article card projection contract", () => {
     expect(overlay).toContain("const TRANSITION_EASING = Easing.out(Easing.poly(4));");
     expect(overlay).toContain("const getOpenDuration = (distance: number)");
     expect(overlay).toContain("const getCloseDuration = (distance: number)");
-    expect(overlay).toContain("Animated.timing(progress, {");
+    expect(overlay).toContain("progress.value = withTiming(1, {");
     expect(overlay).toContain("duration: getOpenDuration(");
     expect(overlay).toContain("easing: TRANSITION_EASING");
-    expect(closeBlock).toContain("progress.stopAnimation((currentProgress) =>");
+    expect(closeBlock).toContain("cancelAnimation(progress);");
     expect(closeBlock).toContain("swipeY.stopAnimation((currentSwipeY) =>");
     expect(closeBlock).toContain("carouselX.stopAnimation((currentCarouselX) =>");
     expect(closeBlock).toContain("calculateCardReturnDistance({");

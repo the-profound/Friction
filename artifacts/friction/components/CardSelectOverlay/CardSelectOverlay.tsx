@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,10 @@ import RAnimated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
+  cancelAnimation,
+  interpolate,
   Easing as REasing,
+  type SharedValue,
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -57,6 +60,8 @@ const CLOSE_MIN_DURATION = 150;
 const CLOSE_MAX_DURATION = 320;
 const CLOSE_DURATION_PER_PIXEL = 0.25;
 const TRANSITION_EASING = Easing.out(Easing.poly(4));
+
+const REANIMATED_TRANSITION_EASING = REasing.out(REasing.poly(4));
 const DISMISS_FADE_DURATION = 100;
 const DISMISS_RESISTANCE_DISTANCE = 180;
 
@@ -120,6 +125,33 @@ function formatDate(visibleAt: string | Date): string {
   return `${month}월 ${day}일`;
 }
 
+/**
+ * One carousel slot's opacity, driven by the Reanimated `progress` shared
+ * value (UI thread). Extracted to its own component because `useAnimatedStyle`
+ * is a hook and each mapped slot needs its own stable call site.
+ * Equivalent to the old `i === initialIndex ? 1 : progressDetailsOpacity`.
+ */
+function CarouselSlotFrame({
+  progress,
+  isInitial,
+  style,
+  children,
+}: {
+  progress: SharedValue<number>;
+  isInitial: boolean;
+  style: unknown;
+  children: React.ReactNode;
+}) {
+  const animatedStyle = useAnimatedStyle(
+    () => ({
+      opacity: isInitial ? 1 : interpolate(progress.value, [0, 0.55, 1], [0, 0, 1]),
+    }),
+    [isInitial],
+  );
+  return (
+    <RAnimated.View style={[style as never, animatedStyle]}>{children}</RAnimated.View>
+  );
+}
 interface CardSelectOverlayProps {
   articles: (Article | null)[];
   metas: ChainArticleMeta[];
@@ -281,7 +313,11 @@ export default function CardSelectOverlay({
   const detailsTop = cardTopVisual + scaledH + 14;
 
   // ── Animated values ───────────────────────────────────────────────────────
-  const progress = useRef(new Animated.Value(0)).current;
+  // The hero grow/shrink progress runs on the UI thread via Reanimated so the
+  // open/close transition never drops frames waiting on the JS thread. The
+  // swipe-to-dismiss / carousel drag / details fade values stay on the legacy
+  // Animated API (PanResponder-driven; converted in a follow-up task).
+  const progress = useSharedValue(0);
   const swipeY = useRef(new Animated.Value(0)).current;
   const carouselX = useRef(new Animated.Value(0)).current;
   const detailsFade = useRef(new Animated.Value(1)).current;
@@ -373,37 +409,29 @@ export default function CardSelectOverlay({
 
   countRef.current = displayArticles.length;
 
-  // ── Derived animated styles ───────────────────────────────────────────────
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [originScale, finalScale],
-  });
-  const cardTranslateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [startTx, 0],
-  });
-  const cardTranslateY = Animated.add(
-    progress.interpolate({ inputRange: [0, 1], outputRange: [startTy, 0] }),
-    swipeY,
-  );
-  const backdropOpacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const progressDetailsOpacity = useMemo(
-    () =>
-      progress.interpolate({
-        inputRange: [0, 0.55, 1],
-        outputRange: [0, 0, 1],
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-  const finalDetailsOpacity = useMemo(
-    () => Animated.multiply(progressDetailsOpacity, detailsFade),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  // ── Derived animated styles (UI thread, driven by `progress`) ─────────────
+  // The hero card's own translate/scale. Nested inside the PanResponder-owned
+  // outer `cardContainer` (which carries only the `swipeY` dismiss offset),
+  // so the rendered transform is identical to the old single combined
+  // [translateX, translateY(progress+swipeY), scale] array: translation
+  // amounts add regardless of which node applies them, and neither node
+  // scales the other's contribution.
+  const cardHeroAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: interpolate(progress.value, [0, 1], [startTx, 0]) },
+      { translateY: interpolate(progress.value, [0, 1], [startTy, 0]) },
+      { scale: interpolate(progress.value, [0, 1], [originScale, finalScale]) },
+    ],
+  }));
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+  }));
+  // Multiplies with the legacy `detailsFade` value (still PanResponder-owned)
+  // via nested-view opacity composition rather than Animated.multiply, since
+  // that API cannot combine a Reanimated shared value with a legacy one.
+  const progressDetailsAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.55, 1], [0, 0, 1]),
+  }));
   // ── Open / close lifecycle ────────────────────────────────────────────────
 
   const startOpenSpringWhenReady = useCallback(() => {
@@ -432,15 +460,13 @@ export default function CardSelectOverlay({
       ) {
         return;
       }
-      Animated.timing(progress, {
-        toValue: 1,
+      progress.value = withTiming(1, {
         duration: getOpenDuration(
           Math.hypot(startTx, startTy) +
             Math.abs(finalScale - originScale) * CARD_W,
         ),
-        easing: TRANSITION_EASING,
-        useNativeDriver: false,
-      }).start();
+        easing: REANIMATED_TRANSITION_EASING,
+      });
     });
   }, [progress]);
 
@@ -527,7 +553,7 @@ export default function CardSelectOverlay({
       setRendered(true);
       closingRef.current = false;
       swipeY.setValue(0);
-      progress.setValue(0);
+      progress.value = 0;
       resetEnvelopeAnim();
     } else {
       openedRef.current = false;
@@ -590,43 +616,55 @@ export default function CardSelectOverlay({
     // Snapshot all transform values before calculating one shared duration.
     // This keeps the return path straight while allowing a farther source slot
     // to take longer than one that is already nearby.
-    progress.stopAnimation((currentProgress) => {
-      swipeY.stopAnimation((currentSwipeY) => {
-        carouselX.stopAnimation((currentCarouselX) => {
-          const closeDuration = getCloseDuration(calculateCardReturnDistance({
-            startTx,
-            startTy,
-            originScale,
-            finalScale,
-            cardWidth: CARD_W,
-            progress: currentProgress,
-            swipeY: currentSwipeY,
-            carouselX: currentCarouselX,
-            carouselTargetX: -initIdx * SLOT_W,
-          }));
-          const closeTiming = (value: Animated.Value, toValue: number) =>
-            Animated.timing(value, {
-              toValue,
-              duration: closeDuration,
-              easing: TRANSITION_EASING,
-              useNativeDriver: false,
-            });
+    // `progress` is a Reanimated shared value: cancel its in-flight animation
+    // (if any) and read `.value` synchronously instead of the legacy
+    // stopAnimation callback pattern still used for swipeY/carouselX below.
+    cancelAnimation(progress);
+    const currentProgress = progress.value;
 
-          // Fallback: if the animation callback never fires (race condition or
-          // JS scheduler jitter), guarantee cleanup within ~420 ms.
-          fallbackTimer = setTimeout(finishClose, CLOSE_MAX_DURATION + 100);
-
-          // Always include the track, even when the active index already equals
-          // the initial index: it can sit between snap points after a drag.
-          Animated.parallel([
-            closeTiming(carouselX, -initIdx * SLOT_W),
-            closeTiming(progress, 0),
-            closeTiming(swipeY, 0),
-          ]).start(() => {
-            activeIndexRef.current = initIdx;
-            finishClose();
+    swipeY.stopAnimation((currentSwipeY) => {
+      carouselX.stopAnimation((currentCarouselX) => {
+        const closeDuration = getCloseDuration(calculateCardReturnDistance({
+          startTx,
+          startTy,
+          originScale,
+          finalScale,
+          cardWidth: CARD_W,
+          progress: currentProgress,
+          swipeY: currentSwipeY,
+          carouselX: currentCarouselX,
+          carouselTargetX: -initIdx * SLOT_W,
+        }));
+        const closeTiming = (value: Animated.Value, toValue: number) =>
+          Animated.timing(value, {
+            toValue,
+            duration: closeDuration,
+            easing: TRANSITION_EASING,
+            useNativeDriver: false,
           });
+
+        // Fallback: if the animation callback never fires (race condition or
+        // JS scheduler jitter), guarantee cleanup within ~420 ms.
+        fallbackTimer = setTimeout(finishClose, CLOSE_MAX_DURATION + 100);
+
+        // Always include the track, even when the active index already equals
+        // the initial index: it can sit between snap points after a drag.
+        Animated.parallel([
+          closeTiming(carouselX, -initIdx * SLOT_W),
+          closeTiming(swipeY, 0),
+        ]).start(() => {
+          activeIndexRef.current = initIdx;
+          finishClose();
         });
+
+        // Same duration/curve as the legacy pair above, run on the UI thread.
+        progress.value = withTiming(
+          0,
+          { duration: closeDuration, easing: REANIMATED_TRANSITION_EASING },
+          (finished) => {
+            if (finished) runOnJS(finishClose)();
+          },
+        );
       });
     });
   };
@@ -1136,12 +1174,12 @@ export default function CardSelectOverlay({
       {/* Dark backdrop — touch disabled the moment closing begins so the
           underlying screen is immediately interactive even if finishClose is
           delayed by a JS scheduler race. */}
-      <Animated.View
+      <RAnimated.View
         pointerEvents={isClosing ? "none" : "auto"}
-        style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}
+        style={[StyleSheet.absoluteFill, styles.backdrop, backdropAnimatedStyle]}
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
-      </Animated.View>
+      </RAnimated.View>
 
       <Animated.View
         style={[
@@ -1149,17 +1187,17 @@ export default function CardSelectOverlay({
           {
             left: cardBoxLeft,
             top: boxTop,
-            transform: [{ translateX: cardTranslateX }, { translateY: cardTranslateY }, { scale }],
+            transform: [{ translateY: swipeY }],
           },
         ]}
         onLayout={handleOriginCardLayout}
         {...cardPanResponder.panHandlers}
       >
+        <RAnimated.View style={[styles.cardContainerInner, cardHeroAnimatedStyle]}>
         {displayArticles.length > 1 ? (
           <Animated.View style={[styles.carouselTrack, { width: trackW, transform: [{ translateX: carouselX }] }]}>
             {displayArticles.map((art, i) => {
               const meta = displayMetas[i] ?? {};
-              const slotOpacity = i === initialIndex ? 1 : progressDetailsOpacity;
               const imageUrl = getCoverImageUrl(art);
               const visualGate = visualGateRef.current;
               const isCurrentVisualSlot =
@@ -1167,9 +1205,11 @@ export default function CardSelectOverlay({
                 imageUrl !== null &&
                 visualGate.imageUrl === imageUrl;
               return (
-                <Animated.View
+                <CarouselSlotFrame
                   key={art?.id ?? `loading-${i}`}
-                  style={[styles.carouselSlot, i < displayArticles.length - 1 && { marginRight: OVERLAY_GAP }, { opacity: slotOpacity }]}
+                  progress={progress}
+                  isInitial={i === initialIndex}
+                  style={[styles.carouselSlot, i < displayArticles.length - 1 && { marginRight: OVERLAY_GAP }]}
                 >
                   {art == null ? (
                     <SkeletonCard />
@@ -1211,7 +1251,7 @@ export default function CardSelectOverlay({
                       {renderEnvelopeLayer(i)}
                     </>
                   )}
-                </Animated.View>
+                </CarouselSlotFrame>
               );
             })}
           </Animated.View>
@@ -1260,12 +1300,19 @@ export default function CardSelectOverlay({
             {renderEnvelopeLayer(0)}
           </>
         )}
+        </RAnimated.View>
       </Animated.View>
 
-      {/* Details (info bar) — hidden while envelope is sealed */}
-      <Animated.View
-        style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft, opacity: isEnvelopeSealed ? 0 : finalDetailsOpacity }]}
+      {/* Details (info bar) — hidden while envelope is sealed. Outer node
+          carries the progress-driven fade (Reanimated, UI thread); inner node
+          carries the legacy detailsFade (PanResponder-owned). Nested opacity
+          composes multiplicatively, matching the old Animated.multiply. */}
+      <RAnimated.View
+        style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft }, progressDetailsAnimatedStyle]}
         pointerEvents={rendered && !isEnvelopeSealed ? "auto" : "none"}
+      >
+      <Animated.View
+        style={{ opacity: isEnvelopeSealed ? 0 : detailsFade }}
         {...detailsPanResponder.panHandlers}
       >
         {dateLabel ? (
@@ -1333,12 +1380,16 @@ export default function CardSelectOverlay({
           </View>
         ) : null}
       </Animated.View>
+      </RAnimated.View>
 
-      {/* CTA button — "개봉하기" when sealed, "읽기" when revealed */}
-      <Animated.View
-        style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: infoBoxLeft, right: infoBoxLeft, opacity: finalDetailsOpacity }]}
+      {/* CTA button — "개봉하기" when sealed, "읽기" when revealed. Same
+          progress/detailsFade nested-opacity composition as the details bar
+          above. */}
+      <RAnimated.View
+        style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: infoBoxLeft, right: infoBoxLeft }, progressDetailsAnimatedStyle]}
         pointerEvents={rendered ? "auto" : "none"}
       >
+      <Animated.View style={{ opacity: detailsFade }}>
         {isEnvelopeSealed ? (
           <Animated.View style={{ opacity: ctaButtonOpacity }}>
             <ScalePressable
@@ -1375,6 +1426,7 @@ export default function CardSelectOverlay({
           </ScalePressable>
         )}
       </Animated.View>
+      </RAnimated.View>
 
       {/* Inline modal: confirm / info dialogs passed by the caller.
           Rendered inside the native Modal window so they always appear above
@@ -1398,6 +1450,14 @@ const styles = StyleSheet.create({
     width: CARD_W,
     height: CARD_H,
     overflow: "visible",
+  },
+  // Inner node that carries the Reanimated hero translate/scale; the outer
+  // `cardContainer` keeps the legacy swipeY dismiss offset (see
+  // cardHeroAnimatedStyle for why splitting the transform this way is
+  // pixel-identical to the old single combined transform array).
+  cardContainerInner: {
+    width: CARD_W,
+    height: CARD_H,
   },
   readFadeOverlay: { backgroundColor: "black" },
   carouselTrack: { flexDirection: "row", height: CARD_H },
