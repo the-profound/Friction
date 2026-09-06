@@ -4,11 +4,9 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   TextInput,
   ActivityIndicator,
   RefreshControl,
-  Platform,
   Modal,
   Pressable,
 } from "react-native";
@@ -19,6 +17,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import { useToast } from "@/contexts/ToastContext";
 import { useUser } from "@/contexts/UserContext";
 import { getUserScopedSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import { SpaceCopy } from "@/constants/spaceCopy";
@@ -109,7 +109,7 @@ function getRequestActionErrorMessage(error: unknown, fallback: string): string 
   return typeof responseError === "string" ? responseError : fallback;
 }
 
-// ─── Android Rejection Reason Modal ──────────────────────────────────────────
+// ─── Rejection Reason Modal (shared across all platforms) ───────────────────
 
 function RejectReasonModal({
   visible,
@@ -121,20 +121,23 @@ function RejectReasonModal({
   onConfirm: (reason: string) => void;
 }) {
   const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   const handleConfirm = () => {
     const trimmed = reason.trim();
     if (!trimmed) {
-      Alert.alert("알림", "거절 사유를 입력해주세요.");
+      setError("거절 사유를 입력해주세요.");
       return;
     }
     onConfirm(trimmed);
     setReason("");
+    setError(null);
   };
 
   const handleCancel = () => {
     setReason("");
+    setError(null);
     onCancel();
   };
 
@@ -149,7 +152,10 @@ function RejectReasonModal({
           <TextInput
             style={modalStyles.input}
             value={reason}
-            onChangeText={setReason}
+            onChangeText={(text) => {
+              setReason(text);
+              if (error) setError(null);
+            }}
             placeholder="거절 사유를 입력하세요"
             placeholderTextColor={Colors.zinc400}
             cursorColor={Colors.cursorAccent}
@@ -157,6 +163,7 @@ function RejectReasonModal({
             autoFocus
             maxLength={200}
           />
+          {error ? <Text style={modalStyles.errorText}>{error}</Text> : null}
           <View style={modalStyles.btnRow}>
             <ScalePressable style={modalStyles.btnOuter} contentStyle={[modalStyles.btn, modalStyles.cancelBtn]} onPress={handleCancel}>
               <Text style={modalStyles.cancelBtnText}>취소</Text>
@@ -253,10 +260,12 @@ export default function SpaceParticipantsScreen() {
   const { id, spaceName } = useLocalSearchParams<{ id: string; spaceName?: string }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<SpaceMember | null>(null);
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
@@ -321,40 +330,28 @@ export default function SpaceParticipantsScreen() {
     ]);
   }, [joinContextQuery, membersQuery, codeRequestsQuery]);
 
-  const handleRemoveMember = useCallback(
-    (member: SpaceMember) => {
-      const label = isAnonymous
-        ? (member.accountNickname ?? "이 참여자")
-        : (member.nickname ?? "이 참여자");
-      Alert.alert(
-        "참여자 내보내기",
-        `${label}님을 공간에서 내보낼까요? 내보낸 참여자는 더 이상 이 공간에 접근할 수 없어요.`,
-        [
-          { text: "취소", style: "cancel" },
-          {
-            text: "내보내기",
-            style: "destructive",
-            onPress: async () => {
-              setRemovingMemberId(member.id);
-              try {
-                await updateParticipation.mutateAsync({
-                  id,
-                  participationId: member.id,
-                  data: { status: "WITHDRAWN" },
-                });
-                await Promise.all([membersQuery.refetch(), joinContextQuery.refetch()]);
-              } catch {
-                Alert.alert("오류", "내보내기에 실패했어요. 다시 시도해주세요.");
-              } finally {
-                setRemovingMemberId(null);
-              }
-            },
-          },
-        ],
-      );
-    },
-    [isAnonymous, updateParticipation, id, membersQuery, joinContextQuery],
-  );
+  const handleRemoveMember = useCallback((member: SpaceMember) => {
+    setRemoveTarget(member);
+  }, []);
+
+  const handleRemoveMemberConfirm = useCallback(async () => {
+    const member = removeTarget;
+    if (!member) return;
+    setRemoveTarget(null);
+    setRemovingMemberId(member.id);
+    try {
+      await updateParticipation.mutateAsync({
+        id,
+        participationId: member.id,
+        data: { status: "WITHDRAWN" },
+      });
+      await Promise.all([membersQuery.refetch(), joinContextQuery.refetch()]);
+    } catch {
+      showToast({ message: "내보내기에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
+    } finally {
+      setRemovingMemberId(null);
+    }
+  }, [removeTarget, updateParticipation, id, membersQuery, joinContextQuery, showToast]);
 
   const handleApprove = useCallback(
     async (requestId: string) => {
@@ -375,10 +372,12 @@ export default function SpaceParticipantsScreen() {
           }),
         ]);
       } catch (error) {
-        Alert.alert(
-          "오류",
-          getRequestActionErrorMessage(error, "승인에 실패했어요. 다시 시도해주세요."),
-        );
+        showToast({
+          message: getRequestActionErrorMessage(error, "승인에 실패했어요. 다시 시도해주세요."),
+          type: "error",
+          duration: 5000,
+          position: "top",
+        });
       } finally {
         setProcessingRequestId(null);
       }
@@ -392,49 +391,16 @@ export default function SpaceParticipantsScreen() {
       joinContextQuery,
       queryClient,
       userId,
+      showToast,
     ],
   );
 
   const handleReject = useCallback(
     (requestId: string) => {
       if (processingRequestId) return;
-      if (Platform.OS === "ios") {
-        Alert.prompt(
-          "거절 사유",
-          "사유를 입력해주세요. 현재는 공간장에게만 기록됩니다.",
-          async (reason) => {
-            if (reason === undefined) return;
-            const trimmed = reason.trim();
-            if (!trimmed) {
-              Alert.alert("알림", "거절 사유를 입력해주세요.");
-              return;
-            }
-            setProcessingRequestId(requestId);
-            try {
-              await updateCodeRequest.mutateAsync({
-                id,
-                requestId,
-                data: { status: "REJECTED", rejectionReason: trimmed },
-              });
-              await Promise.all([
-                codeRequestsQuery.refetch(),
-                queryClient.invalidateQueries({
-                  queryKey: getUserScopedOperatorPendingSpaceCodeRequestsQueryKey(userId),
-                }),
-              ]);
-            } catch {
-              Alert.alert("오류", "거절에 실패했어요. 다시 시도해주세요.");
-            } finally {
-              setProcessingRequestId(null);
-            }
-          },
-          "plain-text",
-        );
-      } else {
-        setRejectTargetId(requestId);
-      }
+      setRejectTargetId(requestId);
     },
-    [processingRequestId, updateCodeRequest, id, codeRequestsQuery, queryClient, userId],
+    [processingRequestId],
   );
 
   const handleRejectConfirm = useCallback(
@@ -456,12 +422,12 @@ export default function SpaceParticipantsScreen() {
           }),
         ]);
       } catch {
-        Alert.alert("오류", "거절에 실패했어요. 다시 시도해주세요.");
+        showToast({ message: "거절에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
       } finally {
         setProcessingRequestId(null);
       }
     },
-    [rejectTargetId, updateCodeRequest, id, codeRequestsQuery, queryClient, userId],
+    [rejectTargetId, updateCodeRequest, id, codeRequestsQuery, queryClient, userId, showToast],
   );
 
   const headerTitle = spaceName ?? space?.name ?? "참여자 관리";
@@ -472,6 +438,22 @@ export default function SpaceParticipantsScreen() {
         visible={!!rejectTargetId}
         onCancel={() => setRejectTargetId(null)}
         onConfirm={handleRejectConfirm}
+      />
+
+      <ConfirmModal
+        visible={!!removeTarget}
+        title="참여자 내보내기"
+        description={`${
+          removeTarget
+            ? isAnonymous
+              ? (removeTarget.accountNickname ?? "이 참여자")
+              : (removeTarget.nickname ?? "이 참여자")
+            : "이 참여자"
+        }님을 공간에서 내보낼까요? 내보낸 참여자는 더 이상 이 공간에 접근할 수 없어요.`}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={handleRemoveMemberConfirm}
+        confirmLabel="내보내기"
+        destructive
       />
 
       <View style={styles.header}>
@@ -930,6 +912,12 @@ const modalStyles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: "top",
     backgroundColor: Colors.zinc50,
+  },
+  errorText: {
+    ...Typography.body,
+    fontSize: 12,
+    color: "#DC2626",
+    marginTop: -4,
   },
   btnRow: {
     flexDirection: "row",
