@@ -28,15 +28,16 @@ export interface DivisionValidation {
   pageCount: number;
 }
 
-export function splitContentToPages(markdownContent: string): PageBlock[] {
-  const lines = String(markdownContent ?? "")
-    .replace(/\r\n?/g, "\n")
-    .trim()
-    .split("\n");
+/**
+ * Split only on standalone divider lines. One newline on each side belongs to
+ * the divider syntax; any additional newlines remain attached to page content.
+ * Document outer whitespace is canonicalized by the existing boundary rule.
+ */
+export function splitPageContentsLosslessly(markdownContent: string): string[] {
+  const normalized = String(markdownContent ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!normalized) return [""];
 
-  // Remove only boundary dividers. Blank lines between repeated leading or
-  // trailing dividers are part of the boundary run; repeated dividers in the
-  // middle still represent an intentional empty page.
+  const lines = normalized.split("\n");
   while (lines.length > 0 && isPageDividerLine(lines[0])) {
     lines.shift();
     while (lines.length > 0 && lines[0].trim() === "") lines.shift();
@@ -46,14 +47,28 @@ export function splitContentToPages(markdownContent: string): PageBlock[] {
     while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
   }
 
-  const normalized = lines.join("\n").trim();
-  const rawPages = normalized.split(
-    new RegExp(`^[\\t ]*${PAGE_DIVIDER}[\\t ]*$`, "m"),
-  );
+  const body = lines.join("\n");
+  const pages: string[] = [];
+  const divider = new RegExp(`^[\\t ]*${PAGE_DIVIDER}[\\t ]*$`, "gm");
+  let pageStart = 0;
+  let match: RegExpExecArray | null;
+  while ((match = divider.exec(body)) !== null) {
+    let before = body.slice(pageStart, match.index);
+    if (before.endsWith("\n")) before = before.slice(0, -1);
+    pages.push(before);
+    pageStart = match.index + match[0].length;
+    if (body[pageStart] === "\n") pageStart += 1;
+  }
+  pages.push(body.slice(pageStart));
+  return pages;
+}
+
+export function splitContentToPages(markdownContent: string): PageBlock[] {
+  const rawPages = splitPageContentsLosslessly(markdownContent);
   return rawPages.map((content, i) => ({
     pageIndex: i,
-    content: content.trim(),
-    charCount: content.trim().length,
+    content,
+    charCount: content.length,
   }));
 }
 
@@ -215,28 +230,30 @@ export function splitAtSectionBoundaries(para: string): string[] {
   let current: string[] = [];
   for (const line of lines) {
     if (SECTION_BOUNDARY_RE.test(line) && current.some((l) => l.trim())) {
-      result.push(current.join("\n").trim());
+      result.push(current.join("\n"));
       current = [line];
     } else {
       current.push(line);
     }
   }
   if (current.some((l) => l.trim())) {
-    result.push(current.join("\n").trim());
+    result.push(current.join("\n"));
   }
   return result.filter((c) => c.trim());
 }
 
 /** content(페이지 구분자 포함) → 분할 엔진 입력용 단락 배열. */
 export function splitContentForDivision(content: string): string[] {
-  const plain = content.replace(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "gm"), "\n\n");
+  const plain = splitPageContentsLosslessly(content).join("\n\n");
   return splitPageContentForDivision(plain);
 }
 
 /** 단일 페이지 내용을 엔진 입력용 단락 배열로 분해한다. */
 export function splitPageContentForDivision(pageContent: string): string[] {
-  const rawParas = pageContent.split("\n\n").filter((p) => p.trim());
-  return rawParas.flatMap(splitAtSectionBoundaries);
+  const rawParas = pageContent.split("\n\n");
+  return rawParas.flatMap((paragraph) =>
+    paragraph.trim() ? splitAtSectionBoundaries(paragraph) : [paragraph],
+  );
 }
 
 function isHeadingPara(para: string): boolean {

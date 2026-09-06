@@ -6,7 +6,14 @@ import {
   isBlockquotePara,
   simulateGreedyJobs,
   runGreedy,
+  splitPageContentForDivision,
+  splitPageContentsLosslessly,
 } from "../pageDivision";
+import {
+  createEmptyParagraphMarker,
+  preserveMarkdownBlankLinesForEditor,
+  restoreEmptyParagraphMarkers,
+} from "../markdownBlankLines";
 import { normalizePageDividersForMarkdownParser } from "../pageDividerMarkdown";
 import { markdownToHtml } from "../markdownRenderer";
 import { marked } from "marked";
@@ -49,7 +56,7 @@ describe("splitContentToPages", () => {
     const pages = splitContentToPages(content);
     expect(pages).toHaveLength(2);
     expect(pages[0].content).toBe("첫 번째 페이지 내용");
-    expect(pages[1].content).toBe("두 번째 페이지 내용");
+    expect(pages[1].content).toBe("\n두 번째 페이지 내용");
     expect(pages.every((p) => p.charCount > 0)).toBe(true);
   });
 
@@ -101,6 +108,103 @@ describe("splitContentToPages", () => {
     const pages = splitContentToPages("# 실제 제목\n---\n본문");
 
     expect(mergePagesToContent(pages)).toBe("# 실제 제목\n---\n본문");
+  });
+
+  it("preserves multiple authored blank lines inside every page", () => {
+    const content = "첫 문단\n\n\n\n둘째 문단\n---\n목록:\n\n\n- 하나\n\n\n\n> 인용";
+    const pages = splitContentToPages(content);
+
+    expect(pages.map((page) => page.content)).toEqual([
+      "첫 문단\n\n\n\n둘째 문단",
+      "목록:\n\n\n- 하나\n\n\n\n> 인용",
+    ]);
+    expect(mergePagesToContent(pages)).toBe(content);
+  });
+
+  it("preserves additional blank lines adjacent to page dividers", () => {
+    for (const newlineCount of [2, 3, 4, 6]) {
+      const whitespace = "\n".repeat(newlineCount);
+      const content = `첫 페이지${whitespace}---${whitespace}둘째 페이지`;
+      const pages = splitContentToPages(content);
+
+      expect(pages).toHaveLength(2);
+      expect(pages[0].content).toBe(`첫 페이지${"\n".repeat(newlineCount - 1)}`);
+      expect(pages[1].content).toBe(`${"\n".repeat(newlineCount - 1)}둘째 페이지`);
+      expect(mergePagesToContent(pages)).toBe(content);
+    }
+  });
+});
+
+describe("editor blank-line round trips", () => {
+  it("turns each additional newline into an editor empty paragraph", () => {
+    expect(preserveMarkdownBlankLinesForEditor("앞\n\n뒤")).toBe("앞\n\n뒤");
+    expect(preserveMarkdownBlankLinesForEditor("앞\n\n\n뒤")).toBe(
+      '앞\n\n<p data-friction-preserved-blank="true"></p>\n\n뒤',
+    );
+    expect(
+      preserveMarkdownBlankLinesForEditor("앞\n\n\n\n뒤").match(
+        /data-friction-preserved-blank/g,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("keeps the existing document-boundary cleanup contract", () => {
+    expect(preserveMarkdownBlankLinesForEditor("\n\n\n본문\n\n\n")).toBe("본문");
+  });
+
+  it("restores empty editor paragraphs to their exact newline count", () => {
+    const marker = createEmptyParagraphMarker("앞뒤");
+    expect(
+      restoreEmptyParagraphMarkers(
+        `앞\n\n${marker}\n\n뒤`,
+        marker,
+      ),
+    ).toBe("앞\n\n\n뒤");
+    expect(
+      restoreEmptyParagraphMarkers(
+        `앞\n\n${marker}\n\n${marker}\n\n뒤`,
+        marker,
+      ),
+    ).toBe("앞\n\n\n\n뒤");
+  });
+
+  it("never mistakes authored marker-like text for an empty paragraph", () => {
+    const authored = "앞\n\nFRICTIONEMPTYBLANKPARAGRAPH\n\n뒤";
+    const marker = createEmptyParagraphMarker(authored);
+
+    expect(marker).not.toBe("FRICTIONEMPTYBLANKPARAGRAPH");
+    expect(restoreEmptyParagraphMarkers(authored, marker)).toBe(authored);
+  });
+});
+
+describe("division preserves authored blank lines", () => {
+  it("keeps two-or-more consecutive blank lines through a no-op engine round trip", () => {
+    for (const content of ["앞\n\n\n뒤", "앞\n\n\n\n뒤"]) {
+      const paragraphs = splitPageContentForDivision(content);
+      const heights = Object.fromEntries(paragraphs.map((_, index) => [index, 10]));
+
+      expect(runGreedy(paragraphs, heights, {}, 1000)).toEqual([content]);
+    }
+  });
+
+  it("keeps formatting and whitespace in heading, list, and quote documents", () => {
+    for (const content of [
+      "### 제목\n\n\n본문",
+      "- 목록\n\n\n다음 문단",
+      "> 인용\n\n\n다음 문단",
+    ]) {
+      const paragraphs = splitPageContentForDivision(content);
+      const heights = Object.fromEntries(paragraphs.map((_, index) => [index, 10]));
+
+      expect(runGreedy(paragraphs, heights, {}, 1000)).toEqual([content]);
+    }
+  });
+
+  it("keeps image markdown and surrounding authored whitespace across stored pages", () => {
+    const content =
+      "사진 설명\n\n\n![](https://example.com/a.jpg)\n---\n다음 사진\n\n\n\n![둘](https://example.com/b.jpg)";
+
+    expect(mergePagesToContent(splitContentToPages(content))).toBe(content);
   });
 });
 

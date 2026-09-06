@@ -37,6 +37,7 @@ import {
 } from "@/lib/nativeBodyFontMode";
 import {
   splitContentToPages,
+  splitPageContentsLosslessly,
   splitPageContentForDivision,
   validatePages,
   simulateGreedyJobs,
@@ -2506,7 +2507,7 @@ export default function WritingScreen() {
     setSplitting(true);
     try {
       const cur = await getEditorContent();
-      const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      const rawPages = splitPageContentsLosslessly(cur);
       const targets = [...overflowPageIndices]
         .filter((i) => i >= 0 && i < rawPages.length)
         .sort((a, b) => b - a);
@@ -2547,7 +2548,7 @@ export default function WritingScreen() {
     async (pageIndex: number) => {
       if (splitting) return;
       const cur = await getEditorContent();
-      const rawPages = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      const rawPages = splitPageContentsLosslessly(cur);
       if (pageIndex < 0 || pageIndex >= rawPages.length) return;
       const paragraphs = splitPageContentForDivision(rawPages[pageIndex]);
       if (paragraphs.length < 2) {
@@ -2574,7 +2575,7 @@ export default function WritingScreen() {
     async (pageIndex: number) => {
       if (pageIndex <= 0) return;
       const cur = await getEditorContent();
-      const parts = cur.split(new RegExp(`\n?${PAGE_DIVIDER}\n?`, "m"));
+      const parts = splitPageContentsLosslessly(cur);
       const breakIndex = pageIndex - 1;
       if (breakIndex < 0 || breakIndex >= parts.length - 1) return;
       parts[breakIndex] = parts[breakIndex] + "\n\n" + parts[breakIndex + 1];

@@ -35,6 +35,11 @@ import { handleTitleEnter, insertTitleSoftBreak } from "./titleKeyboardContract"
 import { createHeadingWithParagraphShortcut } from "./headingKeyboardShortcuts";
 import { Colors } from "@/constants/tokens";
 import {
+  createEmptyParagraphMarker,
+  preserveMarkdownBlankLinesForEditor,
+  restoreEmptyParagraphMarkers,
+} from "@/lib/markdownBlankLines";
+import {
   createEditorSurfaceTouchSession,
   isBlankEditorSurfaceTarget,
   isStationaryBlankSurfaceTap,
@@ -51,7 +56,9 @@ marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOpt
 
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
-    const normalized = normalizePageDividersForMarkdownParser(md || "");
+    const normalized = preserveMarkdownBlankLinesForEditor(
+      normalizePageDividersForMarkdownParser(md || ""),
+    );
     const leadingH1 = splitLeadingH1Markdown(normalized);
     const result = marked.parse(leadingH1?.body ?? normalized);
     let html = leadingH1
@@ -83,7 +90,25 @@ function htmlToMarkdown(html: string): string {
     root.querySelectorAll("img[data-original-src]").forEach((image) => {
       image.setAttribute("src", image.getAttribute("data-original-src") ?? "");
     });
-    return td.turndown(root.innerHTML).replace(
+    // The editor appends an empty paragraph after terminal non-paragraph
+    // blocks so the caret has somewhere to land. Empty document-boundary
+    // paragraphs are not authored body whitespace and must not be exported.
+    while (
+      root.lastElementChild?.tagName.toLowerCase() === "p"
+      && !root.lastElementChild.textContent?.trim()
+    ) {
+      root.lastElementChild.remove();
+    }
+    const emptyParagraphMarker = createEmptyParagraphMarker(root.textContent ?? "");
+    root.querySelectorAll("p").forEach((paragraph) => {
+      if (!paragraph.textContent?.trim()) {
+        paragraph.textContent = emptyParagraphMarker;
+      }
+    });
+    return restoreEmptyParagraphMarkers(
+      td.turndown(root.innerHTML),
+      emptyParagraphMarker,
+    ).replace(
       /!\[[^\]]*]\(([^)\s]+)\)/g,
       (full, src: string) => isPersistableInlineImageUrl(src) ? full : "",
     );

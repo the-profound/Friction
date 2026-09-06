@@ -23,6 +23,10 @@ import { shouldApplyBodyTypographyGeneration } from "../../../lib/bodyTypography
 import { BODY_FONT_FALLBACK_PROBE_TEXT } from "../../shared/bodyTypographyFonts";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
+import {
+  isPreservedBlankParagraphLine,
+  preserveMarkdownBlankLinesForEditor,
+} from "../../../lib/markdownBlankLines";
 import { handleTitleEnter, insertTitleSoftBreak } from "../titleKeyboardContract";
 import { createHeadingWithParagraphShortcut } from "../headingKeyboardShortcuts";
 import {
@@ -574,7 +578,9 @@ function splitByImages(text: string): MdSegment[] {
 
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
-    const text = normalizePageDividersForMarkdownParser(md || "");
+    const text = preserveMarkdownBlankLinesForEditor(
+      normalizePageDividersForMarkdownParser(md || ""),
+    );
     const leadingH1 = splitLeadingH1Markdown(text);
     const lines = (leadingH1?.body ?? text).split("\n");
     const blocks: string[] = [];
@@ -591,6 +597,12 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
       const line = lines[i];
 
       if (line.trim() === "") {
+        i++;
+        continue;
+      }
+
+      if (isPreservedBlankParagraphLine(line)) {
+        blocks.push("<p></p>");
         i++;
         continue;
       }
@@ -741,6 +753,14 @@ function htmlToMarkdown(html: string, onError?: (error: unknown) => void): strin
   try {
     const container = document.createElement("div");
     container.innerHTML = html || "";
+    // Remove the caret-only trailing paragraph (and any other document-edge
+    // empty paragraphs) before internal empty paragraphs are serialized.
+    while (
+      container.lastElementChild?.tagName.toLowerCase() === "p"
+      && !container.lastElementChild.textContent?.trim()
+    ) {
+      container.lastElementChild.remove();
+    }
 
     function inlineMd(node: Node): string {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -845,7 +865,7 @@ function htmlToMarkdown(html: string, onError?: (error: unknown) => void): strin
     for (const child of Array.from(container.children)) {
       md += blockMd(child as HTMLElement, 0);
     }
-    return md.replace(/\n{3,}/g, "\n\n").trimEnd();
+    return md.trimEnd();
   } catch (error) {
     onError?.(error);
     return "";
