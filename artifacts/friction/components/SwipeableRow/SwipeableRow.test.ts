@@ -31,14 +31,36 @@ describe("SwipeableRow shared delete action contract", () => {
   });
 
   it("keeps edge ornaments inside the translated subtree and reserves their overflow", () => {
-    expect(source).toContain(
-      "overflowTop > 0 && { paddingTop: overflowTop, marginTop: -overflowTop }",
-    );
-    expect(source).toContain("top: overflowTop");
+    expect(source).toContain("const topInset = Math.max(overflowTop, SHADOW_CLIP_TOP)");
+    expect(source).toContain("top: topInset");
     expect(source).toMatch(
       /<View[\s\S]*styles\.contentClip[\s\S]*<Animated\.View[\s\S]*\{\.\.\.panResponder\.panHandlers\}[\s\S]*\{children\}[\s\S]*<\/Animated\.View>/,
     );
     expect(source).toContain('container: {\n    overflow: "visible"');
     expect(source).toContain('contentClip: {\n    overflow: "hidden"');
+  });
+
+  it("reserves vertical room inside the clip so the card's own shadow is never flattened, without changing horizontal clip or row height", () => {
+    // Horizontal clipping (needed to hide content sliding past the row's own
+    // left edge) must stay untouched: no horizontal padding/margin trick.
+    expect(source).not.toContain("paddingLeft");
+    expect(source).not.toContain("paddingRight");
+    expect(source).not.toContain("marginLeft");
+    expect(source).not.toContain("marginRight");
+
+    // Vertical shadow-bleed buffer: padding is always cancelled by an equal
+    // negative margin on BOTH the outer container and the inner clip, so
+    // list row height/spacing never changes — only the clip boundary grows.
+    const bothGetTopTrick = (source.match(/paddingTop: topInset,\s*\n\s*marginTop: -topInset,/g) ?? []).length
+      + (source.match(/marginTop: -topInset,\s*\n\s*paddingTop: topInset,/g) ?? []).length;
+    expect(bothGetTopTrick).toBe(2);
+    const bothGetBottomTrick = (source.match(/paddingBottom: bottomInset,\s*\n\s*marginBottom: -bottomInset,/g) ?? []).length
+      + (source.match(/marginBottom: -bottomInset,\s*\n\s*paddingBottom: bottomInset,/g) ?? []).length;
+    expect(bothGetBottomTrick).toBe(2);
+
+    // The reveal actions must stay pinned to the card's actual visible edges
+    // (unaffected by the new shadow buffer), so swipe-open/close geometry is
+    // pixel-identical to before this fix.
+    expect(source).toContain("bottom: bottomInset + actionBottomInset");
   });
 });

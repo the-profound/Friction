@@ -19,6 +19,16 @@ const SWIPE_THRESHOLD = 40;
 const VELOCITY_THRESHOLD = 0.3;
 const SNAP_DURATION = 220;
 
+// The row must still clip horizontally (to hide content sliding past its own
+// left edge while open), but that clip must not also flatten the card's own
+// shadow. Reserve a vertical buffer inside the clip boundary — via the same
+// padding+negative-margin trick used for edge ornaments below — so a card's
+// shadow can bleed above/below its box without being cut. This buffer is
+// purely cosmetic and never changes list layout, row height, or the visual
+// position of the reveal actions.
+const SHADOW_CLIP_TOP = 12;
+const SHADOW_CLIP_BOTTOM = 20;
+
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
 
 export interface SwipeableRowHandle {
@@ -64,6 +74,8 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
     const totalWidth = BUTTON_WIDTH * resolvedActions.length
       + ACTION_GAP * Math.max(0, resolvedActions.length - 1);
     const revealWidth = totalWidth + actionRightInset;
+    const topInset = Math.max(overflowTop, SHADOW_CLIP_TOP);
+    const bottomInset = SHADOW_CLIP_BOTTOM;
 
     const translateX = useRef(new Animated.Value(0)).current;
     const isOpen = useRef(false);
@@ -164,7 +176,12 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
       <View
         style={[
           styles.container,
-          overflowTop > 0 && { paddingTop: overflowTop, marginTop: -overflowTop },
+          {
+            paddingTop: topInset,
+            marginTop: -topInset,
+            paddingBottom: bottomInset,
+            marginBottom: -bottomInset,
+          },
         ]}
       >
         <View
@@ -172,9 +189,9 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
             styles.actionsContainer,
             {
               width: totalWidth,
-              top: overflowTop,
+              top: topInset,
               right: actionRightInset,
-              bottom: actionBottomInset,
+              bottom: bottomInset + actionBottomInset,
             },
           ]}
         >
@@ -206,9 +223,11 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
         <View
           style={[
             styles.contentClip,
-            overflowTop > 0 && {
-              marginTop: -overflowTop,
-              paddingTop: overflowTop,
+            {
+              marginTop: -topInset,
+              paddingTop: topInset,
+              marginBottom: -bottomInset,
+              paddingBottom: bottomInset,
             },
           ]}
         >

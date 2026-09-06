@@ -120,7 +120,7 @@ export default function RecordRow({
 
 const styles = StyleSheet.create({
   row: { marginHorizontal: Spacing.screenPx, marginBottom: Spacing.cardGap },
-  rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.card },
+  rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.listCard },
   questionRowContent: { backgroundColor: Colors.noticeAccent },
   rowMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   rowMetaThought: { justifyContent: "flex-end" },

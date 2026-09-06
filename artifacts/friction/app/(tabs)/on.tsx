@@ -1121,7 +1121,7 @@ function OnScreenContent() {
             onScrollBeginDrag={closeOpenRecordRow}
             scrollEventThrottle={16}
             scrollEnabled={recordListScrollEnabled}
-            contentContainerStyle={{ paddingBottom: navBottom + 16 }}
+            contentContainerStyle={{ paddingTop: Spacing.cardGap, paddingBottom: navBottom + 16 }}
           />
         </View>
       ) : (

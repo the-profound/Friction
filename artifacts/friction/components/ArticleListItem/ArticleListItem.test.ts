@@ -85,7 +85,7 @@ describe("ArticleListItem contract", () => {
     expect(listItemSource).toContain("borderRadius: 16");
     expect(listItemSource).toContain("borderRadius={16}");
     expect(listItemSource).toContain("backgroundColor: Colors.white");
-    expect(listItemSource).toContain("...Shadows.card");
+    expect(listItemSource).toContain("...Shadows.listCard");
     expect(listItemSource).not.toContain("borderBottomWidth");
     expect(listItemSource).toContain("height: ARTICLE_LIST_ITEM_HEIGHT");
     expect(listItemSource).toContain("flexGrow: 0");

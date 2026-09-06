@@ -42,7 +42,7 @@ describe("record card shadow ownership", () => {
     expect(onScreen).toContain("question && styles.questionCardSurface");
   });
 
-  it("does not move the existing list or letter card shadows", () => {
+  it("keeps card-view shadows untouched while list rows use the toned-down list card shadow", () => {
     const recordRow = read(
       "../components/RecordRow/RecordRow.tsx",
     );
@@ -53,11 +53,18 @@ describe("record card shadow ownership", () => {
       "../components/ArticleListItem/ArticleListItem.tsx",
     );
     expect(recordRow).toContain(
-      "rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.card }",
+      "rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.listCard }",
     );
     expect(articleCard).toContain("...Shadows.card");
     expect(articleCard).toContain("...Shadows.carouselCard");
-    expect(articleListItem).toContain("...Shadows.card");
+    expect(articleListItem).toContain("...Shadows.listCard");
     expect(articleListItem).toContain("marginHorizontal: Spacing.screenPx");
+  });
+
+  it("gives the list view's first row breathing room below the filter bar", () => {
+    const onScreen = read("(tabs)/on.tsx");
+    expect(onScreen).toContain(
+      "contentContainerStyle={{ paddingTop: Spacing.cardGap, paddingBottom: navBottom + 16 }}",
+    );
   });
 });

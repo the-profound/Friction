@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     position: "relative",
     borderRadius: 16,
     backgroundColor: Colors.white,
-    ...Shadows.card,
+    ...Shadows.listCard,
   },
   selectedIndicator: {
     position: "absolute",

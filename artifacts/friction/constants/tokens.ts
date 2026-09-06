@@ -326,6 +326,27 @@ export const Shadows = {
     } as object,
     default: {},
   }),
+  /**
+   * Toned-down raised surface for 기록함 목록 보기 rows (단상/편집 rows and
+   * letter list rows), and anything reusing the same list card component
+   * (e.g. the send/reply letter picker lists). Narrower spread/blur than
+   * `card` — do not reuse for card-view (하나씩 보기) or other card surfaces.
+   */
+  listCard: Platform.select({
+    ios: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+    },
+    android: {
+      elevation: 3,
+    },
+    web: {
+      boxShadow: "0px 3px 10px rgba(0,0,0,0.10)",
+    } as object,
+    default: {},
+  }),
   /** A restrained shadow used only by date-group carousel cards. */
   carouselCard: Platform.select({
     ios: {
