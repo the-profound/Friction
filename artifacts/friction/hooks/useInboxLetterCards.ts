@@ -27,6 +27,7 @@ export function inboxItemToViewModel(item: InboxItem): LetterCardViewModel {
     date: item.visibleAt ?? null,
     isRead: item.isRead,
     collectionId: item.sourceSpaceId ? null : (item.sourceTeamCollectionId ?? null),
+    spaceId: item.sourceSpaceId ?? null,
   };
 }
 

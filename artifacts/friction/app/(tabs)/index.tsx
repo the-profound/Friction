@@ -276,6 +276,7 @@ function InboxScreenContent() {
         return {
           collectionName: vm.collectionName,
           collectionId: vm.collectionId ?? null,
+          spaceId: vm.spaceId ?? null,
           date: vm.date ?? null,
           authorName: vm.authorName ?? null,
           authorId: vm.authorId ?? null,
@@ -475,6 +476,7 @@ function InboxScreenContent() {
       collectionId: tapItem.sourceSpaceId
         ? null
         : (tapItem.sourceTeamCollectionId ?? null),
+      spaceId: tapItem.sourceSpaceId ?? null,
       date: tapItem.visibleAt ?? null,
       isRead: tapItem.isRead,
     });
@@ -492,6 +494,7 @@ function InboxScreenContent() {
         collectionId: desc.sourceSpaceId
           ? null
           : (desc.sourceTeamCollectionId ?? null),
+        spaceId: desc.sourceSpaceId ?? null,
         date: desc.visibleAt ?? desc.article.createdAt ?? null,
         isRead: desc.isRead,
       });

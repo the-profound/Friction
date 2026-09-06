@@ -1277,9 +1277,12 @@ export default function SpaceDetailScreen() {
           authorId: vm.authorId ?? null,
           // spaceName is the collection-line label for space letters.
           collectionName: vm.spaceName ?? null,
+          spaceId: vm.spaceId ?? null,
           date: vm.date ?? letter.createdAt,
           isRead: shouldDimSpaceRoundLetter(tappedRoundStatus, letter.isRead),
         },
+        // Already inside this space's own detail screen — keep the space name inactive.
+        currentSpaceId: id,
       });
       // Async fetch to hydrate the overlay with the full article object
       // (includes sourceArticleId for ancestor chain traversal).

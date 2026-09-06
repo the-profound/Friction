@@ -113,3 +113,4 @@
 - [Editor blank paragraph ownership](friction-editor-blank-paragraph-ownership.md) — never infer a trailing empty paragraph is synthetic; mark caret-only paragraphs explicitly or authored terminal blank lines are lost.
 - [Friction reservation null vs cancelled-only](friction-reservation-null-vs-cancelled.md) — SpaceLetter.reservation:null is ambiguous (true-legacy vs cancelled-only); use additive `everScheduled` flag to disambiguate.
 - [Friction web preview font-boot hang](friction-web-preview-font-boot-hang.md) — every route can show only the boot spinner forever due to a pre-existing NotoSerifKR asset path error; don't assume your change broke it, and Screenshot retries/sleeps between calls don't help since each is a fresh page load.
+- [Overlay info-bar navigation slots](friction-overlay-info-bar-nav-slots.md) — author/collection/space links in CardSelectOverlay share one id+currentXId+canTapX pattern; extend it, don't invent a new mechanism.

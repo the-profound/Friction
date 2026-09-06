@@ -41,6 +41,8 @@ export interface LetterCardViewModel {
   collectionName: string | null;
   /** Personal collection id (for overlay info-bar navigation back to collection). */
   collectionId?: string | null;
+  /** Space id (for overlay info-bar navigation back to the space). */
+  spaceId?: string | null;
   /** Used for the 👥 badge (RECIPIENT_ONLY) on the card cover. */
   visibility?: string | null;
   /** Resolved display name for the author (handles anonymous, display-name overrides). */

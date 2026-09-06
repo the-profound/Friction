@@ -1022,6 +1022,7 @@ function OnScreenContent() {
                         // back to collectionName (personal folder) otherwise.
                         collectionName: letterViewModel?.spaceName ?? letterViewModel?.collectionName ?? null,
                         collectionId: letterViewModel?.collectionId ?? null,
+                        spaceId: letterViewModel?.spaceId ?? null,
                         date: letterViewModel?.date ?? null,
                         authorName: letterViewModel?.authorName ?? null,
                         authorId: letterViewModel?.authorId ?? null,

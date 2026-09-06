@@ -259,7 +259,8 @@ export default function MyScreen() {
           fallbackOrigin: origin,
           meta: {
             collectionName: rec?.name ?? null,
-             collectionId: rec?.collectionId ?? null,
+            collectionId: rec?.collectionId ?? null,
+            spaceId: rec?.spaceId ?? null,
             date: rec?.deliverySlot ?? null,
           },
           currentAuthorId: userId,

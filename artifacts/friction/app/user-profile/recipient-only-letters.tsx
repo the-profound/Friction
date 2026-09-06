@@ -131,6 +131,7 @@ export default function RecipientOnlyLettersScreen() {
         meta: {
           collectionName: rec?.name ?? null,
           collectionId: rec?.collectionId ?? null,
+          spaceId: rec?.spaceId ?? null,
           date: rec?.deliverySlot ?? null,
         },
         measureRef: slotRef

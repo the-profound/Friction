@@ -34,6 +34,8 @@ import { Colors, Typography } from "@/constants/tokens";
 export interface LetterOverlayMeta {
   collectionName?: string | null;
   collectionId?: string | null;
+  /** Space id backing the same displayed collectionName, when the letter came from a Space. */
+  spaceId?: string | null;
   date?: string | null;
   /** Override the author name shown in the overlay info bar. */
   authorName?: string | null;
@@ -63,6 +65,8 @@ export interface OpenLetterOverlayOptions {
   currentCollectionId?: string | null;
   /** Prevents the info bar from linking back to the current author. */
   currentAuthorId?: string | null;
+  /** Prevents the info bar from linking back to the current space (e.g. the space's own detail screen). */
+  currentSpaceId?: string | null;
   /** Envelope info for sealed letters (inbox use). */
   envelopeInfo?: EnvelopeInfo | null;
   /**
@@ -318,6 +322,7 @@ export function useLetterSelectionOverlay(
   const [overlayNavOptions, setOverlayNavOptions] = useState<{
     currentCollectionId?: string | null;
     currentAuthorId?: string | null;
+    currentSpaceId?: string | null;
   }>({});
   const [selectedEnvelopeInfo, setSelectedEnvelopeInfo] = useState<EnvelopeInfo | null>(null);
   const [selectedCarouselShadow, setSelectedCarouselShadow] = useState(false);
@@ -419,6 +424,7 @@ export function useLetterSelectionOverlay(
           : (selectedArticle.authorId ?? null),
       collectionName: selectedMeta.collectionName ?? null,
       collectionId: selectedMeta.collectionId ?? null,
+      spaceId: selectedMeta.spaceId ?? null,
       date: selectedMeta.date ?? null,
       isRead: selectedMeta.isRead,
     });
@@ -481,6 +487,7 @@ export function useLetterSelectionOverlay(
       setOverlayNavOptions({
         currentCollectionId: openOptions?.currentCollectionId,
         currentAuthorId: openOptions?.currentAuthorId,
+        currentSpaceId: openOptions?.currentSpaceId,
       });
       setSelectedEnvelopeInfo(openOptions?.envelopeInfo ?? null);
       setSelectedCarouselShadow(openOptions?.originUsesCarouselShadow ?? false);
@@ -704,13 +711,17 @@ export function useLetterSelectionOverlay(
         onRead={handleOverlayRead}
         onReady={() => setIsSelectedSourceHidden(true)}
         onNavigateToCollection={(id) =>
-          router.push({ pathname: "/of-02-detail", params: { id } })
+          router.push({ pathname: "/of-01-detail", params: { id } })
         }
         onNavigateToAuthor={(authorId) =>
           router.push(`/user-profile/${authorId}` as never)
         }
+        onNavigateToSpace={(spaceId) =>
+          router.push({ pathname: "/of-space-detail" as never, params: { id: spaceId } })
+        }
         currentCollectionId={overlayNavOptions.currentCollectionId}
         currentAuthorId={overlayNavOptions.currentAuthorId}
+        currentSpaceId={overlayNavOptions.currentSpaceId}
         originUsesCarouselShadow={selectedCarouselShadow}
         envelopeInfo={selectedEnvelopeInfo}
         visibilityButton={visibilityButton}
@@ -814,4 +825,3 @@ const inlineOverlayStyles = StyleSheet.create({
     color: Colors.primaryActionForeground,
   },
 });
-

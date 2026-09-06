@@ -60,5 +60,6 @@ export function recordArticleToViewModel(
     date: (article as any).letterAt ?? article.createdAt ?? null,
     isRead: null,
     collectionId: article.collectionId ?? null,
+    spaceId: spaceLetter?.spaceId ?? null,
   };
 }

@@ -38,6 +38,7 @@ export function spaceLetterToViewModel(
     date: letter.createdAt,
     isRead: letter.isRead,
     collectionId: null,
+    spaceId: letter.spaceId,
   };
 }
 

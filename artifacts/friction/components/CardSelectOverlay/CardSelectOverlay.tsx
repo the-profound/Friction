@@ -93,6 +93,8 @@ export interface ChainArticleMeta {
   authorId?: string | null;
   collectionName?: string | null;
   collectionId?: string | null;
+  /** Space id backing the same displayed collectionName, when the letter came from a Space. */
+  spaceId?: string | null;
   date?: string | Date | null;
   /** Mirrors the dimmed state of the card that opened the overlay. */
   isRead?: boolean;
@@ -133,9 +135,11 @@ interface CardSelectOverlayProps {
   onReady?: () => void;
   onNavigateToCollection?: (id: string) => void;
   onNavigateToAuthor?: (authorId: string) => void;
+  onNavigateToSpace?: (spaceId: string) => void;
   /** Prevents the info bar from navigating back to the screen's current entity. */
   currentCollectionId?: string | null;
   currentAuthorId?: string | null;
+  currentSpaceId?: string | null;
   /**
    * The inbox carousel uses the restrained carousel shadow at the source.
    * Cross-fade from that source token to the selection token on the same hero
@@ -185,8 +189,10 @@ export default function CardSelectOverlay({
   onReady,
   onNavigateToCollection,
   onNavigateToAuthor,
+  onNavigateToSpace,
   currentCollectionId,
   currentAuthorId,
+  currentSpaceId,
   originUsesCarouselShadow = false,
   envelopeInfo,
   visibilityButton,
@@ -833,12 +839,17 @@ export default function CardSelectOverlay({
 
   // ── Active card info ──────────────────────────────────────────────────────
   const activeMeta = displayMetas[activeIndex] ?? {};
-  const { authorName, authorId, collectionName, collectionId, date } = activeMeta;
+  const { authorName, authorId, collectionName, collectionId, spaceId, date } = activeMeta;
   const dateLabel = date ? formatDate(date) : "";
   const canTapCollection = !!(
     collectionId &&
     collectionId !== currentCollectionId &&
     onNavigateToCollection
+  );
+  const canTapSpace = !!(
+    spaceId &&
+    spaceId !== currentSpaceId &&
+    onNavigateToSpace
   );
   const canTapAuthor = !!(
     authorId &&
@@ -1287,6 +1298,11 @@ export default function CardSelectOverlay({
                     <Text style={styles.infoSep}>·</Text>
                     {canTapCollection ? (
                       <Pressable onPress={() => { requestClose(); onNavigateToCollection!(collectionId!); }} hitSlop={6} style={styles.infoTappableRow}>
+                        <Text style={styles.infoText}>{collectionName}</Text>
+                        <Feather name="chevron-right" size={12} color={Colors.zinc700} />
+                      </Pressable>
+                    ) : canTapSpace ? (
+                      <Pressable onPress={() => { requestClose(); onNavigateToSpace!(spaceId!); }} hitSlop={6} style={styles.infoTappableRow}>
                         <Text style={styles.infoText}>{collectionName}</Text>
                         <Feather name="chevron-right" size={12} color={Colors.zinc700} />
                       </Pressable>
