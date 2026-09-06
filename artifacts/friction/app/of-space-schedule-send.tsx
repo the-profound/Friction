@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   ActivityIndicator,
   RefreshControl,
   Platform,
@@ -18,9 +17,11 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
+import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { ArticleScheduleSheet } from "@/components/ArticleScheduleSheet/ArticleScheduleSheet";
 import { SlotPickerSheet, type EmptySlot } from "@/components/ArticleScheduleSheet/SlotPickerSheet";
 import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarGrid";
+import { useToast } from "@/contexts/ToastContext";
 import {
   useListAllSpaceScheduledSends,
   useListSpaceRounds,
@@ -374,6 +375,7 @@ function ResendSheet({
   const [selectedDate, setSelectedDate] = useState(new Date(Date.now() + 24 * 60 * 60 * 1000));
   const [saving, setSaving] = useState(false);
   const createSend = useCreateSpaceScheduledSend();
+  const { showToast } = useToast();
   const isCenter = send.letterType === "CENTER";
   const isOpening = send.letterType === "OPENING";
 
@@ -394,14 +396,14 @@ function ResendSheet({
       onClose();
     } catch (err) {
       if (isDuplicateReservationError(err)) {
-        Alert.alert("이미 예약이 있어요", DUPLICATE_RESERVATION_MESSAGE);
+        showToast({ message: DUPLICATE_RESERVATION_MESSAGE, type: "error", duration: 5000, position: "top" });
       } else {
-        Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+        showToast({ message: "예약에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
       }
     } finally {
       setSaving(false);
     }
-  }, [selectedDate, spaceId, send, createSend, onSaved, onClose]);
+  }, [selectedDate, spaceId, send, createSend, onSaved, onClose, showToast]);
 
   // CENTER rows never open this sheet (their immutable delivery slot has
   // expired), so keep this defensive branch unsaveable if invoked indirectly.
@@ -470,6 +472,7 @@ function ChangeSheet({
   const [selectedDate, setSelectedDate] = useState(new Date(send.scheduledAt));
   const [saving, setSaving] = useState(false);
   const updateSend = useUpdateSpaceScheduledSend();
+  const { showToast } = useToast();
   const isCenter = send.letterType === "CENTER";
   const isOpening = send.letterType === "OPENING";
 
@@ -506,14 +509,14 @@ function ChangeSheet({
       onClose();
     } catch (err) {
       if (isDuplicateReservationError(err)) {
-        Alert.alert("이미 예약이 있어요", DUPLICATE_RESERVATION_MESSAGE);
+        showToast({ message: DUPLICATE_RESERVATION_MESSAGE, type: "error", duration: 5000, position: "top" });
       } else {
-        Alert.alert("오류", "예약 변경에 실패했어요. 다시 시도해주세요.");
+        showToast({ message: "예약 변경에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
       }
     } finally {
       setSaving(false);
     }
-  }, [selectedDate, spaceId, send, updateSend, onSaved, onClose]);
+  }, [selectedDate, spaceId, send, updateSend, onSaved, onClose, showToast]);
 
   const isValidCenterSelection =
     isCenter && !!ownRoundSlots?.some((s) => s.date === dateToYmd(selectedDate));
@@ -575,10 +578,13 @@ export default function SpaceScheduleSendScreen() {
   }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const [showNewSheet, setShowNewSheet] = useState(false);
   const [resendTarget, setResendTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
   const [changeTarget, setChangeTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<SpaceScheduledSendWithLetter | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   // "새 글 예약하기" flow: pick an empty slot first, then the article to fill it.
   const [showSlotPicker, setShowSlotPicker] = useState(false);
   const [pickedSlot, setPickedSlot] = useState<EmptySlot | null>(null);
@@ -855,31 +861,28 @@ export default function SpaceScheduleSendScreen() {
     });
   }, [queryClient, id, rounds]);
 
-  const handleCancel = useCallback(
-    async (send: SpaceScheduledSendWithLetter) => {
-      Alert.alert("예약 취소", "이 예약 발송을 취소하시겠어요?", [
-        { text: "돌아가기", style: "cancel" },
-        {
-          text: "취소",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await updateSend.mutateAsync({
-                id,
-                letterId: send.spaceLetterId,
-                sendId: send.id,
-                data: { status: "CANCELLED" },
-              });
-              handleSaved();
-            } catch {
-              Alert.alert("오류", "취소에 실패했어요. 다시 시도해주세요.");
-            }
-          },
-        },
-      ]);
-    },
-    [id, updateSend, handleSaved],
-  );
+  const handleCancel = useCallback((send: SpaceScheduledSendWithLetter) => {
+    setCancelTarget(send);
+  }, []);
+
+  const handleConfirmCancel = useCallback(async () => {
+    if (!cancelTarget) return;
+    setIsCancelling(true);
+    try {
+      await updateSend.mutateAsync({
+        id,
+        letterId: cancelTarget.spaceLetterId,
+        sendId: cancelTarget.id,
+        data: { status: "CANCELLED" },
+      });
+      handleSaved();
+      setCancelTarget(null);
+    } catch {
+      showToast({ message: "취소에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [id, cancelTarget, updateSend, handleSaved, showToast]);
 
   const handleGoToArchive = useCallback(() => {
     router.push("/(tabs)/on");
@@ -893,17 +896,19 @@ export default function SpaceScheduleSendScreen() {
       // A leftover slot with no `scheduledDate` (pre-fix data) still means
       // they have a turn; they just can't self-serve a date here.
       if (hasUnresolvedCenterAssignment) {
-        Alert.alert(
-          "알림",
-          "배정된 자리가 있지만 날짜가 아직 설정되지 않았어요. 공간장에게 문의해주세요.",
-        );
+        showToast({
+          message: "배정된 자리가 있지만 날짜가 아직 설정되지 않았어요. 공간장에게 문의해주세요.",
+          type: "error",
+          duration: 5000,
+          position: "top",
+        });
         return;
       }
-      Alert.alert("알림", "이미 글을 모두 올렸어요!");
+      showToast({ message: "이미 글을 모두 올렸어요!", type: "info", duration: 5000, position: "top" });
       return;
     }
     setShowSlotPicker(true);
-  }, [isSchedulingBlocked, emptySlots, hasUnresolvedCenterAssignment]);
+  }, [isSchedulingBlocked, emptySlots, hasUnresolvedCenterAssignment, showToast]);
 
   const handlePickSlot = useCallback((slot: EmptySlot) => {
     setShowSlotPicker(false);
@@ -960,7 +965,7 @@ export default function SpaceScheduleSendScreen() {
       targetRound && targetRound.status === "COMPLETED"
         ? "이미 회차가 끝나 여는 편지를 예약할 수 없어요."
         : "지금은 이 회차에 여는 편지를 예약할 수 없어요.";
-    Alert.alert("예약할 수 없어요", message);
+    showToast({ message, type: "error", duration: 5000, position: "top" });
   }, [
     openingRoundId,
     roundsQuery.isLoading,
@@ -968,6 +973,7 @@ export default function SpaceScheduleSendScreen() {
     joinContextQuery.isLoading,
     openingEligibleRounds,
     presentationRounds,
+    showToast,
   ]);
 
   // A direct route from a slot card is only a shortcut. It must wait for the
@@ -985,7 +991,12 @@ export default function SpaceScheduleSendScreen() {
       setShowNewSheet(true);
       return;
     }
-    Alert.alert("예약할 수 없어요", "이 슬롯의 예약 가능 시간이 지났거나 이미 사용되었어요.");
+    showToast({
+      message: "이 슬롯의 예약 가능 시간이 지났거나 이미 사용되었어요.",
+      type: "error",
+      duration: 5000,
+      position: "top",
+    });
   }, [
     slotId,
     roundId,
@@ -993,6 +1004,7 @@ export default function SpaceScheduleSendScreen() {
     roundsQuery.isLoading,
     allCenterSlots,
     newReservationCenterSlots,
+    showToast,
   ]);
 
   const pendingSends = sends.filter((s) => s.status === "PENDING");
@@ -1207,6 +1219,19 @@ export default function SpaceScheduleSendScreen() {
           onSaved={handleSaved}
         />
       )}
+
+      <ConfirmModal
+        visible={cancelTarget !== null}
+        title="예약 취소"
+        description="이 예약 발송을 취소하시겠어요?"
+        confirmLabel="취소"
+        cancelLabel="돌아가기"
+        destructive
+        confirmDisabled={isCancelling}
+        cancelDisabled={isCancelling}
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setCancelTarget(null)}
+      />
     </View>
   );
 }

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -14,6 +13,7 @@ import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
 import { LetterGridPickerSheet } from "@/components/ArticleScheduleSheet/LetterGridPickerSheet";
 import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarGrid";
+import { useToast } from "@/contexts/ToastContext";
 import {
   useCreateSpaceScheduledSend,
   useCreateSpaceLetter,
@@ -169,6 +169,7 @@ export function ArticleScheduleSheet({
   const createSend = useCreateSpaceScheduledSend();
   const createLetter = useCreateSpaceLetter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const pickerArticles = useMemo(
     () =>
@@ -191,11 +192,11 @@ export function ArticleScheduleSheet({
 
   const handleSave = useCallback(async () => {
     if (!selectedArticleId) {
-      Alert.alert("알림", "발송할 글을 선택해주세요.");
+      showToast({ message: "발송할 글을 선택해주세요.", type: "error", duration: 5000, position: "top" });
       return;
     }
     if (!isOpeningLetter && !selectedCenterSlot) {
-      Alert.alert("알림", "배정된 중심글 차례 날짜를 선택해주세요.");
+      showToast({ message: "배정된 중심글 차례 날짜를 선택해주세요.", type: "error", duration: 5000, position: "top" });
       return;
     }
     // Guard against a stale selection landing outside the valid window (e.g.
@@ -205,7 +206,7 @@ export function ArticleScheduleSheet({
     if (isOpeningLetter) {
       const d0 = startOfDay(scheduledAt);
       if (d0 < startOfDay(minDate) || (maxDate && d0 > startOfDay(maxDate))) {
-        Alert.alert("알림", "선택한 날짜가 더 이상 유효하지 않아요. 날짜를 다시 선택해주세요.");
+        showToast({ message: "선택한 날짜가 더 이상 유효하지 않아요. 날짜를 다시 선택해주세요.", type: "error", duration: 5000, position: "top" });
         return;
       }
     }
@@ -293,9 +294,9 @@ export function ArticleScheduleSheet({
       onClose();
     } catch (err) {
       if (isDuplicateReservationError(err)) {
-        Alert.alert("이미 예약이 있어요", DUPLICATE_RESERVATION_MESSAGE);
+        showToast({ message: DUPLICATE_RESERVATION_MESSAGE, type: "error", duration: 5000, position: "top" });
       } else {
-        Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
+        showToast({ message: "예약에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
       }
     } finally {
       setSaving(false);
@@ -303,7 +304,7 @@ export function ArticleScheduleSheet({
   }, [
     selectedArticleId, selectedCenterSlot, scheduledAt, isOpeningLetter, spaceId, letters, userId,
     slotId, createLetter, createSend, queryClient, onSaved, onClose,
-    openingRoundId, maxDate, minDate,
+    openingRoundId, maxDate, minDate, showToast,
   ]);
 
   const title = isOpeningLetter ? "여는 편지 글 선택" : "글 예약 발송";

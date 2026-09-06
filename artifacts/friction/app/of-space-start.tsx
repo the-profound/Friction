@@ -11,7 +11,6 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
   Modal,
   Animated,
@@ -926,19 +925,11 @@ function OpeningLetterStep({
   const handleSave = useCallback(async () => {
     if (!hasReservableOpeningDate) {
       const message = `여는 편지는 ${formatMonthDay(deadline)} 06:00까지 보내야 하지만, 지금 예약 가능한 가장 빠른 날짜보다 이전이에요. 시작 예정일을 늦춰주세요.`;
-      if (Platform.OS === "web") {
-        showToast({ message, type: "error", duration: 5000, position: "top" });
-      } else {
-        Alert.alert("예약할 수 없는 일정", message);
-      }
+      showToast({ message, type: "error", duration: 5000, position: "top" });
       return;
     }
     if (!selectedArticleId) {
-      if (Platform.OS === "web") {
-        showToast({ message: "발송할 글을 선택해주세요.", type: "error", duration: 5000, position: "top" });
-      } else {
-        Alert.alert("알림", "발송할 글을 선택해주세요.");
-      }
+      showToast({ message: "발송할 글을 선택해주세요.", type: "error", duration: 5000, position: "top" });
       return;
     }
     setSaving(true);
@@ -967,11 +958,7 @@ function OpeningLetterStep({
       setShowArticleList(false);
       onSaved();
     } catch {
-      if (Platform.OS === "web") {
-        showToast({ message: "예약에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
-      } else {
-        Alert.alert("오류", "예약에 실패했어요. 다시 시도해주세요.");
-      }
+      showToast({ message: "예약에 실패했어요. 다시 시도해주세요.", type: "error", duration: 5000, position: "top" });
     } finally {
       setSaving(false);
     }
@@ -1517,7 +1504,7 @@ export default function SpaceStartScreen() {
         err instanceof Error &&
         (err.name === "AbortError" || err.name === "TimeoutError");
       // Extract the server's Korean error string from ApiError.data when
-      // present, so the Alert shows e.g. "확정된 참여자가 없습니다." rather
+      // present, so the toast shows e.g. "확정된 참여자가 없습니다." rather
       // than the raw "HTTP 400 Bad Request: …" prefix.
       const serverMsg: string | null =
         err != null && typeof err === "object" && "data" in err
@@ -1535,12 +1522,7 @@ export default function SpaceStartScreen() {
         ? "시간이 초과됐어요. 다시 시도해주세요."
         : serverMsg ??
           (err instanceof Error ? err.message : "공간 시작에 실패했어요. 다시 시도해주세요.");
-      // web 프리뷰는 cross-origin iframe이라 window.alert()가 차단됨 → showToast 사용
-      if (Platform.OS === "web") {
-        showToast({ message: msg, type: "error", duration: 5000, position: "top" });
-      } else {
-        Alert.alert("오류", msg);
-      }
+      showToast({ message: msg, type: "error", duration: 5000, position: "top" });
     } finally {
       setIsStarting(false);
     }
@@ -1563,27 +1545,15 @@ export default function SpaceStartScreen() {
 
   const handleStartPress = useCallback(() => {
     if (!openingLetterExists) {
-      if (Platform.OS === "web") {
-        showToast({ message: "여는 편지를 먼저 작성해주세요.", type: "error", duration: 5000, position: "top" });
-      } else {
-        Alert.alert("여는 편지 필요", "여는 편지를 먼저 작성해주세요.");
-      }
+      showToast({ message: "여는 편지를 먼저 작성해주세요.", type: "error", duration: 5000, position: "top" });
       return;
     }
     if (!hasEnoughParticipants) {
-      if (Platform.OS === "web") {
-        showToast({ message: "확정 참여자가 1명 이상 있어야 해요.", type: "error", duration: 5000, position: "top" });
-      } else {
-        Alert.alert("참여자 필요", "확정 참여자가 1명 이상 있어야 해요.");
-      }
+      showToast({ message: "확정 참여자가 1명 이상 있어야 해요.", type: "error", duration: 5000, position: "top" });
       return;
     }
     if (scheduleType === "WEEKDAY" && weekdays.length === 0) {
-      if (Platform.OS === "web") {
-        showToast({ message: "요일을 하나 이상 선택해주세요.", type: "error", duration: 5000, position: "top" });
-      } else {
-        Alert.alert("알림", "요일을 하나 이상 선택해주세요.");
-      }
+      showToast({ message: "요일을 하나 이상 선택해주세요.", type: "error", duration: 5000, position: "top" });
       return;
     }
     if (hasPendingRequests) {
