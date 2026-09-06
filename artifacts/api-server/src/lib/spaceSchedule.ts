@@ -36,3 +36,15 @@ export function calculateOccasionDate(
   }
   return null;
 }
+
+/**
+ * Map a global center-article slot position to its schedule occasion.
+ * Multiple slots share one occasion when more than one center article is
+ * configured per day.
+ */
+export function calculateSlotOccasionIndex(
+  slotPosition: number,
+  centerCount: number,
+): number {
+  return Math.floor(slotPosition / Math.max(1, centerCount));
+}

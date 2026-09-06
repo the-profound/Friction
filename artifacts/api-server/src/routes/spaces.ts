@@ -32,7 +32,10 @@ import {
   computeDeliverySlot,
   isKstDateReservable,
 } from "../lib/deliverySlot";
-import { calculateOccasionDate } from "../lib/spaceSchedule";
+import {
+  calculateOccasionDate,
+  calculateSlotOccasionIndex,
+} from "../lib/spaceSchedule";
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
 import { getCorrelationId } from "../lib/operationalTelemetry";
 import { synchronizeSpaceRoundStatuses } from "../lib/spaceRoundStatus";
@@ -1103,6 +1106,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
 
   // 7. Execute in a transaction
   const intervalDays = body.interval ?? space.defaultCenterInterval;
+  const centerCount = body.defaultCenterCount ?? space.defaultCenterCount;
   const weekdays = body.weekdays ?? [];
   let rejectedRequesterIds: string[] = [];
 
@@ -1183,14 +1187,11 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
         .delete(spaceRoundsTable)
         .where(eq(spaceRoundsTable.spaceId, req.params.id));
 
-      // Create rounds and slots. `occasionCursor` tracks the global position
-      // in the schedule's occasion sequence (N_DAY interval / WEEKDAY match)
-      // across ALL rounds' slots, so slot dates are assigned sequentially
-      // slot-by-slot from the very start of the space, never resetting or
-      // overlapping at round boundaries. A round's own start/end date is
-      // just the occasion date of its first/last slot.
+      // Create rounds and slots. `slotCursor` tracks the global center-article
+      // position across all rounds. Multiple slots share one schedule occasion
+      // according to centerCount, including across round boundaries.
       let firstRoundId: string | null = null;
-      let occasionCursor = 0;
+      let slotCursor = 0;
       for (let i = 0; i < body.roundCount; i++) {
         const roundConfig = effectiveRounds[i] as Exclude<typeof effectiveRounds[number], { error: string }>;
         const slots = roundConfig?.slots ?? [];
@@ -1200,7 +1201,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
           body.scheduleType,
           intervalDays,
           weekdays,
-          occasionCursor,
+          calculateSlotOccasionIndex(slotCursor, centerCount),
         );
         const roundEndDate =
           slots.length > 0
@@ -1209,7 +1210,10 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
                 body.scheduleType,
                 intervalDays,
                 weekdays,
-                occasionCursor + slots.length - 1,
+                calculateSlotOccasionIndex(
+                  slotCursor + slots.length - 1,
+                  centerCount,
+                ),
               )
             : roundStartDate;
 
@@ -1236,7 +1240,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
             body.scheduleType,
             intervalDays,
             weekdays,
-            occasionCursor + j,
+            calculateSlotOccasionIndex(slotCursor + j, centerCount),
           );
           await tx.insert(spaceRoundSlotsTable).values({
             spaceRoundId: round.id,
@@ -1245,7 +1249,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
             ...(slotDate ? { scheduledDate: kstDateString(slotDate) } : {}),
           });
         }
-        occasionCursor += slots.length;
+        slotCursor += slots.length;
       }
 
       // Link every round-less OPENING letter to round 1. Multiple opening

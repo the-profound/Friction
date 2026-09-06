@@ -45,6 +45,23 @@ describe("space start-date policy", () => {
     expect(startRoute).toContain("scheduleStartsAt,");
   });
 
+  it("groups preview and persisted slots by the configured daily center count", () => {
+    const startRoute = routesSource.slice(
+      routesSource.indexOf('router.post("/spaces/:id/start"'),
+      routesSource.indexOf('router.get("/spaces/:id/rounds"'),
+    );
+
+    expect(startScreenSource).toContain(
+      "const baseIdx = (i * centerCount) % (items.length || 1)",
+    );
+    expect(startRoute).toContain(
+      "const centerCount = body.defaultCenterCount ?? space.defaultCenterCount",
+    );
+    expect(startRoute).toContain(
+      "calculateSlotOccasionIndex(slotCursor + j, centerCount)",
+    );
+  });
+
   it("keeps the opening-letter KST 06:00 boundary explicit", () => {
     expect(startScreenSource).toContain(
       "const hasReservableOpeningDate = minSendDate <= maxScheduledAt",

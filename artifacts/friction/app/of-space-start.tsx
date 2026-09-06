@@ -752,7 +752,7 @@ function ScheduleCalendarStep({
     dates.forEach((date, i) => {
       const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
       if (!map[key]) map[key] = [];
-      const baseIdx = i % (items.length || 1);
+      const baseIdx = (i * centerCount) % (items.length || 1);
       for (let c = 0; c < centerCount; c++) {
         const w = items[(baseIdx + c) % (items.length || 1)];
         if (w && !map[key].find((x) => x.userId === w.userId)) map[key].push(w);
