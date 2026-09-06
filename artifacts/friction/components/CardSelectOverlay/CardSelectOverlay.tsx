@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,16 +7,17 @@ import {
   Pressable,
   Animated,
   Easing,
-  PanResponder,
   Dimensions,
   Platform,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import RAnimated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
   runOnJS,
   cancelAnimation,
   interpolate,
@@ -59,11 +60,21 @@ const OPEN_DURATION_PER_PIXEL = 0.2;
 const CLOSE_MIN_DURATION = 150;
 const CLOSE_MAX_DURATION = 320;
 const CLOSE_DURATION_PER_PIXEL = 0.25;
-const TRANSITION_EASING = Easing.out(Easing.poly(4));
 
 const REANIMATED_TRANSITION_EASING = REasing.out(REasing.poly(4));
 const DISMISS_FADE_DURATION = 100;
 const DISMISS_RESISTANCE_DISTANCE = 180;
+
+// Reanimated spring configs, ported 1:1 from the legacy Animated.spring
+// {tension, friction} values (Rebound-style springs use the same underlying
+// model as Reanimated's {stiffness, damping} at mass:1 — tension↔stiffness,
+// friction↔damping).
+const SPRING_SWIPE_BACK = { stiffness: 200, damping: 20, mass: 1 };
+const SPRING_CAROUSEL_SNAP = { stiffness: 100, damping: 20, mass: 1, overshootClamping: true };
+const SPRING_CAROUSEL_RESET = { stiffness: 100, damping: 20, mass: 1 };
+// PanResponder's gestureState.vx/vy are in px/ms; RNGH's velocityX/velocityY
+// are in px/s. Divide by this to compare against the original px/ms thresholds.
+const VELOCITY_UNIT_SCALE = 1000;
 
 function getCoverImageUrl(article: Article | null | undefined): string | null {
   const cover = article?.cover;
@@ -313,15 +324,16 @@ export default function CardSelectOverlay({
   const detailsTop = cardTopVisual + scaledH + 14;
 
   // ── Animated values ───────────────────────────────────────────────────────
-  // The hero grow/shrink progress runs on the UI thread via Reanimated so the
-  // open/close transition never drops frames waiting on the JS thread. The
-  // swipe-to-dismiss / carousel drag / details fade values stay on the legacy
-  // Animated API (PanResponder-driven; converted in a follow-up task).
+  // The hero grow/shrink progress, the swipe-to-dismiss offset, the carousel
+  // drag offset, and the details fade all run on the UI thread via
+  // Reanimated shared values, driven by react-native-gesture-handler
+  // (Gesture.Pan) instead of the legacy PanResponder + Animated API.
   const progress = useSharedValue(0);
-  const swipeY = useRef(new Animated.Value(0)).current;
-  const carouselX = useRef(new Animated.Value(0)).current;
-  const detailsFade = useRef(new Animated.Value(1)).current;
+  const swipeY = useSharedValue(0);
+  const carouselX = useSharedValue(0);
+  const detailsFade = useSharedValue(1);
   const verticalDismissActiveRef = useRef(false);
+  const detailsDismissCapturedRef = useRef(false);
 
   // ── Envelope animation values ─────────────────────────────────────────────
   const [envelopePhase, setEnvelopePhase] = useState<EnvelopePhase>("sealed");
@@ -392,7 +404,6 @@ export default function CardSelectOverlay({
   const activeIndexRef = useRef(0);
   const countRef = useRef(count);
   const gestureDirRef = useRef<null | "h" | "v">(null);
-  const pendingGestureDirRef = useRef<null | "h" | "v">(null);
   const openedRef = useRef(false);
   const openSessionRef = useRef(0);
   const modalShownSessionRef = useRef(0);
@@ -410,7 +421,7 @@ export default function CardSelectOverlay({
   countRef.current = displayArticles.length;
 
   // ── Derived animated styles (UI thread, driven by `progress`) ─────────────
-  // The hero card's own translate/scale. Nested inside the PanResponder-owned
+  // The hero card's own translate/scale. Nested inside the gesture-owned
   // outer `cardContainer` (which carries only the `swipeY` dismiss offset),
   // so the rendered transform is identical to the old single combined
   // [translateX, translateY(progress+swipeY), scale] array: translation
@@ -426,11 +437,25 @@ export default function CardSelectOverlay({
   const backdropAnimatedStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
   }));
-  // Multiplies with the legacy `detailsFade` value (still PanResponder-owned)
-  // via nested-view opacity composition rather than Animated.multiply, since
-  // that API cannot combine a Reanimated shared value with a legacy one.
+  // Multiplies with the drag-driven `detailsFade` shared value via
+  // nested-view opacity composition rather than a single combined style,
+  // since progress and detailsFade are updated independently (hero
+  // open/close vs. gesture-driven drags).
   const progressDetailsAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 0.55, 1], [0, 0, 1]),
+  }));
+  // Vertical-dismiss drag offset applied to the card container.
+  const cardSwipeYAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: swipeY.value }],
+  }));
+  // Horizontal carousel drag offset applied to the carousel track.
+  const carouselXAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: carouselX.value }],
+  }));
+  // Fade applied while dragging (either direction) via cardPanGesture /
+  // detailsPanGesture, composed multiplicatively with progressDetailsAnimatedStyle.
+  const ctaFadeAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: detailsFade.value,
   }));
   // ── Open / close lifecycle ────────────────────────────────────────────────
 
@@ -547,12 +572,12 @@ export default function CardSelectOverlay({
         imageUrl: initialImageUrl,
       });
       activeIndexRef.current = initialIndex;
-      carouselX.setValue(-initialIndex * SLOT_W);
-      detailsFade.setValue(1);
+      carouselX.value = -initialIndex * SLOT_W;
+      detailsFade.value = 1;
       setActiveIndex(initialIndex);
       setRendered(true);
       closingRef.current = false;
-      swipeY.setValue(0);
+      swipeY.value = 0;
       progress.value = 0;
       resetEnvelopeAnim();
     } else {
@@ -585,7 +610,7 @@ export default function CardSelectOverlay({
     if (delta !== 0) {
       const newActive = activeIndexRef.current + delta;
       activeIndexRef.current = newActive;
-      carouselX.setValue(-newActive * SLOT_W);
+      carouselX.value = -newActive * SLOT_W;
       setActiveIndex(newActive);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -612,61 +637,62 @@ export default function CardSelectOverlay({
       closingRef.current = false;
       onClose();
     };
+    const finishCloseWithIndex = (idx: number) => {
+      activeIndexRef.current = idx;
+      finishClose();
+    };
 
     // Snapshot all transform values before calculating one shared duration.
     // This keeps the return path straight while allowing a farther source slot
     // to take longer than one that is already nearby.
-    // `progress` is a Reanimated shared value: cancel its in-flight animation
-    // (if any) and read `.value` synchronously instead of the legacy
-    // stopAnimation callback pattern still used for swipeY/carouselX below.
+    // `progress`, `swipeY`, and `carouselX` are all Reanimated shared values:
+    // cancel any in-flight animation and read `.value` synchronously instead
+    // of the legacy Animated.Value `stopAnimation` callback pattern.
     cancelAnimation(progress);
+    cancelAnimation(swipeY);
+    cancelAnimation(carouselX);
     const currentProgress = progress.value;
+    const currentSwipeY = swipeY.value;
+    const currentCarouselX = carouselX.value;
 
-    swipeY.stopAnimation((currentSwipeY) => {
-      carouselX.stopAnimation((currentCarouselX) => {
-        const closeDuration = getCloseDuration(calculateCardReturnDistance({
-          startTx,
-          startTy,
-          originScale,
-          finalScale,
-          cardWidth: CARD_W,
-          progress: currentProgress,
-          swipeY: currentSwipeY,
-          carouselX: currentCarouselX,
-          carouselTargetX: -initIdx * SLOT_W,
-        }));
-        const closeTiming = (value: Animated.Value, toValue: number) =>
-          Animated.timing(value, {
-            toValue,
-            duration: closeDuration,
-            easing: TRANSITION_EASING,
-            useNativeDriver: false,
-          });
+    const closeDuration = getCloseDuration(calculateCardReturnDistance({
+      startTx,
+      startTy,
+      originScale,
+      finalScale,
+      cardWidth: CARD_W,
+      progress: currentProgress,
+      swipeY: currentSwipeY,
+      carouselX: currentCarouselX,
+      carouselTargetX: -initIdx * SLOT_W,
+    }));
 
-        // Fallback: if the animation callback never fires (race condition or
-        // JS scheduler jitter), guarantee cleanup within ~420 ms.
-        fallbackTimer = setTimeout(finishClose, CLOSE_MAX_DURATION + 100);
+    // Fallback: if the animation callback never fires (race condition or
+    // JS scheduler jitter), guarantee cleanup within ~420 ms.
+    fallbackTimer = setTimeout(finishClose, CLOSE_MAX_DURATION + 100);
 
-        // Always include the track, even when the active index already equals
-        // the initial index: it can sit between snap points after a drag.
-        Animated.parallel([
-          closeTiming(carouselX, -initIdx * SLOT_W),
-          closeTiming(swipeY, 0),
-        ]).start(() => {
-          activeIndexRef.current = initIdx;
-          finishClose();
-        });
-
-        // Same duration/curve as the legacy pair above, run on the UI thread.
-        progress.value = withTiming(
-          0,
-          { duration: closeDuration, easing: REANIMATED_TRANSITION_EASING },
-          (finished) => {
-            if (finished) runOnJS(finishClose)();
-          },
-        );
-      });
+    // Always include the track, even when the active index already equals
+    // the initial index: it can sit between snap points after a drag.
+    carouselX.value = withTiming(-initIdx * SLOT_W, {
+      duration: closeDuration,
+      easing: REANIMATED_TRANSITION_EASING,
     });
+    swipeY.value = withTiming(
+      0,
+      { duration: closeDuration, easing: REANIMATED_TRANSITION_EASING },
+      (finished) => {
+        if (finished) runOnJS(finishCloseWithIndex)(initIdx);
+      },
+    );
+
+    // Same duration/curve as the pair above, run on the UI thread.
+    progress.value = withTiming(
+      0,
+      { duration: closeDuration, easing: REANIMATED_TRANSITION_EASING },
+      (finished) => {
+        if (finished) runOnJS(finishClose)();
+      },
+    );
   };
   const requestClose = useCallback(() => runCloseRef.current(), []);
 
@@ -723,26 +749,22 @@ export default function CardSelectOverlay({
     });
   }, [envelopeOpening, envelopeInfo, flipProgress, flapOpenProgress, revealProgress, letterOpacity, letterScale]);
 
-  // ── Pan responder (horizontal carousel + vertical dismiss) ────────────────
+  // ── Gesture-driven horizontal carousel + vertical dismiss ─────────────────
   const beginVerticalDismiss = useCallback(() => {
     if (verticalDismissActiveRef.current) return;
     verticalDismissActiveRef.current = true;
-    Animated.timing(detailsFade, {
-      toValue: 0,
+    detailsFade.value = withTiming(0, {
       duration: DISMISS_FADE_DURATION,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start();
+      easing: REasing.out(REasing.quad),
+    });
   }, [detailsFade]);
 
   const restoreDetailsAfterDismiss = useCallback(() => {
     verticalDismissActiveRef.current = false;
-    Animated.timing(detailsFade, {
-      toValue: 1,
+    detailsFade.value = withTiming(1, {
       duration: 120,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start();
+      easing: REasing.out(REasing.quad),
+    });
   }, [detailsFade]);
 
   const applyDismissResistance = (distance: number) => {
@@ -753,127 +775,153 @@ export default function CardSelectOverlay({
     );
   };
 
-  const cardPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => {
-        if (countRef.current > 1 && Math.abs(g.dx) > 6 && Math.abs(g.dx) >= Math.abs(g.dy)) {
-          pendingGestureDirRef.current = "h";
-          return true;
-        }
-        if (g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx)) {
-          pendingGestureDirRef.current = "v";
-          return true;
-        }
-        pendingGestureDirRef.current = null;
-        return false;
-      },
-      onPanResponderGrant: () => {
-        gestureDirRef.current = pendingGestureDirRef.current;
-        pendingGestureDirRef.current = null;
-        if (gestureDirRef.current === "v") {
-          beginVerticalDismiss();
-        } else {
+  // Card container gesture: horizontal carousel drag + vertical dismiss drag.
+  // Direction is decided on the first move sample past a 4px threshold (the
+  // PanResponder's onMoveShouldSetPanResponder was unreachable dead code,
+  // since onStartShouldSetPanResponder always returned true and captured the
+  // responder before any movement — the onPanResponderMove re-check below was
+  // the actual, load-bearing disambiguation logic, so it is what we port).
+  // `.runOnJS(true)` matches the pattern in app/read.tsx and PreviewPager:
+  // gesture *recognition* stays on the native UI thread (RNGH), while this
+  // callback runs on the JS thread so refs can be mutated directly and
+  // withTiming/withSpring still animate the shared values on the UI thread.
+  const cardPanGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        // Matches the JS-side 4px direction-decision threshold below (see
+        // app/read.tsx's `.minDistance(8)` for the same "keep existing
+        // sensitivity, ported at the native-recognizer level" idiom) so a
+        // plain tap on the card (handled by ArticleCardItem's own Pressable)
+        // is never swallowed by an over-eager native gesture activation.
+        .minDistance(4)
+        .runOnJS(true)
+        .onBegin(() => {
+          gestureDirRef.current = null;
           verticalDismissActiveRef.current = false;
+        })
+        .onUpdate((e) => {
+          const dx = e.translationX;
+          const dy = e.translationY;
+          if (!gestureDirRef.current) {
+            if (countRef.current > 1 && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 4) {
+              gestureDirRef.current = "h";
+              detailsFade.value = withTiming(0, { duration: 120 });
+            } else if (Math.abs(dy) > 4) {
+              gestureDirRef.current = "v";
+              beginVerticalDismiss();
+            }
+          }
           if (gestureDirRef.current === "h") {
-            Animated.timing(detailsFade, { toValue: 0, duration: 120, useNativeDriver: false }).start();
+            const baseX = -activeIndexRef.current * SLOT_W;
+            const raw = baseX + dx;
+            const maxX = 0;
+            const minX = -(countRef.current - 1) * SLOT_W;
+            const rubber = raw > maxX ? maxX + (raw - maxX) * 0.3 : raw < minX ? minX + (raw - minX) * 0.3 : raw;
+            carouselX.value = rubber;
+          } else if (gestureDirRef.current === "v") {
+            if (dy > 0) swipeY.value = applyDismissResistance(dy);
           }
-        }
-      },
-      onPanResponderMove: (_, g) => {
-        if (!gestureDirRef.current) {
-          if (countRef.current > 1 && Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 4) {
-            gestureDirRef.current = "h";
-            Animated.timing(detailsFade, { toValue: 0, duration: 120, useNativeDriver: false }).start();
-          } else if (Math.abs(g.dy) > 4) {
-            gestureDirRef.current = "v";
-            beginVerticalDismiss();
+        })
+        .onEnd((e) => {
+          if (gestureDirRef.current === "h") {
+            const dx = e.translationX;
+            const vx = e.velocityX / VELOCITY_UNIT_SCALE;
+            const cur = activeIndexRef.current;
+            const n = countRef.current;
+            let newIdx = cur;
+            if (Math.abs(vx) > CAROUSEL_FLING_VX) newIdx = vx < 0 ? cur + 1 : cur - 1;
+            else if (Math.abs(dx) >= CAROUSEL_SNAP_THRESHOLD) newIdx = dx < 0 ? cur + 1 : cur - 1;
+            newIdx = Math.max(0, Math.min(n - 1, newIdx));
+            const changed = newIdx !== activeIndexRef.current;
+            activeIndexRef.current = newIdx;
+            if (changed) setActiveIndex(newIdx);
+            carouselX.value = withSpring(-newIdx * SLOT_W, SPRING_CAROUSEL_SNAP);
+            setTimeout(() => {
+              detailsFade.value = withTiming(1, { duration: 120 });
+            }, 80);
+          } else if (gestureDirRef.current === "v") {
+            const dy = e.translationY;
+            const vy = e.velocityY / VELOCITY_UNIT_SCALE;
+            if (dy > 80 || vy > 0.8) runCloseRef.current();
+            else {
+              swipeY.value = withSpring(0, SPRING_SWIPE_BACK);
+              restoreDetailsAfterDismiss();
+            }
+          } else {
+            swipeY.value = withSpring(0, SPRING_SWIPE_BACK);
           }
-        }
-        if (gestureDirRef.current === "h") {
-          const baseX = -activeIndexRef.current * SLOT_W;
-          const raw = baseX + g.dx;
-          const maxX = 0;
-          const minX = -(countRef.current - 1) * SLOT_W;
-          const rubber = raw > maxX ? maxX + (raw - maxX) * 0.3 : raw < minX ? minX + (raw - minX) * 0.3 : raw;
-          carouselX.setValue(rubber);
-        } else if (gestureDirRef.current === "v") {
-          if (g.dy > 0) swipeY.setValue(applyDismissResistance(g.dy));
-        }
-      },
-      onPanResponderRelease: (_, g) => {
-        if (gestureDirRef.current === "h") {
-          const { dx, vx } = g;
-          const cur = activeIndexRef.current;
-          const n = countRef.current;
-          let newIdx = cur;
-          if (Math.abs(vx) > CAROUSEL_FLING_VX) newIdx = vx < 0 ? cur + 1 : cur - 1;
-          else if (Math.abs(dx) >= CAROUSEL_SNAP_THRESHOLD) newIdx = dx < 0 ? cur + 1 : cur - 1;
-          newIdx = Math.max(0, Math.min(n - 1, newIdx));
-          const changed = newIdx !== activeIndexRef.current;
-          activeIndexRef.current = newIdx;
-          if (changed) setActiveIndex(newIdx);
-          Animated.spring(carouselX, { toValue: -newIdx * SLOT_W, useNativeDriver: false, tension: 100, friction: 20, overshootClamping: true }).start();
-          setTimeout(() => {
-            Animated.timing(detailsFade, { toValue: 1, duration: 120, useNativeDriver: false }).start();
-          }, 80);
-        } else if (gestureDirRef.current === "v") {
-          if (g.dy > 80 || g.vy > 0.8) runCloseRef.current();
-          else {
-            Animated.spring(swipeY, {
-              toValue: 0,
-              useNativeDriver: false,
-              tension: 200,
-              friction: 20,
-            }).start();
+          gestureDirRef.current = null;
+        })
+        .onFinalize((_e, success) => {
+          // Mirrors onPanResponderTerminate: only fires when the gesture was
+          // interrupted (e.g. app backgrounded) rather than normally released
+          // — onEnd above already handled the normal-release case, and must
+          // not be fought here (in particular, a drag-triggered close is
+          // already animating swipeY/progress toward 0 on its own timing).
+          if (!success) {
+            swipeY.value = withSpring(0, SPRING_SWIPE_BACK);
             restoreDetailsAfterDismiss();
+            carouselX.value = withSpring(-activeIndexRef.current * SLOT_W, SPRING_CAROUSEL_RESET);
+            gestureDirRef.current = null;
           }
-        } else {
-          Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
-        }
-        gestureDirRef.current = null;
-      },
-      onPanResponderTerminate: () => {
-        Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
-        restoreDetailsAfterDismiss();
-        Animated.spring(carouselX, { toValue: -activeIndexRef.current * SLOT_W, useNativeDriver: false, tension: 100, friction: 20 }).start();
-        gestureDirRef.current = null;
-      },
-    }),
-  ).current;
+        }),
+    [beginVerticalDismiss, restoreDetailsAfterDismiss, carouselX, swipeY, detailsFade],
+  );
 
   // ── Vertical-only pan for details area ───────────────────────────────────
-  const detailsPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
-      onPanResponderGrant: () => {
-        verticalDismissActiveRef.current = false;
-      },
-      onPanResponderMove: (_, g) => {
-        if (g.dy > 0) {
-          beginVerticalDismiss();
-          swipeY.setValue(applyDismissResistance(g.dy));
-        }
-      },
-      onPanResponderRelease: (_, g) => {
-        if (g.dy > 80 || g.vy > 0.8) runCloseRef.current();
-        else {
-          Animated.spring(swipeY, {
-            toValue: 0,
-            useNativeDriver: false,
-            tension: 200,
-            friction: 20,
-          }).start();
-          restoreDetailsAfterDismiss();
-        }
-      },
-      onPanResponderTerminate: () => {
-        Animated.spring(swipeY, { toValue: 0, useNativeDriver: false, tension: 200, friction: 20 }).start();
-        restoreDetailsAfterDismiss();
-      },
-    }),
-  ).current;
+  const detailsPanGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        // This view's child is a horizontal ScrollView (the date/author info
+        // row). The old PanResponder deferred to it for horizontal drags via
+        // `onMoveShouldSetPanResponder` returning false when `|dx| >= |dy|`;
+        // the RNGH equivalent for "only claim the gesture for a
+        // vertical-dominant downward drag, else let the ScrollView handle
+        // it" is failOffsetX/activeOffsetY at the native-recognizer level
+        // (see PreviewPager.tsx's activeOffsetX/failOffsetY for the same
+        // idiom, applied to the other axis here). Reuses the same 8px
+        // magnitude as the JS-side capture check below.
+        .activeOffsetY([-Number.MAX_VALUE, 8])
+        .failOffsetX([-8, 8])
+        .runOnJS(true)
+        .onBegin(() => {
+          detailsDismissCapturedRef.current = false;
+          verticalDismissActiveRef.current = false;
+        })
+        .onUpdate((e) => {
+          const dx = e.translationX;
+          const dy = e.translationY;
+          if (!detailsDismissCapturedRef.current) {
+            if (dy > 8 && Math.abs(dy) > Math.abs(dx)) {
+              detailsDismissCapturedRef.current = true;
+            } else {
+              return;
+            }
+          }
+          if (dy > 0) {
+            beginVerticalDismiss();
+            swipeY.value = applyDismissResistance(dy);
+          }
+        })
+        .onEnd((e) => {
+          if (!detailsDismissCapturedRef.current) return;
+          const dy = e.translationY;
+          const vy = e.velocityY / VELOCITY_UNIT_SCALE;
+          if (dy > 80 || vy > 0.8) runCloseRef.current();
+          else {
+            swipeY.value = withSpring(0, SPRING_SWIPE_BACK);
+            restoreDetailsAfterDismiss();
+          }
+        })
+        .onFinalize((_e, success) => {
+          if (!success && detailsDismissCapturedRef.current) {
+            swipeY.value = withSpring(0, SPRING_SWIPE_BACK);
+            restoreDetailsAfterDismiss();
+          }
+          detailsDismissCapturedRef.current = false;
+        }),
+    [beginVerticalDismiss, restoreDetailsAfterDismiss, swipeY],
+  );
 
   // ── Active card info ──────────────────────────────────────────────────────
   const activeMeta = displayMetas[activeIndex] ?? {};
@@ -905,6 +953,10 @@ export default function CardSelectOverlay({
   }, [rendered, fadeOverlayOpacity]);
 
   const isEnvelopeSealed = !!envelopeInfo && envelopePhase !== "revealed";
+  const detailsFadeAnimatedStyle = useAnimatedStyle(
+    () => ({ opacity: isEnvelopeSealed ? 0 : detailsFade.value }),
+    [isEnvelopeSealed],
+  );
 
   const runReadTransition = useCallback((callback: (index: number) => void) => {
     const idx = activeIndexRef.current;
@@ -1181,21 +1233,21 @@ export default function CardSelectOverlay({
         <Pressable style={StyleSheet.absoluteFill} onPress={requestClose} />
       </RAnimated.View>
 
-      <Animated.View
+      <GestureDetector gesture={cardPanGesture}>
+      <RAnimated.View
         style={[
           styles.cardContainer,
           {
             left: cardBoxLeft,
             top: boxTop,
-            transform: [{ translateY: swipeY }],
           },
+          cardSwipeYAnimatedStyle,
         ]}
         onLayout={handleOriginCardLayout}
-        {...cardPanResponder.panHandlers}
       >
         <RAnimated.View style={[styles.cardContainerInner, cardHeroAnimatedStyle]}>
         {displayArticles.length > 1 ? (
-          <Animated.View style={[styles.carouselTrack, { width: trackW, transform: [{ translateX: carouselX }] }]}>
+          <RAnimated.View style={[styles.carouselTrack, { width: trackW }, carouselXAnimatedStyle]}>
             {displayArticles.map((art, i) => {
               const meta = displayMetas[i] ?? {};
               const imageUrl = getCoverImageUrl(art);
@@ -1254,7 +1306,7 @@ export default function CardSelectOverlay({
                 </CarouselSlotFrame>
               );
             })}
-          </Animated.View>
+          </RAnimated.View>
         ) : displayArticles[0] == null ? (
           <SkeletonCard />
         ) : (
@@ -1301,20 +1353,20 @@ export default function CardSelectOverlay({
           </>
         )}
         </RAnimated.View>
-      </Animated.View>
+      </RAnimated.View>
+      </GestureDetector>
 
       {/* Details (info bar) — hidden while envelope is sealed. Outer node
           carries the progress-driven fade (Reanimated, UI thread); inner node
-          carries the legacy detailsFade (PanResponder-owned). Nested opacity
-          composes multiplicatively, matching the old Animated.multiply. */}
+          carries the drag-driven detailsFade (Reanimated shared value, driven
+          by detailsPanGesture). Nested opacity composes multiplicatively,
+          matching the old Animated.multiply. */}
       <RAnimated.View
         style={[styles.detailsContainer, { top: detailsTop, left: infoBoxLeft, right: infoBoxLeft }, progressDetailsAnimatedStyle]}
         pointerEvents={rendered && !isEnvelopeSealed ? "auto" : "none"}
       >
-      <Animated.View
-        style={{ opacity: isEnvelopeSealed ? 0 : detailsFade }}
-        {...detailsPanResponder.panHandlers}
-      >
+      <GestureDetector gesture={detailsPanGesture}>
+      <RAnimated.View style={detailsFadeAnimatedStyle}>
         {dateLabel ? (
           <View style={styles.infoBar}>
             <ScrollView
@@ -1379,7 +1431,8 @@ export default function CardSelectOverlay({
             ))}
           </View>
         ) : null}
-      </Animated.View>
+      </RAnimated.View>
+      </GestureDetector>
       </RAnimated.View>
 
       {/* CTA button — "개봉하기" when sealed, "읽기" when revealed. Same
@@ -1389,7 +1442,7 @@ export default function CardSelectOverlay({
         style={[styles.ctaWrapper, { bottom: bottomInset + 16, left: infoBoxLeft, right: infoBoxLeft }, progressDetailsAnimatedStyle]}
         pointerEvents={rendered ? "auto" : "none"}
       >
-      <Animated.View style={{ opacity: detailsFade }}>
+      <RAnimated.View style={ctaFadeAnimatedStyle}>
         {isEnvelopeSealed ? (
           <Animated.View style={{ opacity: ctaButtonOpacity }}>
             <ScalePressable
@@ -1425,7 +1478,7 @@ export default function CardSelectOverlay({
             <Text style={styles.ctaLabel} numberOfLines={1}>읽기</Text>
           </ScalePressable>
         )}
-      </Animated.View>
+      </RAnimated.View>
       </RAnimated.View>
 
       {/* Inline modal: confirm / info dialogs passed by the caller.
