@@ -60,7 +60,6 @@ export default function WritingStateBar({
 
       <ActionSheetModal
         visible={visible}
-        title={`${label} 단계`}
         actions={menuActions}
         onClose={closeMenu}
       />
