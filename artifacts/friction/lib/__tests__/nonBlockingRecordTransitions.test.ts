@@ -193,6 +193,46 @@ describe("non-blocking editor transitions", () => {
     );
   });
 
+  it("suppresses the not-dividing detail error only for its own in-flight closing transition", () => {
+    const screen = readScreen("app/on-01a.tsx");
+
+    // The suppression flag must be threaded into detailResolution so the
+    // review screen's own optimistic status patch never flashes a false
+    // "not-dividing" error, while any other cause of failure (a real 404,
+    // network error, etc.) is untouched.
+    expect(screen).toContain(
+      "suppressNotDividingError: closingTransitionSuppressionRef.current.isPending(),",
+    );
+
+    // Reset on every focus: returning to this screen (back navigation, or a
+    // failed/aborted transition landing the user back here) must re-enable
+    // normal error detection. Clearing the controller alone would not cause
+    // a rerender, so the focus handler must also force one whenever the
+    // controller reports it actually cleared a pending suppression.
+    expect(screen).toContain(
+      "const closingTransitionSuppressionRef = useRef<ClosingTransitionSuppressionController>(",
+    );
+    const focusReset = screen.slice(
+      screen.indexOf("const closingTransitionSuppressionRef = useRef<ClosingTransitionSuppressionController>("),
+      screen.indexOf("// ── 데이터 fetching"),
+    );
+    expect(focusReset).toContain("useFocusEffect(");
+    expect(focusReset).toContain("closingTransitionSuppressionRef.current.handleFocus()");
+    expect(focusReset).toContain("forceDetailResolutionRecheck();");
+
+    // The controller must begin before the optimistic cache patch that would
+    // otherwise cause the very next render to see a non-DIVIDING status for
+    // its own article.
+    const nextHandler = screen.slice(
+      screen.indexOf("const handleNextToClosing"),
+      screen.indexOf("// ── 작성/분할 모드 뒤로가기"),
+    );
+    expect(nextHandler.indexOf("closingTransitionSuppressionRef.current.begin();")).toBeLessThan(
+      nextHandler.indexOf("stageArticleTransitionSnapshot("),
+    );
+    expect(nextHandler).toContain('status: "CLOSING",\n    }, article);');
+  });
+
   it("opens closing immediately after the local recovery snapshot is durable", () => {
     const screen = readScreen("app/on-01a.tsx");
     const nextHandler = screen.slice(

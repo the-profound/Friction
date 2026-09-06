@@ -153,6 +153,7 @@ export function detailQueryRetryDelayMs(attemptIndex: number): number {
 
 function resolveArticle<TThought, TArticle extends DividingArticle>(
   article: DetailQuerySnapshot<TArticle>,
+  options?: { suppressNotDividingError?: boolean },
 ): DetailEntityResolution<TThought, TArticle> {
   if (article.data?.status === "DIVIDING") {
     return { kind: "success", entity: "article", article: article.data };
@@ -169,6 +170,18 @@ function resolveArticle<TThought, TArticle extends DividingArticle>(
   }
 
   if (article.data) {
+    // A caller can be mid-way through its own intentional forward transition
+    // (e.g. review → closing), having already optimistically patched this
+    // same article's status away from "DIVIDING" before navigation actually
+    // lands. That self-inflicted mismatch is not a real "this article is
+    // gone" state — surfacing the not-dividing error here would flash a
+    // false failure screen for the one render before the route change
+    // completes. The caller opts into this suppression only while its own
+    // transition is in flight, so a genuinely stale/invalid article (one the
+    // caller did not just optimistically move itself) is unaffected.
+    if (options?.suppressNotDividingError) {
+      return { kind: "loading", entity: "article" };
+    }
     return { kind: "error", entity: "article", reason: "not-dividing", retryEntity: "article" };
   }
 
@@ -183,13 +196,22 @@ export function resolveDetailEntity<TThought, TArticle extends DividingArticle>(
   requestMode,
   thought,
   article,
+  suppressNotDividingError,
 }: {
   requestMode: DetailRequestMode;
   thought: DetailQuerySnapshot<TThought>;
   article: DetailQuerySnapshot<TArticle>;
+  /**
+   * Set while the caller has just staged its own optimistic forward
+   * transition away from the "DIVIDING" status it depends on (e.g. review →
+   * closing) and is about to navigate away. Suppresses the resulting
+   * "not-dividing" false positive for that one in-between render without
+   * masking a genuine query error or a real, externally-caused mismatch.
+   */
+  suppressNotDividingError?: boolean;
 }): DetailEntityResolution<TThought, TArticle> {
   if (requestMode === "dividing") {
-    return resolveArticle(article);
+    return resolveArticle(article, { suppressNotDividingError });
   }
 
   if (thought.data) {
@@ -206,7 +228,7 @@ export function resolveDetailEntity<TThought, TArticle extends DividingArticle>(
     // masquerade as "not-implemented", or a real "not-implemented" get
     // overwritten by whatever the article lookup happens to return.
     if (isNotFound(thought.error) && hasStructuredErrorBody(thought.error as { data?: unknown })) {
-      return resolveArticle(article);
+      return resolveArticle(article, { suppressNotDividingError });
     }
     return {
       kind: "error",

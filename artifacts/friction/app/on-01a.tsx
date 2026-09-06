@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef, useReducer } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams, Stack, useNavigation } from "expo-router";
+import { useRouter, useLocalSearchParams, Stack, useNavigation, useFocusEffect } from "expo-router";
 import { usePreventRemove } from "expo-router/build/react-navigation/core";
 import type { NavigationAction } from "expo-router/build/react-navigation/routers";
 import { Feather } from "@expo/vector-icons";
@@ -29,6 +29,10 @@ import {
   type DetailErrorReason,
 } from "@/lib/detailEntityResolution";
 import { GuardedReturnSession } from "@/lib/guardedReturnSession";
+import {
+  createClosingTransitionSuppressionController,
+  type ClosingTransitionSuppressionController,
+} from "@/lib/closingTransitionSuppression";
 import { useEditorLayout } from "@/lib/useEditorLayout";
 import { bodyTypographyMetrics, getBodyContentHeight } from "@/lib/bodyLayout";
 import {
@@ -234,6 +238,27 @@ export default function WritingScreen() {
   } = editorLayout;
   const typography = useMemo(() => bodyTypographyMetrics(editorLayout), [editorLayout]);
 
+  // Suppresses the false-positive "not-dividing" detail error for the
+  // render(s) between staging this screen's own optimistic "review →
+  // closing" status patch and the route actually leaving this screen. The
+  // flag itself is a plain (non-state) controller so `begin()` takes effect
+  // synchronously on the very render the optimistic cache patch triggers,
+  // not one tick later. On every focus (a failed/aborted transition, or the
+  // user returning here) the controller is cleared, and — since clearing a
+  // plain flag would not itself trigger a re-render — a version bump forces
+  // one, so a genuine error is detected normally again immediately.
+  const closingTransitionSuppressionRef = useRef<ClosingTransitionSuppressionController>(
+    createClosingTransitionSuppressionController(),
+  );
+  const [, forceDetailResolutionRecheck] = useReducer((n: number) => n + 1, 0);
+  useFocusEffect(
+    useCallback(() => {
+      if (closingTransitionSuppressionRef.current.handleFocus()) {
+        forceDetailResolutionRecheck();
+      }
+    }, []),
+  );
+
   // ── 데이터 fetching ─────────────────────────────────────────────────────────
   //
   // Routes identify their entity type: draft routes fetch only their thought,
@@ -271,6 +296,7 @@ export default function WritingScreen() {
     requestMode: modeParam === "dividing" ? "dividing" : "thought",
     thought: thoughtQuery,
     article: { ...articleQuery, data: article },
+    suppressNotDividingError: closingTransitionSuppressionRef.current.isPending(),
   });
 
   // isThoughtMode: the id refers to a thought (draft writing stage).
@@ -2008,6 +2034,11 @@ export default function WritingScreen() {
     }
 
     const pagesJson = pgs.map((p) => p.content);
+    // Mark this transition as self-initiated before the optimistic patch
+    // below can trigger a re-render, so the very next render already
+    // suppresses the "not-dividing" detail error the patch would otherwise
+    // cause (this screen no longer sees its own article as DIVIDING).
+    closingTransitionSuppressionRef.current.begin();
     stageArticleTransitionSnapshot(queryClient, id, {
       title: titleRef.current,
       content: cur,

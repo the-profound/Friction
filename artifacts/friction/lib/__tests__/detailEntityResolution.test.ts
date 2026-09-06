@@ -176,6 +176,50 @@ describe("detail entity resolution", () => {
     });
   });
 
+  it("suppresses the not-dividing false positive while the caller's own forward transition is in flight", () => {
+    // The review screen optimistically flips its own article's status to
+    // "CLOSING" before navigating away; while that self-initiated patch is
+    // pending, this must NOT read as "article is gone" (it would otherwise,
+    // since it's no longer DIVIDING).
+    expect(resolveDetailEntity({
+      requestMode: "dividing",
+      thought: missing<Thought>(),
+      article: success<Article>({ id: "article-1", status: "CLOSING", content: "마감 전환 중" }),
+      suppressNotDividingError: true,
+    })).toEqual({ kind: "loading", entity: "article" });
+  });
+
+  it("keeps reporting not-dividing once suppression is turned back off (transition finished, failed, or the user returned)", () => {
+    expect(resolveDetailEntity({
+      requestMode: "dividing",
+      thought: missing<Thought>(),
+      article: success<Article>({ id: "article-1", status: "CLOSING", content: "마감 전환 중" }),
+      suppressNotDividingError: false,
+    })).toMatchObject({
+      kind: "error",
+      entity: "article",
+      reason: "not-dividing",
+      retryEntity: "article",
+    });
+  });
+
+  it("never lets suppression hide a genuine query failure (deleted/nonexistent article)", () => {
+    // Suppression only defuses the caller's own optimistic status patch. A
+    // real 404/409/connection failure from the server must still surface,
+    // even while the caller believes a transition is in flight.
+    expect(resolveDetailEntity({
+      requestMode: "dividing",
+      thought: missing<Thought>(),
+      article: missing<Article>(),
+      suppressNotDividingError: true,
+    })).toMatchObject({
+      kind: "error",
+      entity: "article",
+      reason: "not-found",
+      retryEntity: "article",
+    });
+  });
+
   it("reports an expired session distinctly from a missing record", () => {
     expect(resolveDetailEntity({
       requestMode: "thought",
