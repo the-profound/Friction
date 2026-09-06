@@ -449,25 +449,7 @@ describe("thought question queue API", () => {
     });
   });
 
-  it("never adds questions beyond the six-card maximum", async () => {
-    seedQueue("user-a", [
-      "existing-1",
-      "existing-2",
-      "existing-3",
-      "existing-4",
-      "existing-5",
-      "existing-6",
-    ]);
-    seedCandidates("user-a", 18);
-
-    await withServer(async (baseUrl) => {
-      const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
-      expect(body.queue).toHaveLength(6);
-      expect(state.generatedCount).toBe(0);
-    });
-  });
-
-  it("trims an oversized persisted queue to the first six FIFO questions", async () => {
+  it("never adds questions beyond the twelve-card maximum", async () => {
     seedQueue("user-a", [
       "existing-1",
       "existing-2",
@@ -476,6 +458,36 @@ describe("thought question queue API", () => {
       "existing-5",
       "existing-6",
       "existing-7",
+      "existing-8",
+      "existing-9",
+      "existing-10",
+      "existing-11",
+      "existing-12",
+    ]);
+    seedCandidates("user-a", 36);
+
+    await withServer(async (baseUrl) => {
+      const body = (await (await request(baseUrl, "user-a", "/thoughts/question-queue")).json()) as QueueResponse;
+      expect(body.queue).toHaveLength(12);
+      expect(state.generatedCount).toBe(0);
+    });
+  });
+
+  it("trims an oversized persisted queue to the first twelve FIFO questions", async () => {
+    seedQueue("user-a", [
+      "existing-1",
+      "existing-2",
+      "existing-3",
+      "existing-4",
+      "existing-5",
+      "existing-6",
+      "existing-7",
+      "existing-8",
+      "existing-9",
+      "existing-10",
+      "existing-11",
+      "existing-12",
+      "existing-13",
     ]);
 
     await withServer(async (baseUrl) => {
@@ -487,13 +499,19 @@ describe("thought question queue API", () => {
         "existing-4",
         "existing-5",
         "existing-6",
+        "existing-7",
+        "existing-8",
+        "existing-9",
+        "existing-10",
+        "existing-11",
+        "existing-12",
       ]);
-      expect(state.queues.get("user-a")).toHaveLength(6);
-      expect(state.thoughts.get("existing-7")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.queues.get("user-a")).toHaveLength(12);
+      expect(state.thoughts.get("existing-13")?.deletedAt).toBeInstanceOf(Date);
     });
   });
 
-  it("keeps only six questions when refreshing an oversized queue", async () => {
+  it("keeps only twelve questions when refreshing an oversized queue", async () => {
     seedQueue("user-a", [
       "question-1",
       "question-2",
@@ -502,6 +520,12 @@ describe("thought question queue API", () => {
       "question-5",
       "question-6",
       "question-7",
+      "question-8",
+      "question-9",
+      "question-10",
+      "question-11",
+      "question-12",
+      "question-13",
     ]);
 
     await withServer(async (baseUrl) => {
@@ -516,10 +540,16 @@ describe("thought question queue API", () => {
         "question-4",
         "question-5",
         "question-6",
+        "question-7",
+        "question-8",
+        "question-9",
+        "question-10",
+        "question-11",
+        "question-12",
         "question-1",
       ]);
-      expect(state.queues.get("user-a")).toHaveLength(6);
-      expect(state.thoughts.get("question-7")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.queues.get("user-a")).toHaveLength(12);
+      expect(state.thoughts.get("question-13")?.deletedAt).toBeInstanceOf(Date);
     });
   });
 
@@ -532,6 +562,12 @@ describe("thought question queue API", () => {
       "question-5",
       "question-6",
       "question-7",
+      "question-8",
+      "question-9",
+      "question-10",
+      "question-11",
+      "question-12",
+      "question-13",
     ]);
 
     await withServer(async (baseUrl) => {
@@ -548,13 +584,19 @@ describe("thought question queue API", () => {
           { id: "question-4" },
           { id: "question-5" },
           { id: "question-6" },
+          { id: "question-7" },
+          { id: "question-8" },
+          { id: "question-9" },
+          { id: "question-10" },
+          { id: "question-11" },
+          { id: "question-12" },
         ],
       });
-      expect(state.queues.get("user-a")).toHaveLength(6);
+      expect(state.queues.get("user-a")).toHaveLength(12);
     });
   });
 
-  it("keeps only six questions after activating one from an oversized queue", async () => {
+  it("keeps only twelve questions after activating one from an oversized queue", async () => {
     seedQueue("user-a", [
       "question-1",
       "question-2",
@@ -564,6 +606,12 @@ describe("thought question queue API", () => {
       "question-6",
       "question-7",
       "question-8",
+      "question-9",
+      "question-10",
+      "question-11",
+      "question-12",
+      "question-13",
+      "question-14",
     ]);
 
     await withServer(async (baseUrl) => {
@@ -577,15 +625,21 @@ describe("thought question queue API", () => {
         "question-4",
         "question-5",
         "question-6",
+        "question-7",
+        "question-8",
+        "question-9",
+        "question-10",
+        "question-11",
+        "question-12",
       ]);
-      expect(state.queues.get("user-a")).toHaveLength(5);
-      expect(state.thoughts.get("question-7")?.deletedAt).toBeInstanceOf(Date);
-      expect(state.thoughts.get("question-8")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.queues.get("user-a")).toHaveLength(11);
+      expect(state.thoughts.get("question-13")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.thoughts.get("question-14")?.deletedAt).toBeInstanceOf(Date);
     });
   });
 
   it("returns the minimum backlog immediately and fills the full queue via background AI", async () => {
-    seedCandidates("user-a", 18);
+    seedCandidates("user-a", 36);
 
     await withServer(async (baseUrl) => {
       const response = await request(baseUrl, "user-a", "/thoughts/question-queue");
@@ -599,9 +653,9 @@ describe("thought question queue API", () => {
 
       // Background AI fills remaining slots up to the target size.
       await _drainBackgroundGenerations();
-      expect(state.generatedCount).toBe(6); // 3 random fallback + 3 AI
-      expect(state.lastCandidateLimit).toBe(18);
-      expect(state.queues.get("user-a")).toHaveLength(6);
+      expect(state.generatedCount).toBe(12); // 3 random fallback + 9 AI
+      expect(state.lastCandidateLimit).toBe(36);
+      expect(state.queues.get("user-a")).toHaveLength(12);
     });
   });
 
@@ -917,7 +971,98 @@ describe("thought question queue API", () => {
       await _drainBackgroundGenerations();
 
       // Only one background generation pass should have run for this user.
-      expect(aiCallCount).toBeLessThanOrEqual(3); // max one pass of 3 questions
+      expect(aiCallCount).toBeLessThanOrEqual(6); // max one pass (18 candidates / 3 per group)
+    });
+  });
+
+  it("expires an unactivated question 72 hours after creation and refills to the minimum on GET", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+    const stale = state.thoughts.get("question-a")!;
+    stale.createdAt = new Date(Date.now() - 73 * 60 * 60 * 1000);
+
+    await withServer(async (baseUrl) => {
+      const body = (await (
+        await request(baseUrl, "user-a", "/thoughts/question-queue")
+      ).json()) as QueueResponse;
+
+      // The expired card is gone and the minimum backlog is refilled synchronously.
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "question-b",
+        "question-c",
+        "generated-1",
+      ]);
+      expect(stale.deletedAt).toBeInstanceOf(Date);
+      expect(state.queues.get("user-a")?.some((entry) => entry.thoughtId === "question-a")).toBe(false);
+    });
+  });
+
+  it("does not expire a question created less than 72 hours ago", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+    const recent = state.thoughts.get("question-a")!;
+    recent.createdAt = new Date(Date.now() - 71 * 60 * 60 * 1000);
+
+    await withServer(async (baseUrl) => {
+      const body = (await (
+        await request(baseUrl, "user-a", "/thoughts/question-queue")
+      ).json()) as QueueResponse;
+
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "question-a",
+        "question-b",
+        "question-c",
+      ]);
+      expect(recent.deletedAt).toBeNull();
+    });
+  });
+
+  it("expires stale questions on refresh and tops the queue back up toward the target", async () => {
+    seedQueue("user-a", [
+      "question-1",
+      "question-2",
+      "question-3",
+      "question-4",
+      "question-5",
+    ]);
+    for (const id of ["question-4", "question-5"]) {
+      state.thoughts.get(id)!.createdAt = new Date(Date.now() - 90 * 60 * 60 * 1000);
+    }
+    seedCandidates("user-a", 3);
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-queue/refresh", {
+        method: "POST",
+        body: JSON.stringify({ currentThoughtId: "question-1" }),
+      });
+      const body = (await response.json()) as QueueResponse;
+
+      // The two stale cards are dropped before the current card is requeued;
+      // the three still-fresh cards remain (current moved to the end), and the
+      // refresh's own AI phase (synchronous, not background) tops it back up.
+      expect(body.queue.map((item: { id: string }) => item.id)).toEqual([
+        "question-2",
+        "question-3",
+        "question-1",
+        "generated-1",
+      ]);
+      expect(state.thoughts.get("question-4")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.thoughts.get("question-5")?.deletedAt).toBeInstanceOf(Date);
+      expect(state.generatedCount).toBe(1);
+      expect(state.queues.get("user-a")).toHaveLength(4);
+    });
+  });
+
+  it("never expires a question that has already been activated (status is no longer PRELIMINARY)", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+    // Activation removes the row from the queue and flips status to NORMAL;
+    // simulate the leftover PRELIMINARY-only invariant by directly aging an
+    // already-active (non-queued) thought and confirming cleanup leaves it alone.
+    const activated = thought("already-active", "user-a", "NORMAL");
+    activated.createdAt = new Date(Date.now() - 200 * 60 * 60 * 1000);
+    state.thoughts.set("already-active", activated);
+
+    await withServer(async (baseUrl) => {
+      await request(baseUrl, "user-a", "/thoughts/question-queue");
+      expect(activated.deletedAt).toBeNull();
     });
   });
 });

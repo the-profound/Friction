@@ -121,3 +121,4 @@
 - [Source-text test substring fragility](friction-source-text-test-substring-fragility.md) — bare-word `not.toContain("visible"/"dim"/"BottomSheet")` false-fails on comments; assert the syntactic shape instead.
 - [SwipeableRow shadow-clip vs horizontal-clip](friction-swipeablerow-shadow-clip.md) — reserve vertical room via padding-in/negative-margin-out on both clip layers so shadows bleed without flattening; horizontal clip must stay untouched.
 - [Space list recent-letters cache key wiring](friction-space-recent-letters-cache-key-wiring.md) — of.tsx's longer query key correctly prefix-matches the schedule screen's shorter invalidation key; verified no bug there for cancelled-reservation letters.
+- [Question-queue lazy expiry ordering](friction-question-queue-lazy-expiry.md) — age-based expiry is its own step between cleanup and trim; refresh/activate's AI fill is synchronous (in the response), unlike GET's background fill.

@@ -56,9 +56,14 @@ export function getInitialThoughtStatus(
 
 // A bounded backlog lets the archive browse questions continuously without
 // letting display retries trigger unbounded AI work.
-const QUESTION_QUEUE_TARGET_SIZE = 6;
+const QUESTION_QUEUE_TARGET_SIZE = 12;
 const QUESTION_QUEUE_MIN_SIZE = 3;
 const QUESTION_QUEUE_SOURCE_CANDIDATE_LIMIT = QUESTION_QUEUE_TARGET_SIZE * 3;
+// A question card that sits unactivated this long is treated as stale and is
+// removed the next time the queue is read or refreshed (lazy cleanup — no
+// separate scheduled job).
+const QUESTION_QUEUE_EXPIRY_HOURS = 72;
+const QUESTION_QUEUE_EXPIRY_MS = QUESTION_QUEUE_EXPIRY_HOURS * 60 * 60 * 1000;
 
 type ThoughtRow = typeof thoughtsTable.$inferSelect;
 const questionSourceThought = alias(thoughtsTable, "question_source_thought");
@@ -134,6 +139,36 @@ async function cleanupQuestionQueue(
   `);
 }
 
+async function expireQuestionQueue(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+  queued: Awaited<ReturnType<typeof getQueuedQuestions>>,
+) {
+  const cutoff = new Date(Date.now() - QUESTION_QUEUE_EXPIRY_MS);
+  const expired = queued.filter((entry) => entry.thought.createdAt < cutoff);
+  if (expired.length === 0) return queued;
+
+  const deletedAt = new Date();
+  for (const entry of expired) {
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(eq(thoughtQuestionQueueTable.id, entry.queueId));
+    await tx
+      .update(thoughtsTable)
+      .set({ deletedAt })
+      .where(
+        and(
+          eq(thoughtsTable.id, entry.thought.id),
+          eq(thoughtsTable.authorId, userId),
+          eq(thoughtsTable.status, "PRELIMINARY"),
+          eq(thoughtsTable.createdFrom, "question"),
+        ),
+      );
+  }
+  const expiredQueueIds = new Set(expired.map((entry) => entry.queueId));
+  return queued.filter((entry) => !expiredQueueIds.has(entry.queueId));
+}
+
 async function trimQuestionQueue(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   userId: string,
@@ -168,7 +203,12 @@ async function normalizeQuestionQueue(
   userId: string,
 ) {
   await cleanupQuestionQueue(tx, userId);
-  return trimQuestionQueue(tx, userId, await getQueuedQuestions(tx, userId));
+  const queued = await expireQuestionQueue(
+    tx,
+    userId,
+    await getQueuedQuestions(tx, userId),
+  );
+  return trimQuestionQueue(tx, userId, queued);
 }
 
 // ——— Background AI generation guard and drain helper ———
