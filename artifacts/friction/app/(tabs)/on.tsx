@@ -46,6 +46,7 @@ import AnimatedSearchBar from "@/components/AnimatedSearchBar/AnimatedSearchBar"
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
+import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
 import { PageHeader, HEADER_FADE_HEIGHT } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
@@ -398,6 +399,7 @@ function OnScreenContent() {
   const [isArchiving, setIsArchiving] = useState(false);
   const isArchivingRef = useRef(false);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [isActivatingQuestion, setIsActivatingQuestion] = useState(false);
   // Refresh and activation mutate the same server-owned FIFO queue. Keep one
   // synchronous guard so a late response can never replace a newer snapshot.
   const questionQueueMutationPendingRef = useRef(false);
@@ -815,6 +817,7 @@ function OnScreenContent() {
   const openQuestion = useCallback(async (thought: Thought) => {
     if (activateQuestion.isPending || questionQueueMutationPendingRef.current) return;
     questionQueueMutationPendingRef.current = true;
+    setIsActivatingQuestion(true);
     const cacheSnapshot = snapshotRecordListCaches(queryClient);
     try {
       await Promise.all([
@@ -830,6 +833,7 @@ function OnScreenContent() {
       showToast({ message: "질문을 시작하지 못했습니다. 다시 시도해주세요.", type: "error" });
     } finally {
       questionQueueMutationPendingRef.current = false;
+      setIsActivatingQuestion(false);
     }
   }, [activateQuestion, queryClient, router, showToast]);
 
@@ -1333,6 +1337,10 @@ function OnScreenContent() {
           </ScalePressable>
         </View>
       </BottomSheet>
+      <SubmitProgressOverlay
+        visible={isActivatingQuestion}
+        message="단상을 준비하는 중이에요"
+      />
     </View>
   );
 }
