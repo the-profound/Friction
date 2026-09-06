@@ -39,6 +39,8 @@ interface ArticleCardItemProps {
   visibility?: string | null;
   /** Limits shadow strength when the card sits inside a clipped date carousel. */
   carouselShadow?: boolean;
+  /** Removes the card surface shadow entirely, e.g. for compact previews stacked inside another shadowed container. */
+  noShadow?: boolean;
   /**
    * Selection overlays use the same hero progress to blend a carousel card's
    * raised surface into the selected-card treatment and back on close.
@@ -118,6 +120,7 @@ function ArticleCardItem({
   visibility,
   carouselShadow = false,
   shadowProgress,
+  noShadow = false,
   onImageReady,
 }: ArticleCardItemProps) {
   const w = cardWidth ?? CARD_W;
@@ -140,7 +143,7 @@ function ArticleCardItem({
       <Animated.View
         style={[
           styles.cardSurface,
-          getCardSurfaceShadowStyle(carouselShadow, shadowProgress),
+          !noShadow && getCardSurfaceShadowStyle(carouselShadow, shadowProgress),
           { width: w, height: h, borderRadius },
         ]}
       >

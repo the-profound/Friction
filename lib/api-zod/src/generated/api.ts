@@ -202,6 +202,12 @@ export const ListUserSpaceLettersResponseItem = zod.object({
     .object({
       status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
       scheduledAt: zod.date(),
+      sentAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+        ),
       roundId: zod.string().uuid().nullable(),
       date: zod.date().nullable(),
       slotId: zod.string().uuid().nullable(),
@@ -212,6 +218,12 @@ export const ListUserSpaceLettersResponseItem = zod.object({
       "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
     )
     .nullish(),
+  everScheduled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
+    ),
 });
 export const ListUserSpaceLettersResponse = zod.array(
   ListUserSpaceLettersResponseItem,
@@ -3100,6 +3112,12 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
     .object({
       status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
       scheduledAt: zod.date(),
+      sentAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+        ),
       roundId: zod.string().uuid().nullable(),
       date: zod.date().nullable(),
       slotId: zod.string().uuid().nullable(),
@@ -3183,6 +3201,12 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
         .object({
           status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
           scheduledAt: zod.date(),
+          sentAt: zod
+            .date()
+            .nullish()
+            .describe(
+              "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+            ),
           roundId: zod.string().uuid().nullable(),
           date: zod.date().nullable(),
           slotId: zod.string().uuid().nullable(),
@@ -3193,6 +3217,12 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
           "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
         )
         .nullish(),
+      everScheduled: zod
+        .boolean()
+        .optional()
+        .describe(
+          "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
+        ),
     })
     .nullish(),
   articleTitle: zod
@@ -3593,6 +3623,12 @@ export const ListSpaceLettersResponseItem = zod.object({
     .object({
       status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
       scheduledAt: zod.date(),
+      sentAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+        ),
       roundId: zod.string().uuid().nullable(),
       date: zod.date().nullable(),
       slotId: zod.string().uuid().nullable(),
@@ -3603,6 +3639,12 @@ export const ListSpaceLettersResponseItem = zod.object({
       "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
     )
     .nullish(),
+  everScheduled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
+    ),
 });
 export const ListSpaceLettersResponse = zod.array(ListSpaceLettersResponseItem);
 
@@ -3711,6 +3753,12 @@ export const UpdateSpaceLetterVisibilityResponse = zod.object({
     .object({
       status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
       scheduledAt: zod.date(),
+      sentAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+        ),
       roundId: zod.string().uuid().nullable(),
       date: zod.date().nullable(),
       slotId: zod.string().uuid().nullable(),
@@ -3721,6 +3769,12 @@ export const UpdateSpaceLetterVisibilityResponse = zod.object({
       "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
     )
     .nullish(),
+  everScheduled: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
+    ),
 });
 
 /**

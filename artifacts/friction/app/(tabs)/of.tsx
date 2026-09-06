@@ -25,6 +25,7 @@ import { useUser } from "@/contexts/UserContext";
 import { isQueryStale } from "@/lib/useScreenFocused";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import { spaceLetterToViewModel } from "@/hooks/useSpaceLetterCards";
+import { sortRecentLetters } from "@/lib/spaceRecentLetters";
 import {
   useListSpaces,
   useListMySpaceInvitations,
@@ -75,15 +76,9 @@ function sortSpaces(spaces: SpaceListItem[]): SpaceListItem[] {
   });
 }
 
-function sortRecentLetters(letters: SpaceLetter[]): SpaceLetter[] {
-  return [...letters]
-    .filter((letter) => letter.articleTitle || letter.articleExcerpt)
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
-    .slice(0, 3);
-}
+// 공간 카드 최근 편지 선별/정렬 로직은 lib/spaceRecentLetters.ts에서 관리한다
+// (발신 완료(SENT) 또는 진짜 레거시(reservation 없고 everScheduled도 false) 편지만,
+// 실제 발신 시각(sentAt, 없으면 scheduledAt) 기준 최신순).
 function SpaceCard({
   item,
   onPress,
@@ -1057,6 +1052,7 @@ function RecentPostCards({
               cardWidth={coverWidth}
               cardRadius={coverRadius}
               disabled
+              noShadow
               onPress={() => {}}
             />
           </View>

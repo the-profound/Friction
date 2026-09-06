@@ -84,11 +84,14 @@ describe("space list pending sections", () => {
 
   it("loads and displays up to three recent visible space posts inside each space card", () => {
     const source = readAppFile("app/(tabs)/of.tsx");
+    const recentLettersLogic = readAppFile("lib/spaceRecentLetters.ts");
 
     expect(source).toContain("useQueries");
     expect(source).toContain("getListSpaceLettersQueryKey(space.id)");
-    expect(source).toContain("sortRecentLetters");
-    expect(source).toContain(".slice(0, 3)");
+    expect(source).toContain(
+      'import { sortRecentLetters } from "@/lib/spaceRecentLetters";',
+    );
+    expect(recentLettersLogic).toContain(".slice(0, 3)");
     expect(source).toContain("<RecentPostCards");
     expect(source).toContain("articleTitle || \"제목 없음\"");
     expect(source).toContain("spaceLetterToViewModel");

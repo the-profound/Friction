@@ -109,3 +109,4 @@
 - [Friction offline user feedback via onlineManager](friction-offline-user-feedback.md) — default networkMode "online" pauses (not rejects) refetch/mutations offline; wrap onlineManager in a hook to surface toasts instead of a silently stuck spinner.
 - [Self-optimistic detail error suppression](friction-self-optimistic-detail-error-suppression.md) — a screen's own optimistic status patch before navigating away can flash its own "record not found"; suppress only that one classification via a dedicated ref, never real query errors.
 - [Editor blank paragraph ownership](friction-editor-blank-paragraph-ownership.md) — never infer a trailing empty paragraph is synthetic; mark caret-only paragraphs explicitly or authored terminal blank lines are lost.
+- [Friction reservation null vs cancelled-only](friction-reservation-null-vs-cancelled.md) — SpaceLetter.reservation:null is ambiguous (true-legacy vs cancelled-only); use additive `everScheduled` flag to disambiguate.

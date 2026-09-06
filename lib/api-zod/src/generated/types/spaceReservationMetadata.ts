@@ -13,6 +13,8 @@ import type { SpaceReservationMetadataStatus } from "./spaceReservationMetadataS
 export interface SpaceReservationMetadata {
   status: SpaceReservationMetadataStatus;
   scheduledAt: Date;
+  /** The actual send timestamp once status is SENT. Null while still PENDING or if never sent. */
+  sentAt?: Date | null;
   roundId: string | null;
   date: Date | null;
   slotId: string | null;

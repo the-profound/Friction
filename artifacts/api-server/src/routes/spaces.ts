@@ -2608,6 +2608,7 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
       status: spaceScheduledSendsTable.status,
       createdAt: spaceScheduledSendsTable.createdAt,
       scheduledAt: spaceScheduledSendsTable.scheduledAt,
+      sentAt: spaceScheduledSendsTable.sentAt,
       reservedRoundId: spaceScheduledSendsTable.reservedRoundId,
       reservedDate: spaceScheduledSendsTable.reservedDate,
       slotId: spaceScheduledSendsTable.slotId,
@@ -2617,7 +2618,15 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   const articleMap = new Map(articles.map((a) => [a.id, a]));
   const authorMap = new Map(authors.map((u) => [u.id, u.nickname]));
   const currentReservationByLetter = new Map<string, typeof reservationRows[number]>();
+  // Letters whose only reservation history is CANCELLED must not be confused
+  // with true legacy letters that never had a reservation at all — the
+  // `everScheduled` flag below preserves that distinction for callers (e.g.
+  // the space list card) even though the "current reservation" selection
+  // logic here continues to ignore CANCELLED rows, unchanged, so existing
+  // round-presentation consumers of `reservation` keep their prior meaning.
+  const everScheduledLetterIds = new Set<string>();
   for (const reservation of reservationRows) {
+    everScheduledLetterIds.add(reservation.spaceLetterId);
     if (reservation.status === "CANCELLED") continue;
     const current = currentReservationByLetter.get(reservation.spaceLetterId);
     if (!current || reservation.createdAt > current.createdAt) {
@@ -2654,9 +2663,11 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
         ? (identity.displayNames.get(letter.authorId) ?? ANONYMOUS_PARTICIPANT_NAME)
         : null,
       isRead: letter.sourceArticleId ? readSet.has(letter.sourceArticleId) : false,
+      everScheduled: everScheduledLetterIds.has(letter.id),
       reservation: reservation ? {
         status: reservation.status,
         scheduledAt: reservation.scheduledAt,
+        sentAt: reservation.sentAt ?? null,
         roundId: reservation.reservedRoundId ?? null,
         date: reservation.reservedDate ?? null,
         slotId: reservation.slotId ?? null,

@@ -32,4 +32,6 @@ export interface SpaceLetter {
   /** Whether the calling user has already read the source article. Always false when there is no sourceArticleId. */
   isRead: boolean;
   reservation?: SpaceReservationMetadata | null;
+  /** Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET /spaces/:id/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all. */
+  everScheduled?: boolean;
 }
