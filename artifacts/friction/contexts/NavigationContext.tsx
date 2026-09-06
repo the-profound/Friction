@@ -2,7 +2,7 @@ import { type Href, router, useGlobalSearchParams, usePathname, useSegments } fr
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
-import type { NavContextValue, NavLayer } from "@/types/navigation";
+import type { NavContextValue, NavLayer, RecordKindIntent } from "@/types/navigation";
 
 const TAB_ROUTES: Record<MainTabKey, Href> = {
   IN: "/(tabs)/" as Href,
@@ -52,6 +52,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [ofSubTab, setOfSubTabState] = useState<OfSubTabKey>("group");
   const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [recordKindIntent, setRecordKindIntent] = useState<RecordKindIntent>("thought");
   const [tabReselectVersion, setTabReselectVersion] = useState<Record<MainTabKey, number>>({
     IN: 0,
     OF: 0,
@@ -175,11 +176,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       toSubTab,
       headerScrolled,
       tabReselectVersion,
+      recordKindIntent,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
       goBackToMainLayer,
       setHeaderScrolled,
+      setRecordKindIntent,
     }),
     [
       activeTab,
@@ -189,11 +192,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       toSubTab,
       headerScrolled,
       tabReselectVersion,
+      recordKindIntent,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
       goBackToMainLayer,
       setHeaderScrolled,
+      setRecordKindIntent,
     ]
   );
 

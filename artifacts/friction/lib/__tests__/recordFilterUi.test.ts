@@ -23,11 +23,30 @@ describe("record filter UI regression", () => {
     );
 
     expect(recordsScreen).toContain(
-      'const [kind, setKind] = useState<RecordKind>("thought")',
+      "recordKindIntent: kind, setRecordKindIntent: setKind",
     );
     expect(recordsScreen).toContain('setKind("thought")');
     expect(recordsScreen).toContain('() => kind === "thought"');
     expect(recordsScreen).toContain("buildMixedRecordGroups(");
+  });
+
+  it("shares record kind intent and keeps tab reselect resetting it to thoughts", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+    const navigationContext = readFileSync(
+      join(__dirname, "../../contexts/NavigationContext.tsx"),
+      "utf8",
+    );
+
+    expect(navigationContext).toContain(
+      'useState<RecordKindIntent>("thought")',
+    );
+    expect(navigationContext).toContain("setRecordKindIntent,");
+    expect(recordsScreen).toContain('setKind("thought")');
+    expect(recordsScreen).toContain('onPress={() => setKind("editing")}');
+    expect(recordsScreen).toContain('onPress={() => setKind("letter")}');
   });
 
   it("routes letter list rows through the shared action-menu flow", () => {

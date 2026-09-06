@@ -50,6 +50,17 @@ const readEditorTypes = () =>
   );
 
 describe("on-01a editor hydration and initialization", () => {
+  it("preselects the record filter for the current writing stage", () => {
+    const screen = readScreen();
+
+    expect(screen).toContain(
+      'setRecordKindIntent(mode === "draft" ? "thought" : "editing")',
+    );
+    expect(screen).toContain(
+      'setRecordKindIntent(modeRef.current === "draft" ? "thought" : "editing")',
+    );
+  });
+
   it("renders only the keyboard dismiss action for the restricted reading toolbar", () => {
     const screen = readScreen();
     const toolbar = readFileSync(

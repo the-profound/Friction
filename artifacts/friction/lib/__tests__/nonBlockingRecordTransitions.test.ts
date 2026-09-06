@@ -101,7 +101,9 @@ describe("non-blocking editor transitions", () => {
     expect(promoteHandler.indexOf('setModeBoth("dividing")')).toBeLessThan(
       promoteHandler.indexOf("promoteThought.mutateAsync"),
     );
+    expect(promoteHandler).toContain('setRecordKindIntent("editing")');
     expect(promoteHandler).toContain('setModeBoth("draft")');
+    expect(promoteHandler).toContain('setRecordKindIntent("thought")');
     expect(promoteHandler).toContain('label: "다시 시도"');
     expect(promoteHandler).toContain("retryPromotionRef.current?.()");
     expect(promoteHandler).toContain("setInlineMenuMode(null)");
@@ -109,6 +111,25 @@ describe("non-blocking editor transitions", () => {
     expect(screen).toContain("editable={!isNavigating}");
     expect(screen).toContain('!isNavigating && Platform.OS !== "web"');
     expect(screen).toContain('!isNavigating && inlineMenuMode === "addMenu"');
+  });
+
+  it("preselects editing before review and closing back navigation", () => {
+    const writing = readScreen("app/on-01a.tsx");
+    const closing = readScreen("app/on-01c.tsx");
+    const nextHandler = writing.slice(
+      writing.indexOf("const handleNextToClosing"),
+      writing.indexOf("// ── 작성/분할 모드 뒤로가기"),
+    );
+    const closingBack = closing.slice(
+      closing.indexOf("const handleBack"),
+      closing.indexOf("const stageMenuBusy"),
+    );
+
+    expect(nextHandler).toContain('setRecordKindIntent("editing")');
+    expect(nextHandler.indexOf('setRecordKindIntent("editing")')).toBeLessThan(
+      nextHandler.indexOf("router.push("),
+    );
+    expect(closingBack.match(/setRecordKindIntent\("editing"\)/g)).toHaveLength(2);
   });
 
   it("keeps the review editor free of reply-link actions during and after promotion", () => {

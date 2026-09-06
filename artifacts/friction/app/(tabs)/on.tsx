@@ -92,7 +92,6 @@ import {
   type QuestionErrorKind,
   type QuestionPlacementAnchors,
   type RecordDateGroup,
-  type RecordKind,
   type RecordView,
   type UnifiedRecord,
 } from "@/lib/recordList";
@@ -349,7 +348,7 @@ function RecordSourceCard({
 }
 function OnScreenContent() {
   const router = useRouter();
-  const { tabReselectVersion } = useNavigation();
+  const { tabReselectVersion, recordKindIntent: kind, setRecordKindIntent: setKind } = useNavigation();
   const queryClient = useQueryClient();
   const { startFadeToBlack } = useReaderTransition();
   const { userId } = useUser();
@@ -378,7 +377,6 @@ function OnScreenContent() {
   const navBottom = useNavBarBottomSafeArea();
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
-  const [kind, setKind] = useState<RecordKind>("thought");
   const [view, setView] = useState<RecordView>("card");
   const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
   const [searchActive, setSearchActive] = useState(false);

@@ -121,6 +121,7 @@ import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useThoughtComposer } from "@/contexts/ThoughtComposerContext";
+import { useNavigation as useAppNavigation } from "@/contexts/NavigationContext";
 import WritingStateBar, {
   type WritingStageAction,
 } from "@/components/WritingStateBar/WritingStateBar";
@@ -205,6 +206,7 @@ export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const navigation = useNavigation();
+  const { setRecordKindIntent } = useAppNavigation();
   const queryClient = useQueryClient();
   const { id, source, mode: modeParam, editorContext, returnPage, returnBlock, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
     id?: string;
@@ -359,6 +361,10 @@ export default function WritingScreen() {
     modeRef.current = next;
     setMode(next);
   }, []);
+
+  useEffect(() => {
+    setRecordKindIntent(mode === "draft" ? "thought" : "editing");
+  }, [mode, setRecordKindIntent]);
 
   // ── 공통 상태 ─────────────────────────────────────────────────────────────
   const [title, setTitle] = useState("");
@@ -1642,6 +1648,7 @@ export default function WritingScreen() {
     serverInjectionPendingRef.current = true;
     editorRef.current?.setTitle(transitionSnapshot.title);
     editorRef.current?.setMarkdown(transitionSnapshot.content);
+    setRecordKindIntent("editing");
     setModeBoth("dividing");
 
     // The server validates and commits the title/body snapshot atomically.
@@ -1670,6 +1677,7 @@ export default function WritingScreen() {
       serverInjectionPendingRef.current = true;
       editorRef.current?.setTitle("");
       editorRef.current?.setMarkdown(cur);
+      setRecordKindIntent("thought");
       setModeBoth("draft");
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -1753,7 +1761,7 @@ export default function WritingScreen() {
         },
       });
     }, { resumeGuardAfterRouteChange: true });
-  }, [abortAutosaveTransition, commitAutosaveTransition, flush, getEditorContent, markDirty, prepareAutosaveTransition, promoteThought, queryClient, releaseDirectThoughtDraft, reportAutosaveFailure, router, setModeBoth, showToast, spaceId, spaceRoundId, thought, letterType, navigateAfterRemovingGuard]);
+  }, [abortAutosaveTransition, commitAutosaveTransition, flush, getEditorContent, markDirty, prepareAutosaveTransition, promoteThought, queryClient, releaseDirectThoughtDraft, reportAutosaveFailure, router, setModeBoth, setRecordKindIntent, showToast, spaceId, spaceRoundId, thought, letterType, navigateAfterRemovingGuard]);
   retryPromotionRef.current = () => {
     void enterDividingMode();
   };
@@ -1901,6 +1909,7 @@ export default function WritingScreen() {
     serverInjectionPendingRef.current = true;
     editorRef.current?.setTitle("");
     editorRef.current?.setMarkdown(restoredThought.content);
+    setRecordKindIntent("thought");
     setModeBoth("draft");
     await commitAutosaveTransition({
       entityId: restoredThought.id,
@@ -1949,6 +1958,7 @@ export default function WritingScreen() {
     revertArticleToThought,
     router,
     setModeBoth,
+    setRecordKindIntent,
     showToast,
     source,
     spaceId,
@@ -2047,6 +2057,7 @@ export default function WritingScreen() {
       status: "CLOSING",
     }, article);
 
+    setRecordKindIntent("editing");
     router.push({
       pathname: "/on-01c",
       params: {
@@ -2129,7 +2140,7 @@ export default function WritingScreen() {
         }
       }
     })();
-  }, [getEditorContent, markDirty, flush, persistLatestAutosave, retryAutosave, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, showToast, pageHeights, pageContentHeight]);
+  }, [getEditorContent, markDirty, flush, persistLatestAutosave, retryAutosave, id, router, updateArticle, transitionStatus, queryClient, containerWidth, article, setRecordKindIntent, showToast, pageHeights, pageContentHeight]);
 
   // ── 작성/분할 모드 뒤로가기 (화면 종료) ───────────────────────────────────
   //
@@ -2170,6 +2181,7 @@ export default function WritingScreen() {
 
   const handleDraftBack = useCallback(async (removalAction?: NavigationAction) => {
     if (isNavigatingRef.current || !returnSessionRef.current.begin()) return;
+    setRecordKindIntent(modeRef.current === "draft" ? "thought" : "editing");
     isNavigatingRef.current = true;
     setIsNavigating(true);
 
@@ -2271,7 +2283,7 @@ export default function WritingScreen() {
       void queryClient.invalidateQueries({ queryKey: getListThoughtsQueryKey() });
     }
     exitToPreviousList(removalAction);
-  }, [flush, queryClient, getEditorContent, markDirty, id, showToast, isLocalDirectDraft, exitToPreviousList, persistLatestAutosave, stageCleanup, runPendingCleanup]);
+  }, [flush, queryClient, getEditorContent, markDirty, id, setRecordKindIntent, showToast, isLocalDirectDraft, exitToPreviousList, persistLatestAutosave, stageCleanup, runPendingCleanup]);
 
   // Native lifecycle events have no reliable "before unload" hook.  Export the
   // WebView snapshot while the app is still active and flush it to the thought/article

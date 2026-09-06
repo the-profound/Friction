@@ -61,6 +61,7 @@ import {
   getProtectedArticleDetailSnapshot,
 } from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
+import { useNavigation as useAppNavigation } from "@/contexts/NavigationContext";
 
 const WRITING_HEADER_HEIGHT = 68;
 
@@ -71,6 +72,7 @@ export default function ClosingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { setRecordKindIntent } = useAppNavigation();
   const { height: screenHeight } = useWindowDimensions();
   const { id, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
     id: string;
@@ -92,6 +94,9 @@ export default function ClosingScreen() {
     letterType?: string;
   } | null>(null);
   const [contextReady, setContextReady] = useState(!!spaceId);
+  useEffect(() => {
+    setRecordKindIntent("editing");
+  }, [setRecordKindIntent]);
   useEffect(() => {
     if (spaceId) {
       setContextReady(true);
@@ -505,6 +510,7 @@ export default function ClosingScreen() {
       return;
     }
     if (isActionInProgressRef.current) return;
+    setRecordKindIntent("editing");
     isActionInProgressRef.current = true;
     const coverToSave = pendingCoverRef.current ?? cover;
     if (id) {
@@ -531,6 +537,7 @@ export default function ClosingScreen() {
     navigateAfterRemovingGuard,
     queryClient,
     router,
+    setRecordKindIntent,
     showToast,
     title,
   ]);
@@ -538,6 +545,7 @@ export default function ClosingScreen() {
   const handleStepBack = useCallback(() => {
     if (coverUploadInProgressRef.current) return;
     if (isActionInProgressRef.current) return;
+    setRecordKindIntent("editing");
     isActionInProgressRef.current = true;
     const result = canStepBack("CLOSING");
     if (!result.allowed) {
@@ -606,6 +614,7 @@ export default function ClosingScreen() {
     navigateAfterRemovingGuard,
     queryClient,
     router,
+    setRecordKindIntent,
     showToast,
     title,
     transitionStatus,

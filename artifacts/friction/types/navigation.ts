@@ -1,6 +1,7 @@
 import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
 
 export type NavLayer = "main" | "sub";
+export type RecordKindIntent = "thought" | "editing" | "letter";
 
 export interface NavState {
   activeTab: MainTabKey;
@@ -10,6 +11,7 @@ export interface NavState {
   toSubTab: ToSubTabKey;
   headerScrolled: boolean;
   tabReselectVersion: Record<MainTabKey, number>;
+  recordKindIntent: RecordKindIntent;
 }
 
 export interface NavActions {
@@ -18,6 +20,7 @@ export interface NavActions {
   setToSubTab: (subTab: ToSubTabKey) => void;
   goBackToMainLayer: () => void;
   setHeaderScrolled: (scrolled: boolean) => void;
+  setRecordKindIntent: (kind: RecordKindIntent) => void;
 }
 
 export interface NavContextValue extends NavState, NavActions {}
