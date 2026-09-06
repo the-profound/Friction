@@ -8,6 +8,12 @@
  *  - A SENT letter → reservation.status === "SENT" and reservation.sentAt reflects the
  *    actual dispatch timestamp, separate from the originally planned scheduledAt
  *  - A PENDING letter → reservation.status === "PENDING"
+ *
+ * Task #2051 — a letter reported to still show its cover on the space list
+ * after "schedule → cancel" must stay reservation:null/everScheduled:true even
+ * when its reservation history has multiple rows (repeated
+ * schedule→cancel→reschedule→cancel cycles on the same letter), not just a
+ * single cancelled row.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,6 +52,7 @@ const state = vi.hoisted(() => {
     { id: "letter-cancelled-only", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-cancelled-only", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-01-02T00:00:00.000Z"), updatedAt: new Date("2026-01-02T00:00:00.000Z") },
     { id: "letter-sent", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-sent", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-01-03T00:00:00.000Z"), updatedAt: new Date("2026-01-03T00:00:00.000Z") },
     { id: "letter-pending", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-pending", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-01-04T00:00:00.000Z"), updatedAt: new Date("2026-01-04T00:00:00.000Z") },
+    { id: "letter-cancelled-multi", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-cancelled-multi", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-01-05T00:00:00.000Z"), updatedAt: new Date("2026-01-05T00:00:00.000Z") },
   ];
 
   const scheduledSends = [
@@ -80,6 +87,32 @@ const state = vi.hoisted(() => {
       reservedRoundId: "round-a",
       reservedDate: "2026-02-01",
       slotId: "slot-c",
+      reservationAuthorId: "author-a",
+    },
+    // Repro for Task #2051: the same letter scheduled and cancelled twice
+    // (schedule → cancel → reschedule → cancel again). Both rows are
+    // CANCELLED; the second (later createdAt) must not resurrect the letter
+    // as if it had an active reservation.
+    {
+      spaceLetterId: "letter-cancelled-multi",
+      status: "CANCELLED" as const,
+      createdAt: new Date("2026-01-05T01:00:00.000Z"),
+      scheduledAt: new Date("2026-01-09T06:00:00.000Z"),
+      sentAt: null,
+      reservedRoundId: "round-a",
+      reservedDate: "2026-01-09",
+      slotId: "slot-d",
+      reservationAuthorId: "author-a",
+    },
+    {
+      spaceLetterId: "letter-cancelled-multi",
+      status: "CANCELLED" as const,
+      createdAt: new Date("2026-01-05T02:00:00.000Z"),
+      scheduledAt: new Date("2026-01-12T06:00:00.000Z"),
+      sentAt: null,
+      reservedRoundId: "round-a",
+      reservedDate: "2026-01-12",
+      slotId: "slot-e",
       reservationAuthorId: "author-a",
     },
   ];
@@ -216,5 +249,12 @@ describe("GET /spaces/:id/letters reservation metadata", () => {
     const letter = body.find((l) => l.id === "letter-pending")!;
     expect(letter.everScheduled).toBe(true);
     expect(letter.reservation?.status).toBe("PENDING");
+  });
+
+  it("a letter scheduled and cancelled twice (schedule→cancel→reschedule→cancel) stays reservation:null/everScheduled:true", async () => {
+    const body = await getLetters();
+    const letter = body.find((l) => l.id === "letter-cancelled-multi")!;
+    expect(letter.reservation).toBeNull();
+    expect(letter.everScheduled).toBe(true);
   });
 });

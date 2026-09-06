@@ -1,4 +1,3 @@
-// hint: Logic changed on both sides. Requires understanding intent of each change.
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
@@ -121,3 +120,4 @@
 - [Sheet-to-page conversion pattern](friction-sheet-to-page-conversion.md) — derive origin-screen state from the query cache, move mutation plumbing to the new page, await save-flush before back-nav, use a subscribable singleton for cross-screen flags.
 - [Source-text test substring fragility](friction-source-text-test-substring-fragility.md) — bare-word `not.toContain("visible"/"dim"/"BottomSheet")` false-fails on comments; assert the syntactic shape instead.
 - [SwipeableRow shadow-clip vs horizontal-clip](friction-swipeablerow-shadow-clip.md) — reserve vertical room via padding-in/negative-margin-out on both clip layers so shadows bleed without flattening; horizontal clip must stay untouched.
+- [Space list recent-letters cache key wiring](friction-space-recent-letters-cache-key-wiring.md) — of.tsx's longer query key correctly prefix-matches the schedule screen's shorter invalidation key; verified no bug there for cancelled-reservation letters.
