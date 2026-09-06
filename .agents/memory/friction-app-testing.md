@@ -53,3 +53,8 @@ authentication; a failed shortcut previously looked like an unresponsive tap.
 **How to apply:** preserve a clear in-app message for the unavailable profile.
 Use a provisioned development shortcut when authentication-gated web or native
 flows need verification, and do not assume seed identities can sign in.
+
+**Note:** the dev-account shortcut described above may not currently exist in
+`app/login.tsx` — verify with a grep before relying on it. When it's absent,
+live-login-based screenshot verification of auth-gated screens isn't possible;
+fall back to careful code-level review and sibling-pattern parity instead.

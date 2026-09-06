@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -29,7 +29,7 @@ import { useAncestorChain } from "@/hooks/useAncestorChain";
 import { useToast } from "@/contexts/ToastContext";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import { useAuth } from "@/contexts/AuthContext";
-import { Colors } from "@/constants/tokens";
+import { Colors, Typography } from "@/constants/tokens";
 
 export interface LetterOverlayMeta {
   collectionName?: string | null;
@@ -155,6 +155,129 @@ function hasPersonalSend(records: SendRecordWithDetails[], articleId: string): b
       record.articleId === articleId &&
       record.targetType !== "space" &&
       !record.spaceId,
+  );
+}
+
+interface InlineConfirmDialogProps {
+  visible: boolean;
+  title: string;
+  description: string;
+  cancelLabel?: string;
+  /** Omit to render the single-button "info" variant. */
+  confirmLabel?: string;
+  onCancel: () => void;
+  onConfirm?: () => void;
+  confirmDisabled?: boolean;
+  cancelDisabled?: boolean;
+}
+
+/**
+ * Visibility-change confirm / info dialog rendered inside CardSelectOverlay's
+ * `inlineModal` slot (see CardSelectOverlay's doc comment for why a nested
+ * RN Modal cannot be used there).
+ *
+ * Visually and behaviourally mirrors components/ConfirmModal/ConfirmModal.tsx:
+ * same tokens (colors/typography/spacing), same fade transition, and the same
+ * "freeze last content while fading out" trick so dismissing never flashes
+ * empty content.
+ */
+function InlineConfirmDialog({
+  visible,
+  title,
+  description,
+  cancelLabel = "취소",
+  confirmLabel,
+  onCancel,
+  onConfirm,
+  confirmDisabled = false,
+  cancelDisabled = false,
+}: InlineConfirmDialogProps) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const [isMounted, setIsMounted] = useState(visible);
+
+  // Freeze content while fading out so the dialog never flashes empty/stale
+  // text between the moment the caller clears its state and the fade finishing.
+  const frozenTitle = useRef(title);
+  const frozenDescription = useRef(description);
+  const frozenCancelLabel = useRef(cancelLabel);
+  const frozenConfirmLabel = useRef(confirmLabel);
+  const frozenOnConfirm = useRef(onConfirm);
+  if (visible) {
+    frozenTitle.current = title;
+    frozenDescription.current = description;
+    frozenCancelLabel.current = cancelLabel;
+    frozenConfirmLabel.current = confirmLabel;
+    frozenOnConfirm.current = onConfirm;
+  }
+
+  useEffect(() => {
+    if (visible) {
+      setIsMounted(true);
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) setIsMounted(false);
+      });
+    }
+  }, [visible, opacity]);
+
+  if (!isMounted) return null;
+
+  const displayConfirmLabel = frozenConfirmLabel.current;
+
+  return (
+    <Animated.View
+      style={[inlineOverlayStyles.fullScreenRoot, { opacity }]}
+      pointerEvents={visible ? "auto" : "none"}
+    >
+      <Pressable
+        style={inlineOverlayStyles.overlay}
+        onPress={cancelDisabled ? undefined : onCancel}
+      >
+        <View style={inlineOverlayStyles.contentWrapper}>
+          <Pressable style={inlineOverlayStyles.card} onPress={(e) => e.stopPropagation()}>
+            <Text style={inlineOverlayStyles.title}>{frozenTitle.current}</Text>
+            <Text style={inlineOverlayStyles.description}>{frozenDescription.current}</Text>
+            <View style={inlineOverlayStyles.buttons}>
+              <ScalePressable
+                style={inlineOverlayStyles.button}
+                contentStyle={[inlineOverlayStyles.buttonContent, inlineOverlayStyles.cancelButton]}
+                onPress={onCancel}
+                disabled={cancelDisabled}
+                accessibilityRole="button"
+                accessibilityLabel={frozenCancelLabel.current}
+              >
+                <Text style={inlineOverlayStyles.cancelText}>{frozenCancelLabel.current}</Text>
+              </ScalePressable>
+              {displayConfirmLabel != null && (
+                <ScalePressable
+                  style={inlineOverlayStyles.button}
+                  contentStyle={[
+                    inlineOverlayStyles.buttonContent,
+                    inlineOverlayStyles.confirmButton,
+                    confirmDisabled && inlineOverlayStyles.buttonDisabled,
+                  ]}
+                  onPress={frozenOnConfirm.current}
+                  disabled={confirmDisabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={displayConfirmLabel}
+                >
+                  <Text style={inlineOverlayStyles.confirmText}>{displayConfirmLabel}</Text>
+                </ScalePressable>
+              )}
+            </View>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -534,66 +657,42 @@ export function useLetterSelectionOverlay(
       setVisibilityInfoModal(null);
     };
 
-    let inlineModalNode: React.ReactNode = null;
-    if (isConfirmVisible || isInfoVisible) {
-      const title = isConfirmVisible
-        ? (visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
-            ? "수신자 공개로 변경하시겠습니까?"
-            : "전체 공개로 변경하시겠습니까?")
-        : "전체 공개로 변경할 수 없어요";
-      const description = isConfirmVisible
-        ? (visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
-            ? "편지가 내 프로필에서 사라지며, 발신 시점의 수신자만 읽을 수 있게 됩니다."
-            : "편지가 내 프로필에 표시되며, Friction 내 모든 사용자가 볼 수 있습니다.")
-        : (visibilityInfoModal === "anon"
-            ? "익명 공간에 발신된 편지는 수신자 공개로만 설정할 수 있어요"
-            : visibilityInfoModal === "personal"
-              ? "개인에게 발신된 편지는 수신자 공개로만 설정할 수 있어요"
-              : "발신하지 않은 편지는 수신자 공개로만 설정할 수 있어요");
-      inlineModalNode = (
-        <View style={inlineOverlayStyles.fullScreenRoot}>
-          <Pressable style={inlineOverlayStyles.backdrop} onPress={handleDismiss}>
-            <View style={inlineOverlayStyles.contentWrapper}>
-              <Pressable style={inlineOverlayStyles.card} onPress={(e) => e.stopPropagation()}>
-                <Text style={inlineOverlayStyles.title}>{title}</Text>
-                <Text style={inlineOverlayStyles.description}>{description}</Text>
-                <View style={inlineOverlayStyles.buttons}>
-                  <ScalePressable
-                    style={inlineOverlayStyles.button}
-                    contentStyle={[
-                      inlineOverlayStyles.buttonContent,
-                      inlineOverlayStyles.cancelButton,
-                    ]}
-                    onPress={handleDismiss}
-                    disabled={isChangingVisibility}
-                    accessibilityRole="button"
-                    accessibilityLabel="취소"
-                  >
-                    <Text style={inlineOverlayStyles.cancelText}>취소</Text>
-                  </ScalePressable>
-                  {isConfirmVisible && (
-                    <ScalePressable
-                      style={inlineOverlayStyles.button}
-                      contentStyle={[
-                        inlineOverlayStyles.buttonContent,
-                        inlineOverlayStyles.confirmButton,
-                        isChangingVisibility && inlineOverlayStyles.buttonDisabled,
-                      ]}
-                      onPress={confirmVisibilityChange}
-                      disabled={isChangingVisibility}
-                      accessibilityRole="button"
-                      accessibilityLabel="변경"
-                    >
-                      <Text style={inlineOverlayStyles.confirmText}>변경</Text>
-                    </ScalePressable>
-                  )}
-                </View>
-              </Pressable>
-            </View>
-          </Pressable>
-        </View>
-      );
+    let dialogTitle = "";
+    let dialogDescription = "";
+    let dialogConfirmLabel: string | undefined;
+    if (isConfirmVisible) {
+      dialogTitle =
+        visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
+          ? "수신자 공개로 변경하시겠습니까?"
+          : "전체 공개로 변경하시겠습니까?";
+      dialogDescription =
+        visibilityConfirmTarget!.newVisibility === SpaceLetterVisibility.RECIPIENT_ONLY
+          ? "편지가 내 프로필에서 사라지며, 발신 시점의 수신자만 읽을 수 있게 됩니다."
+          : "편지가 내 프로필에 표시되며, Friction 내 모든 사용자가 볼 수 있습니다.";
+      dialogConfirmLabel = "변경";
+    } else if (isInfoVisible) {
+      dialogTitle = "전체 공개로 변경할 수 없어요";
+      dialogDescription =
+        visibilityInfoModal === "anon"
+          ? "익명 공간에 발신된 편지는 수신자 공개로만 설정할 수 있어요"
+          : visibilityInfoModal === "personal"
+            ? "개인에게 발신된 편지는 수신자 공개로만 설정할 수 있어요"
+            : "발신하지 않은 편지는 수신자 공개로만 설정할 수 있어요";
+      dialogConfirmLabel = undefined;
     }
+
+    const inlineModalNode = (
+      <InlineConfirmDialog
+        visible={isConfirmVisible || isInfoVisible}
+        title={dialogTitle}
+        description={dialogDescription}
+        confirmLabel={dialogConfirmLabel}
+        onCancel={handleDismiss}
+        onConfirm={isConfirmVisible ? confirmVisibilityChange : undefined}
+        confirmDisabled={isChangingVisibility}
+        cancelDisabled={isChangingVisibility}
+      />
+    );
 
     return (
       <CardSelectOverlay
@@ -636,76 +735,83 @@ export function useLetterSelectionOverlay(
 }
 
 // Styles for the View-based visibility dialog rendered inside the overlay's
-// native Modal window via the `inlineModal` prop.
+// native Modal window via the `inlineModal` prop. Mirrors
+// components/ConfirmModal/ConfirmModal.tsx's tokens (colors/typography/
+// spacing/radii) exactly so both dialogs look identical to the user.
 const inlineOverlayStyles = StyleSheet.create({
   fullScreenRoot: {
     flex: 1,
     width: "100%",
     height: "100%",
   },
-  backdrop: {
+  overlay: {
     flex: 1,
-    width: "100%",
-    height: "100%",
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 40,
   },
   contentWrapper: {
-    width: "85%",
-    maxWidth: 340,
+    width: "100%",
+    alignItems: "center",
   },
   card: {
+    width: "100%",
     backgroundColor: Colors.white,
-    borderRadius: 12,
+    borderRadius: 16,
+    paddingTop: 24,
     paddingHorizontal: 24,
-    paddingTop: 28,
     paddingBottom: 20,
   },
   title: {
-    fontSize: 16,
-    fontWeight: "600",
+    ...Typography.bodySemiBold,
+    fontSize: 17,
     color: Colors.zinc900,
     textAlign: "center",
-    marginBottom: 10,
   },
   description: {
+    ...Typography.body,
     fontSize: 14,
-    color: Colors.zinc700,
+    color: Colors.zinc500,
     textAlign: "center",
+    marginTop: 8,
     lineHeight: 20,
-    marginBottom: 24,
   },
   buttons: {
     flexDirection: "row",
-    gap: 8,
+    marginTop: 20,
+    gap: 10,
   },
   button: {
     flex: 1,
+    height: 48,
   },
   buttonContent: {
-    paddingVertical: 12,
-    borderRadius: 8,
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
     alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
   },
   cancelButton: {
     backgroundColor: Colors.zinc100,
   },
   confirmButton: {
-    backgroundColor: Colors.zinc900,
-  },
-  cancelText: {
-    color: Colors.zinc900,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  confirmText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: "500",
+    backgroundColor: Colors.primaryAction,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
+  },
+  cancelText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.zinc600,
+  },
+  confirmText: {
+    ...Typography.bodySemiBold,
+    fontSize: 15,
+    color: Colors.primaryActionForeground,
   },
 });
 

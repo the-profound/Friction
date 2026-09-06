@@ -1,4 +1,5 @@
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
+- [Inline dialog / ConfirmModal parity](friction-inline-dialog-confirmmodal-parity.md) — CardSelectOverlay's inlineModal dialogs can't import ConfirmModal (z-order); tokens/fade/freeze must be hand-copied and kept in sync.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
 - [api-zod enum barrel gap](friction-api-zod-enum-barrel-gap.md) — generated enums (ServerFeature, ThoughtStatus, ...) export only as a TS type from `@workspace/api-zod`, never a runtime const; use string literals.
