@@ -18,14 +18,31 @@ const validSnapshot = {
 };
 
 describe("thought/review atomic transition contract", () => {
-  it("allows only reading-origin preliminary thoughts through the new promotion path", () => {
+  it("allows NORMAL thoughts from every ordinary creation origin", () => {
     expect(
       canPromoteThoughtToArticle({
-        status: "PRELIMINARY",
+        status: "NORMAL",
         createdFrom: "reading",
         migratedFromArticleId: null,
       }),
     ).toBe(true);
+    expect(
+      canPromoteThoughtToArticle({
+        status: "NORMAL",
+        createdFrom: "quoted",
+        migratedFromArticleId: null,
+      }),
+    ).toBe(true);
+    expect(
+      canPromoteThoughtToArticle({
+        status: "NORMAL",
+        createdFrom: "direct",
+        migratedFromArticleId: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("blocks every PRELIMINARY thought, including unactivated questions", () => {
     expect(
       canPromoteThoughtToArticle({
         status: "PRELIMINARY",
@@ -37,26 +54,9 @@ describe("thought/review atomic transition contract", () => {
       canPromoteThoughtToArticle({
         status: "PRELIMINARY",
         createdFrom: "direct",
-        migratedFromArticleId: null,
-      }),
-    ).toBe(false);
-  });
-
-  it("preserves normal and migrated-thought promotion eligibility", () => {
-    expect(
-      canPromoteThoughtToArticle({
-        status: "NORMAL",
-        createdFrom: "direct",
-        migratedFromArticleId: null,
-      }),
-    ).toBe(true);
-    expect(
-      canPromoteThoughtToArticle({
-        status: "PRELIMINARY",
-        createdFrom: "direct",
         migratedFromArticleId: "article-before-revert",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("accepts the same optional snapshot shape for promotion and return", () => {
@@ -121,6 +121,7 @@ describe("thought/review atomic transition contract", () => {
     expect(revertHandler).toContain("db.transaction(async (tx)");
     expect(revertHandler).toContain("expectedUpdatedAt.getTime()");
     expect(revertHandler).toContain("set({ title, content, deletedAt: now, updatedAt: now })");
+    expect(revertHandler).toContain('status: "NORMAL"');
     expect(revertHandler).toContain("return { status: 200, body: restoredThought }");
   });
 });

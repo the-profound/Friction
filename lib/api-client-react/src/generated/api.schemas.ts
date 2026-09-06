@@ -1594,7 +1594,6 @@ export interface CreateThoughtBody {
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
   sourceStoredSentenceId?: string | null;
-  status?: ThoughtStatus;
 }
 
 export type RegisterPushTokenBodyPlatform =

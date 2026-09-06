@@ -638,7 +638,6 @@ export default function ThoughtsBottomSheet({
               content: committedText,
               createdFrom: "reading",
               sourceArticleId: articleId,
-              status: "PRELIMINARY",
             },
           }) as Thought;
           await cancelThoughtQueries();
@@ -703,7 +702,6 @@ export default function ThoughtsBottomSheet({
             content: optimistic.content,
             createdFrom: "reading",
             sourceArticleId: optimistic.sourceArticleId,
-            status: "PRELIMINARY",
           },
         }) as Thought;
         await cancelThoughtQueries();

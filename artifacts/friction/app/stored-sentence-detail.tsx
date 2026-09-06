@@ -141,7 +141,6 @@ export default function StoredSentenceDetailScreen() {
             createdFrom: "quoted",
             sourceArticleId: sentence.articleId ?? undefined,
             sourceStoredSentenceId: sentence.id,
-            status: "PRELIMINARY",
           },
         });
         router.push({ pathname: "/on-01a", params: { id: thought.id } });

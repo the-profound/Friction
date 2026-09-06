@@ -803,7 +803,7 @@ export default function WritingScreen() {
               authorId: userId ?? "",
               content: data.content,
               createdFrom: "direct",
-              status: "PRELIMINARY",
+              status: "NORMAL",
               createdAt: now,
               updatedAt: now,
             };
@@ -818,7 +818,6 @@ export default function WritingScreen() {
                     ?? thoughtCreationGenerationRef.current,
                   content: data.content,
                   createdFrom: "direct",
-                  status: "PRELIMINARY",
                 },
               })
               .then(async (created: Thought) => {

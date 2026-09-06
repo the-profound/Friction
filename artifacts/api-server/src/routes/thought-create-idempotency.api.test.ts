@@ -1,8 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { getInitialThoughtStatus } from "./thoughts";
 
 describe("thought create idempotency contract", () => {
+  it("reserves PRELIMINARY for question-origin creates", () => {
+    expect(getInitialThoughtStatus("question")).toBe("PRELIMINARY");
+    expect(getInitialThoughtStatus("direct")).toBe("NORMAL");
+    expect(getInitialThoughtStatus("reading")).toBe("NORMAL");
+    expect(getInitialThoughtStatus("quoted")).toBe("NORMAL");
+  });
+
   it("validates the optional client id as a UUID in the generated contract", () => {
     const generatedSchema = readFileSync(
       join(__dirname, "../../../../lib/api-zod/src/generated/api.ts"),
@@ -10,7 +18,9 @@ describe("thought create idempotency contract", () => {
     );
     const createThoughtSchema = generatedSchema.slice(
       generatedSchema.indexOf("export const CreateThoughtBody"),
-      generatedSchema.indexOf("export const RegisterPushTokenBody"),
+      generatedSchema.indexOf(
+        "/**\n * Returns the authenticated user's own thought by ID.",
+      ),
     );
 
     expect(createThoughtSchema).toContain("clientId: zod");
@@ -19,6 +29,7 @@ describe("thought create idempotency contract", () => {
     expect(createThoughtSchema).toContain("requestGeneration: zod");
     expect(createThoughtSchema).toContain(".int()");
     expect(createThoughtSchema).toContain(".min(1)");
+    expect(createThoughtSchema).not.toContain("status:");
   });
 
   it("reuses an owned client id and applies the retry's newest content", () => {
@@ -34,6 +45,10 @@ describe("thought create idempotency contract", () => {
     expect(createRoute).toContain("activePromotion");
     expect(createRoute).toContain("existing.migratedFromArticleId");
     expect(createRoute).toContain("existing.createdFrom !== createdFrom");
+    expect(createRoute).toContain(
+      "status: getInitialThoughtStatus(createdFrom)",
+    );
+    expect(createRoute).toContain("existing.status !== insertValues.status");
     expect(createRoute).toContain(
       "existing.sourceArticleId !== (sourceArticleId ?? null)",
     );

@@ -40,7 +40,7 @@ describe("review article reverse-promotion contract", () => {
       "formatThoughtMarkdown(article.title, article.content)",
     );
     expect(handler).toContain('eq(articlesTable.status, "DIVIDING")');
-    expect(handler).toContain('status: "PRELIMINARY"');
+    expect(handler).toContain('status: "NORMAL"');
     expect(handler).toContain("migratedFromArticleId: articleId");
     expect(handler).toContain(".delete(thoughtPromotionsTable)");
     expect(handler).toContain(".update(articlesTable)");

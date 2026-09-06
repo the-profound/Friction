@@ -202,7 +202,6 @@ export default function SentenceCollectionScreen() {
             createdFrom: "quoted",
             sourceArticleId: sentence.articleId ?? undefined,
             sourceStoredSentenceId: sentence.id,
-            status: "PRELIMINARY",
           },
         });
         setSelectedSentence(null);

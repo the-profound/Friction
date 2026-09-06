@@ -20,7 +20,6 @@ import {
   thoughtQuestionQueueTable,
   thoughtQuestionSourcesTable,
   thoughtsTable,
-  type ThoughtStatus,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import {
@@ -48,6 +47,12 @@ type ThoughtMarkdown = {
   title: string;
   body: string;
 };
+
+export function getInitialThoughtStatus(
+  createdFrom: string,
+): "NORMAL" | "PRELIMINARY" {
+  return createdFrom === "question" ? "PRELIMINARY" : "NORMAL";
+}
 
 // A bounded backlog lets the archive browse questions continuously without
 // letting display retries trigger unbounded AI work.
@@ -1150,7 +1155,6 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     createdFrom,
     sourceArticleId,
     sourceStoredSentenceId,
-    status,
   } = parsed.data;
   const authorId = req.user!.id;
   if (!isMeaningfulThoughtMarkdown(content)) {
@@ -1167,7 +1171,7 @@ router.post("/thoughts", requireAuth, async (req, res) => {
     createdFrom,
     sourceArticleId: sourceArticleId ?? null,
     sourceStoredSentenceId: sourceStoredSentenceId ?? null,
-    status: (status ?? "NORMAL") as ThoughtStatus,
+    status: getInitialThoughtStatus(createdFrom),
     createRequestGeneration: requestGeneration,
   };
 
@@ -1217,7 +1221,7 @@ router.post("/thoughts", requireAuth, async (req, res) => {
         existing.sourceArticleId !== (sourceArticleId ?? null) ||
         existing.sourceStoredSentenceId !==
           (sourceStoredSentenceId ?? null) ||
-        existing.status !== (status ?? "NORMAL")
+        existing.status !== insertValues.status
       ) {
         return {
           status: 409,
@@ -1468,11 +1472,7 @@ export function canPromoteThoughtToArticle(thought: {
   createdFrom: string | null;
   migratedFromArticleId: string | null;
 }): boolean {
-  return (
-    thought.status === "NORMAL" ||
-    thought.migratedFromArticleId !== null ||
-    (thought.status === "PRELIMINARY" && thought.createdFrom === "reading")
-  );
+  return thought.status === "NORMAL";
 }
 
 router.post("/thoughts/:id/promote", requireAuth, async (req, res) => {

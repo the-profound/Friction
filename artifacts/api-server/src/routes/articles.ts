@@ -546,7 +546,7 @@ router.post(
           .update(thoughtsTable)
           .set({
             content: thoughtMarkdown,
-            status: "PRELIMINARY",
+            status: "NORMAL",
             migratedFromArticleId: articleId,
             updatedAt: now,
           })

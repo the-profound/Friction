@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ThoughtCreatedFrom } from "./thoughtCreatedFrom";
-import type { ThoughtStatus } from "./thoughtStatus";
 
 export interface CreateThoughtBody {
   /** Optional client-generated ID used to make retried creates idempotent. */
@@ -24,5 +23,4 @@ export interface CreateThoughtBody {
   createdFrom: ThoughtCreatedFrom;
   sourceArticleId?: string | null;
   sourceStoredSentenceId?: string | null;
-  status?: ThoughtStatus;
 }

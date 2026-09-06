@@ -4829,7 +4829,6 @@ export const CreateThoughtBody = zod.object({
   createdFrom: zod.enum(["quoted", "question", "reading", "direct"]),
   sourceArticleId: zod.string().uuid().nullish(),
   sourceStoredSentenceId: zod.string().uuid().nullish(),
-  status: zod.enum(["NORMAL", "PRELIMINARY"]).optional(),
 });
 
 /**

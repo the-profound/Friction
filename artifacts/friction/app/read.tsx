@@ -599,7 +599,6 @@ export default function ReadScreen() {
               content: `> ${card.question}\n\n${card.answer.trim()}`,
               createdFrom: "question",
               sourceArticleId: articleId,
-              status: "PRELIMINARY",
             },
           }) as Promise<Thought>
       ));
