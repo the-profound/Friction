@@ -32,7 +32,10 @@ interface ArticleCardItemProps {
   cardRadius?: number;
   letterTypeBadge?: string | null;
   date?: string | null;
-  /** When 'RECIPIENT_ONLY', the cover shows a 👥 badge. No badge for 'PUBLIC' or when omitted. */
+  /**
+   * No longer rendered as a badge on the cover (removed from all small/list
+   * card covers). Kept only so existing callers don't need to change.
+   */
   visibility?: string | null;
   /** Limits shadow strength when the card sits inside a clipped date carousel. */
   carouselShadow?: boolean;

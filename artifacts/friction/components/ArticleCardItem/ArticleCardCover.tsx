@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Feather } from "@expo/vector-icons";
 import {
   LayoutChangeEvent,
   StyleSheet,
@@ -40,7 +39,12 @@ interface ArticleCardCoverProps {
   spaceName?: string | null;
   date?: string | null;
   letterTypeBadge?: string | null;
-  /** When 'RECIPIENT_ONLY', renders a 👥 badge on the cover. No badge for 'PUBLIC' or when omitted. */
+  /**
+   * No longer rendered on the cover itself (the visibility badge was removed
+   * from all small/list card covers). Kept only so callers that still pass
+   * a visibility value (e.g. for the letter-selection overlay's separate
+   * visibility-toggle button) don't need to change their call sites.
+   */
   visibility?: string | null;
   width?: number;
   height?: number;
@@ -70,7 +74,6 @@ export default function ArticleCardCover({
   spaceName,
   date,
   letterTypeBadge,
-  visibility,
   width,
   height,
   borderRadius = 16,
@@ -354,23 +357,6 @@ export default function ArticleCardCover({
             {date}
           </Text>
         ) : null}
-
-        {visibility === "RECIPIENT_ONLY" ? (
-          <View
-            style={[
-              styles.visibilityBadge,
-              !presentation.isImageRendered && {
-                backgroundColor: `${textColor}22`,
-              },
-            ]}
-          >
-            <Feather
-              name="users"
-              size={Math.max(8, Math.round(11 * scale))}
-              color={textColor}
-            />
-          </View>
-        ) : null}
       </View>
     </View>
   );
@@ -418,14 +404,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     fontFamily: ReaderTokens.fontFamily.sans,
     letterSpacing: 0.1,
-  },
-  visibilityBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.28)",
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 3,
   },
 });
