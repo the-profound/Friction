@@ -137,7 +137,6 @@ export default function StoredSentenceCreateScreen() {
 
       <ActionSheetModal 
         visible={menuVisible} 
-        title="새 수집 문장" 
         actions={actions} 
         onClose={() => setMenuVisible(false)} 
       />

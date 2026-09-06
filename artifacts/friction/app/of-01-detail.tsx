@@ -739,7 +739,6 @@ export default function PersonalCollectionDetailScreen() {
 
       <ActionSheetModal
         visible={moreSheetVisible}
-        title="모음 관리"
         onClose={() => setMoreSheetVisible(false)}
         actions={[
           ...(!isArchive && !isImpression ? [

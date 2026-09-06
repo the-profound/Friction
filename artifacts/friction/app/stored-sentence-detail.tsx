@@ -225,7 +225,7 @@ export default function StoredSentenceDetailScreen() {
         <HeaderButton variant="menu" onPress={() => setMenuVisible(true)} disabled={!sentence || busy} busy={busy} />
       </View>
       {renderState()}
-      <ActionSheetModal visible={menuVisible} title="문장 관리" actions={actions} onClose={() => setMenuVisible(false)} />
+      <ActionSheetModal visible={menuVisible} actions={actions} onClose={() => setMenuVisible(false)} />
       <ConfirmModal
         visible={deleteConfirmVisible}
         title="문장 삭제"

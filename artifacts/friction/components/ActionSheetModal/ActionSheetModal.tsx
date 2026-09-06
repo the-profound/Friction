@@ -31,32 +31,25 @@ export interface ActionSheetAction {
 
 interface ActionSheetModalProps {
   visible: boolean;
-  title?: string;
-  description?: string;
   actions: ActionSheetAction[];
   onClose: () => void;
 }
 
+// This modal intentionally never renders a title/description header — a menu
+// list opens straight into its selectable actions. Do not add title props
+// back; see task #2045 for why every entry point was made consistent.
 export default function ActionSheetModal({
   visible,
-  title,
-  description,
   actions,
   onClose,
 }: ActionSheetModalProps) {
   const insets = useSafeAreaInsets();
-  const frozenTitle = useRef(title);
-  const frozenDescription = useRef(description);
   const frozenActions = useRef(actions);
 
   if (visible) {
-    frozenTitle.current = title;
-    frozenDescription.current = description;
     frozenActions.current = actions;
   }
 
-  const displayTitle = frozenTitle.current;
-  const displayDescription = frozenDescription.current;
   const displayActions = frozenActions.current;
 
   const mainActions = displayActions.filter((a) => a.style !== "cancel");
@@ -90,20 +83,9 @@ export default function ActionSheetModal({
       >
         <View style={styles.contentWrapper}>
           <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-            {displayTitle || displayDescription ? (
-              <View style={styles.header}>
-                {displayTitle ? <Text style={styles.title}>{displayTitle}</Text> : null}
-                {displayDescription ? (
-                  <Text style={styles.description}>{displayDescription}</Text>
-                ) : null}
-              </View>
-            ) : null}
-
             {mainActions.map((action, index) => (
               <React.Fragment key={index}>
-                {index > 0 || displayTitle || displayDescription ? (
-                  <View style={styles.divider} />
-                ) : null}
+                {index > 0 ? <View style={styles.divider} /> : null}
                 <ScalePressable
                   style={styles.actionRow}
                   contentStyle={styles.actionRowContent}
@@ -214,25 +196,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     overflow: "hidden",
-  },
-  header: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: "center",
-  },
-  title: {
-    ...Typography.bodySemiBold,
-    fontSize: 15,
-    color: Colors.noticeAccent,
-    textAlign: "center",
-  },
-  description: {
-    ...Typography.body,
-    fontSize: 13,
-    color: Colors.zinc500,
-    textAlign: "center",
-    marginTop: 4,
-    lineHeight: 18,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
