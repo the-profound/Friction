@@ -29,6 +29,14 @@ const scheduleSheetSource = readFileSync(
   new URL("../ArticleScheduleSheet/ArticleScheduleSheet.tsx", import.meta.url),
   "utf8",
 );
+const gridPickerSheetSource = readFileSync(
+  new URL("../ArticleScheduleSheet/LetterGridPickerSheet.tsx", import.meta.url),
+  "utf8",
+);
+const sharedPickerGridSource = readFileSync(
+  new URL("../shared/LetterPickerGrid.tsx", import.meta.url),
+  "utf8",
+);
 const collectionDetailSource = readFileSync(
   new URL("../../app/of-01-detail.tsx", import.meta.url),
   "utf8",
@@ -96,10 +104,37 @@ describe("ArticleListItem contract", () => {
     expect(replyPickerSource).toContain("onSelect={onSelect}");
   });
 
-  it("preserves dates when the schedule flow adapts articles for the shared picker", () => {
-    expect(scheduleSheetSource).toContain("<LetterPickerSheet");
+  it("preserves dates and passes cover/author metadata to the space schedule flow's grid picker", () => {
+    expect(scheduleSheetSource).toContain("<LetterGridPickerSheet");
+    expect(scheduleSheetSource).not.toContain("<LetterPickerSheet");
     expect(scheduleSheetSource).toContain("createdAt: a.createdAt");
     expect(scheduleSheetSource).toContain("updatedAt: a.updatedAt");
+    expect(scheduleSheetSource).toContain("cover: a.cover");
+    expect(scheduleSheetSource).toContain("authorNickname: a.authorNickname");
+  });
+
+  it("renders the space schedule flow's letter picker as a 3-column cover-card grid, not a list", () => {
+    expect(gridPickerSheetSource).toContain("<LetterPickerSelectionSheet");
+    expect(gridPickerSheetSource).toContain('bodyVariant="grid"');
+    expect(gridPickerSheetSource).toContain("getSendArticleAuthorName(article)");
+    expect(gridPickerSheetSource).not.toMatch(/import\s+\{\s*LetterPickerList\s*[,}]/);
+    expect(gridPickerSheetSource).not.toContain("ArticleListItem");
+
+    expect(sharedPickerGridSource).toContain("<ArticleCardItem");
+    expect(sharedPickerGridSource).toContain("<CanonicalCardSlot");
+    expect(sharedPickerGridSource).toContain("<LetterPickerSearchBar");
+    expect(sharedPickerGridSource).toContain("GRID_COLS = 3");
+    expect(sharedPickerGridSource).not.toContain("<ArticleListItem");
+  });
+
+  it("keeps the other letter pickers (space wizard, personal send, reply) on the default list body", () => {
+    expect(pickerSource).toContain("<LetterPickerList");
+    expect(pickerSource).toContain('bodyVariant = "list"');
+    // The space-wizard/personal-send LetterPickerSheet must not opt into the grid.
+    const letterPickerSheetFn = pickerSource.slice(
+      pickerSource.indexOf("export function LetterPickerSheet("),
+    );
+    expect(letterPickerSheetFn).not.toContain("bodyVariant");
   });
 
   it("uses a non-blocking cached cover image with a synchronous fallback", () => {

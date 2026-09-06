@@ -1112,17 +1112,6 @@ export default function SpaceScheduleSendScreen() {
                     ? schedulingBlockReason
                     : "아래 버튼으로\n새 예약을 등록하세요"}
                 </Text>
-                <ScalePressable
-                  style={styles.footerBtnOuter}
-                  contentStyle={[
-                    styles.footerBtn,
-                    (isSchedulingBlocked || emptySlots === undefined) && styles.footerBtnDisabled,
-                  ]}
-                  onPress={handleStartNewReservation}
-                  disabled={isSchedulingBlocked || emptySlots === undefined}
-                >
-                  <Text style={styles.footerBtnText}>새 글 예약하기</Text>
-                </ScalePressable>
               </View>
             )
           )}

@@ -12,7 +12,7 @@ import { Colors, Typography, Spacing } from "@/constants/tokens";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { SpaceInfoNote } from "@/components/SpaceInfoNote/SpaceInfoNote";
 import { SpaceCopy } from "@/constants/spaceCopy";
-import { LetterPickerSheet } from "@/components/shared/LetterPickerSheet";
+import { LetterGridPickerSheet } from "@/components/ArticleScheduleSheet/LetterGridPickerSheet";
 import { CollapsibleDatePicker, startOfDay } from "@/components/shared/CalendarGrid";
 import {
   useCreateSpaceScheduledSend,
@@ -175,6 +175,8 @@ export function ArticleScheduleSheet({
       articles.map((a) => ({
         id: a.id,
         title: a.title ?? null,
+        authorNickname: a.authorNickname ?? null,
+        cover: a.cover ?? null,
         content: (a as unknown as { content?: string | null }).content ?? null,
         createdAt: a.createdAt,
         updatedAt: a.updatedAt,
@@ -343,7 +345,7 @@ export function ArticleScheduleSheet({
           <Feather name="chevron-right" size={16} color={Colors.zinc300} />
         </ScalePressable>
 
-        <LetterPickerSheet
+        <LetterGridPickerSheet
           visible={letterPickerVisible}
           onClose={() => setLetterPickerVisible(false)}
           articles={pickerArticles}

@@ -7,6 +7,7 @@ import {
   LetterPickerList,
   type LetterPickerListEntry,
 } from "@/components/shared/LetterPickerList";
+import { LetterPickerGrid } from "@/components/shared/LetterPickerGrid";
 import { Colors, Typography } from "@/constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { getSendArticleAuthorName } from "@/lib/sendPickerPresentation";
@@ -46,6 +47,13 @@ interface LetterPickerSelectionSheetProps<T> {
   emptyTitle: string;
   emptyMessage?: string;
   emptyAction?: { label: string; onPress: () => void };
+  /**
+   * "list" (default) renders the compact ArticleListItem rows every other
+   * picker uses. "grid" renders the 3-column cover-card grid — currently
+   * only the space-reservation schedule sheet opts into it via
+   * LetterGridPickerSheet.
+   */
+  bodyVariant?: "list" | "grid";
 }
 
 export function LetterPickerSelectionSheet<T>({
@@ -62,6 +70,7 @@ export function LetterPickerSelectionSheet<T>({
   emptyTitle,
   emptyMessage,
   emptyAction,
+  bodyVariant = "list",
 }: LetterPickerSelectionSheetProps<T>) {
   return (
     <BottomSheet
@@ -102,6 +111,16 @@ export function LetterPickerSelectionSheet<T>({
             </ScalePressable>
           ) : null}
         </View>
+      ) : bodyVariant === "grid" ? (
+        <LetterPickerGrid
+          visible={visible}
+          items={items}
+          selectedId={selectedId}
+          onSelect={(item) => {
+            onSelect(item);
+            onClose();
+          }}
+        />
       ) : (
         <LetterPickerList
           visible={visible}

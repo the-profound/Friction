@@ -28,6 +28,45 @@ interface LetterPickerListProps<T> {
 
 const ITEM_EXTENT = ARTICLE_LIST_ITEM_HEIGHT + Spacing.cardGap;
 
+export interface LetterPickerSearchBarProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+/**
+ * The title-search row shared by every letter-picker body (list and grid).
+ * Kept as one component so both layouts stay visually and behaviorally
+ * identical — only the results area below it differs.
+ */
+export function LetterPickerSearchBar({ value, onChange }: LetterPickerSearchBarProps) {
+  return (
+    <View style={styles.searchRow}>
+      <Feather name="search" size={16} color={Colors.searchIcon} />
+      <TextInput
+        style={styles.searchInput}
+        placeholder="제목으로 검색"
+        placeholderTextColor={Colors.searchPlaceholder}
+        cursorColor={Colors.cursorAccent}
+        value={value}
+        onChangeText={onChange}
+        returnKeyType="search"
+        accessibilityLabel="편지 제목 검색"
+      />
+      {value.length > 0 ? (
+        <ScalePressable
+          style={styles.clearButton}
+          contentStyle={styles.clearButtonContent}
+          onPress={() => onChange("")}
+          accessibilityRole="button"
+          accessibilityLabel="검색어 지우기"
+        >
+          <Feather name="x" size={16} color={Colors.zinc400} />
+        </ScalePressable>
+      ) : null}
+    </View>
+  );
+}
+
 export function LetterPickerList<T>({
   visible,
   items,
@@ -85,30 +124,7 @@ export function LetterPickerList<T>({
 
   return (
     <View style={styles.container}>
-      <View style={styles.searchRow}>
-        <Feather name="search" size={16} color={Colors.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="제목으로 검색"
-          placeholderTextColor={Colors.searchPlaceholder}
-          cursorColor={Colors.cursorAccent}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-          accessibilityLabel="편지 제목 검색"
-        />
-        {searchQuery.length > 0 ? (
-          <ScalePressable
-            style={styles.clearButton}
-            contentStyle={styles.clearButtonContent}
-            onPress={() => setSearchQuery("")}
-            accessibilityRole="button"
-            accessibilityLabel="검색어 지우기"
-          >
-            <Feather name="x" size={16} color={Colors.zinc400} />
-          </ScalePressable>
-        ) : null}
-      </View>
+      <LetterPickerSearchBar value={searchQuery} onChange={setSearchQuery} />
 
       {visibleItems.length === 0 ? (
         <View style={styles.noResults}>
