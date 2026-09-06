@@ -1293,7 +1293,7 @@ router.post("/spaces/:id/start", requireAuth, async (req, res) => {
   } catch (err) {
     if (err instanceof InvalidOpeningScheduleError) {
       res.status(400).json({
-        error: "여는 편지는 시작 예정일 전날 오전 6시까지 예약해야 해요. 시작 예정일을 늦추거나 발송일을 다시 선택해주세요.",
+        error: "여는 편지는 시작 예정일 전날 오전 6시까지 예약해야 해요. 시작 예정일을 늦추거나 발신일을 다시 선택해주세요.",
       });
       return;
     }
@@ -2976,13 +2976,13 @@ async function validateCenterSlotDate(
     return { ok: false, error: "선택한 슬롯이 이 회차의 작성자 배정 슬롯과 일치하지 않습니다." };
   }
   if (!slot.scheduledDate) {
-    return { ok: false, error: "슬롯에 배정된 발송일이 없습니다." };
+    return { ok: false, error: "슬롯에 배정된 발신일이 없습니다." };
   }
   if (!isKstDateReservable(slot.scheduledDate)) {
     return { ok: false, error: "이 슬롯의 예약 가능 시간이 지났습니다." };
   }
   if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) !== slot.scheduledDate) {
-    return { ok: false, error: "요청한 발송 예정일이 배정된 슬롯 날짜와 일치하지 않습니다." };
+    return { ok: false, error: "요청한 발신 예정일이 배정된 슬롯 날짜와 일치하지 않습니다." };
   }
   return { ok: true, slot };
 }
@@ -3106,7 +3106,7 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
   }
   const parsedScheduledAt = toDate(parsedBody.data.scheduledAt);
   if (!parsedScheduledAt) {
-    res.status(400).json({ error: "잘못된 발송 시각입니다." });
+    res.status(400).json({ error: "잘못된 발신 시각입니다." });
     return;
   }
   // Reservation send times are always normalized to KST 06:00, regardless of
@@ -3239,7 +3239,7 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
     return;
   }
   if (existingSend.status === "SENT") {
-    res.status(409).json({ error: "이미 발송된 예약은 변경하거나 재활성화할 수 없습니다." });
+    res.status(409).json({ error: "이미 발신된 예약은 변경하거나 재활성화할 수 없습니다." });
     return;
   }
   if (status === "PENDING" && !["CANCELLED", "FAILED", "PENDING"].includes(existingSend.status)) {
@@ -3268,7 +3268,7 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
   if (scheduledAt !== undefined) {
     const parsedScheduledAt = toDate(scheduledAt);
     if (!parsedScheduledAt) {
-      res.status(400).json({ error: "잘못된 발송 시각입니다." });
+      res.status(400).json({ error: "잘못된 발신 시각입니다." });
       return;
     }
     normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);

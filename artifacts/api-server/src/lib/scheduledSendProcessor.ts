@@ -146,7 +146,7 @@ async function processOneScheduledSend(
     } else if (!space) {
       failureReason = "공간을 찾을 수 없습니다.";
     } else if (space.status === "ARCHIVED" && send.status === "PENDING") {
-      failureReason = "공간이 종료되어 발송할 수 없습니다.";
+      failureReason = "공간이 종료되어 발신할 수 없습니다.";
     } else if (!letter.sourceArticleId) {
       failureReason = "수신함에 전달할 원본 글이 없습니다.";
     } else if (letter.letterType === "CENTER") {
@@ -189,7 +189,7 @@ async function processOneScheduledSend(
         .where(eq(articlesTable.id, letter.sourceArticleId))
         .limit(1);
       if (!article || article.deletedAt || !READABLE_ARTICLE_STATUSES.has(article.status)) {
-        failureReason = "원본 글을 읽을 수 없어 발송할 수 없습니다.";
+        failureReason = "원본 글을 읽을 수 없어 발신할 수 없습니다.";
       }
     }
 
