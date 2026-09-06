@@ -618,6 +618,7 @@ export default function ClosingScreen() {
       onPress: handleStepBack,
       disabled: stageMenuBusy,
       busy: false,
+      directionIcon: "leading",
     },
     {
       label: "표지 편집",

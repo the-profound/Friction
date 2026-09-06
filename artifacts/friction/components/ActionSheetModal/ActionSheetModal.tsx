@@ -8,8 +8,16 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, Typography, ZIndex } from "../../constants/tokens";
+
+/**
+ * "leading" renders a left chevron before the label (moving back to a
+ * previous stage); "trailing" renders a right chevron after the label
+ * (moving forward to the next stage).
+ */
+export type ActionSheetDirectionIcon = "leading" | "trailing";
 
 export interface ActionSheetAction {
   label: string;
@@ -18,6 +26,7 @@ export interface ActionSheetAction {
   disabled?: boolean;
   busy?: boolean;
   accessibilityLabel?: string;
+  directionIcon?: ActionSheetDirectionIcon;
 }
 
 interface ActionSheetModalProps {
@@ -52,6 +61,12 @@ export default function ActionSheetModal({
 
   const mainActions = displayActions.filter((a) => a.style !== "cancel");
   const cancelActions = displayActions.filter((a) => a.style === "cancel");
+
+  const getActionColor = (action: ActionSheetAction) => {
+    if (action.disabled) return Colors.zinc500;
+    if (action.style === "destructive") return Colors.noticeAccent;
+    return Colors.zinc900;
+  };
 
   return (
     <Modal
@@ -110,15 +125,33 @@ export default function ActionSheetModal({
                       color={action.style === "destructive" ? Colors.noticeAccent : Colors.zinc500}
                     />
                   ) : (
-                    <Text
-                      style={[
-                        styles.actionLabel,
-                        action.style === "destructive" && styles.destructiveLabel,
-                        action.disabled && styles.disabledLabel,
-                      ]}
-                    >
-                      {action.label}
-                    </Text>
+                    <View style={styles.actionLabelRow}>
+                      {action.directionIcon === "leading" ? (
+                        <Feather
+                          name="chevron-left"
+                          size={18}
+                          color={getActionColor(action)}
+                          style={styles.chevronLeading}
+                        />
+                      ) : null}
+                      <Text
+                        style={[
+                          styles.actionLabel,
+                          action.style === "destructive" && styles.destructiveLabel,
+                          action.disabled && styles.disabledLabel,
+                        ]}
+                      >
+                        {action.label}
+                      </Text>
+                      {action.directionIcon === "trailing" ? (
+                        <Feather
+                          name="chevron-right"
+                          size={18}
+                          color={getActionColor(action)}
+                          style={styles.chevronTrailing}
+                        />
+                      ) : null}
+                    </View>
                   )}
                 </ScalePressable>
               </React.Fragment>
@@ -223,6 +256,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 20,
+  },
+  actionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  chevronLeading: {
+    marginRight: 4,
+  },
+  chevronTrailing: {
+    marginLeft: 4,
   },
   actionLabel: {
     ...Typography.body,

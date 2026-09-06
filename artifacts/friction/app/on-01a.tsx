@@ -2694,6 +2694,7 @@ export default function WritingScreen() {
           label: "단상 단계로",
           onPress: () => void returnToThoughtMode(),
           disabled: isNavigating,
+          directionIcon: "leading",
         },
         {
           label: "자동 분할",
@@ -2711,6 +2712,7 @@ export default function WritingScreen() {
           label: "마감 단계로",
           onPress: () => void handleNextToClosing(),
           disabled: isNavigating || splitting || spellCheckInFlightRef.current,
+          directionIcon: "trailing",
         },
       ]
     : [
@@ -2718,6 +2720,7 @@ export default function WritingScreen() {
           label: "검토 단계로",
           onPress: () => void enterDividingMode(),
           disabled: isNavigating,
+          directionIcon: "trailing",
         },
       ];
 
