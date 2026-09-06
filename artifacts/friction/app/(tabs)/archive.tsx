@@ -24,7 +24,7 @@ import {
   readerFontSize,
 } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
-import { PageHeader } from "@/components/NavBar/PageHeader";
+import { PageHeader, HeaderFadeTail } from "@/components/NavBar/PageHeader";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -651,6 +651,7 @@ export default function ArchiveScreen() {
           />
         ) : null}
       </View>
+      <HeaderFadeTail />
 
       {renderContent()}
 

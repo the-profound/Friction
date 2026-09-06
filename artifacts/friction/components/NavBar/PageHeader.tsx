@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Image, ImageSourcePropType, Keyboard, Platform, StyleSheet, Text, TouchableWithoutFeedback, useWindowDimensions, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton, { type HeaderButtonVariant } from "@/components/shared/HeaderButton";
@@ -8,6 +9,68 @@ import { HeaderAccentLine } from "@/components/NavBar/HeaderAccentLine";
 
 import { Colors, Shadows, Sizing, Spacing, Typography } from "@/constants/tokens";
 import { useNavigation } from "@/contexts/NavigationContext";
+
+// expo-linear-gradient's types don't line up with the RN style array pattern
+// used throughout this file; the rest of the codebase casts it the same way
+// (see app/(tabs)/on.tsx).
+const Gradient = LinearGradient as unknown as React.ComponentType<any>;
+
+/**
+ * Height of the fading tail appended below a header block when it needs to
+ * blend into scrolling content underneath it (see `HeaderFadeTail`).
+ * Shared so every screen's overlap/reveal band feels the same size.
+ */
+export const HEADER_FADE_HEIGHT = 24;
+
+/** Converts a "#RRGGBB" (or "#RGB") hex color into an "rgba(r,g,b,alpha)" string. */
+function hexToRgba(hex: string, alpha: number): string {
+  let normalized = hex.replace("#", "");
+  if (normalized.length === 3) {
+    normalized = normalized.split("").map((c) => c + c).join("");
+  }
+  const int = parseInt(normalized, 16);
+  if (normalized.length !== 6 || Number.isNaN(int)) {
+    // Fall back gracefully for non-hex inputs (e.g. already an rgba/named color)
+    // rather than rendering a broken gradient.
+    return alpha <= 0 ? "transparent" : hex;
+  }
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * A thin, non-interactive strip that fades a solid `backgroundColor` down to
+ * fully transparent, then overlaps the next sibling by its own height (via a
+ * matching negative margin) so scrolling content underneath is revealed
+ * through the fade instead of being hard-cut by the header's bottom edge.
+ *
+ * Drop this in directly above whatever actually scrolls (a FlatList/
+ * ScrollView) — not above static header chrome like filter rows or search
+ * bars, since its zIndex would otherwise wash out over their content.
+ */
+export function HeaderFadeTail({
+  backgroundColor = Colors.white,
+  height = HEADER_FADE_HEIGHT,
+}: {
+  backgroundColor?: string;
+  height?: number;
+}) {
+  return (
+    <View
+      pointerEvents="none"
+      style={[styles.fadeTail, { height, marginBottom: -height }]}
+    >
+      <Gradient
+        colors={[hexToRgba(backgroundColor, 1), hexToRgba(backgroundColor, 0)]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+    </View>
+  );
+}
 
 interface PageHeaderProps {
   title: string;
@@ -42,6 +105,14 @@ interface PageHeaderProps {
   rightText?: string;
   onRightTextPress?: () => void;
   searchLast?: boolean;
+  /**
+   * When true, appends a `HeaderFadeTail` right after this header so the
+   * scrollable content immediately below fades in/out instead of getting
+   * hard-cut. Only use this when NOTHING else (a filter row, a search bar)
+   * sits between this PageHeader and the actual scrolling list — otherwise
+   * place `HeaderFadeTail` manually right above the list instead.
+   */
+  fadeBottom?: boolean;
 }
 
 export function PageHeader({
@@ -75,6 +146,7 @@ export function PageHeader({
   onRightTextPress,
   searchLast = false,
   backgroundColor = Colors.white,
+  fadeBottom = false,
 }: PageHeaderProps) {
   const { headerScrolled } = useNavigation();
   const insets = useSafeAreaInsets();
@@ -85,6 +157,7 @@ export function PageHeader({
   const rowHeight = Sizing.headerButtonTouchSize;
 
   return (
+    <>
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={[styles.shell, headerScrolled && Shadows.headerScrolled, { backgroundColor }]}>
         <View
@@ -213,6 +286,8 @@ export function PageHeader({
         ) : null}
       </View>
     </TouchableWithoutFeedback>
+    {fadeBottom ? <HeaderFadeTail backgroundColor={backgroundColor} /> : null}
+    </>
   );
 }
 
@@ -220,6 +295,9 @@ const styles = StyleSheet.create({
   shell: {
     position: "relative",
     backgroundColor: Colors.white,
+  },
+  fadeTail: {
+    zIndex: 5,
   },
   container: {
     flexDirection: "row",

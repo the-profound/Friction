@@ -1,0 +1,12 @@
+---
+name: Friction header fade-to-transparent tail
+description: Pattern for turning a solid PageHeader/filter-bar background into a top-opaque→bottom-transparent gradient that reveals scrolled list content underneath, and where NOT to attach it.
+---
+
+`components/NavBar/PageHeader.tsx` exports `HeaderFadeTail` (+ `HEADER_FADE_HEIGHT` constant) and a `PageHeader` `fadeBottom` prop. Both work the same way: a thin `View` with `height: H`, `marginBottom: -H`, `zIndex` above its sibling, `pointerEvents="none"`, containing a `LinearGradient` from opaque `backgroundColor` to fully transparent. The negative margin makes it overlap (not push down) the very next sibling, so that sibling's top `H` px render underneath the fading gradient instead of being hard-cut by the header's bottom edge. This generalizes the overlap trick already used by `app/(tabs)/on.tsx`'s `filtersAnimated` block.
+
+**Why this shape:** the reveal only works where the transparent-gradient region and the actual overlapped content coincide. If you put the whole gradient inside a component's own (non-overlapping) box, nothing is revealed — you just fade to the plain screen background behind it, which is invisible when both are the same color.
+
+**Why NOT to just attach `fadeBottom` to every `PageHeader` call directly:** the tail overlaps whatever the *immediate next sibling* is. If that's an active UI control — a kebab/menu row (공간 목록/of.tsx `headerActionRow`), a sub-tab/filter row (보관함/archive.tsx `filterRow`), or an expanded search bar (기록함/on.tsx `AnimatedSearchBar`) — the fading white layer (zIndex above it) visually washes out that control's icon/label, and pulling it up by the overlap height can shove it into the header above it. Only use `fadeBottom` on `PageHeader` when NOTHING sits between it and the real scrollable content (e.g. 수신함/index.tsx). Everywhere else, place `HeaderFadeTail` manually immediately before the actual `FlatList`/scrollable content, after any intermediate rows — that keeps those rows' layout completely untouched and the reveal effect lands exactly where it should.
+
+**Verification limitation:** the (tabs) routes are Supabase-auth-gated in this dev environment and there is currently no working dev quick-login (see friction-app-testing.md) to visually confirm scroll-fade behavior or that the `pointerEvents="none"` tail doesn't block taps — this had to be verified by code/layout reasoning plus a clean `tsc`/vitest pass instead of a live authenticated screenshot.

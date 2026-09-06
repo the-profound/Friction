@@ -526,6 +526,7 @@ function InboxScreenContent() {
       <PageHeader
         title="수신함"
         centeredBrandTitle
+        fadeBottom
       />
 
       {isLoading || shouldShowInboxOfflineEmptyNotice({

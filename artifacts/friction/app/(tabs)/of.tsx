@@ -15,7 +15,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { keepPreviousData, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
-import { PageHeader } from "@/components/NavBar/PageHeader";
+import { PageHeader, HeaderFadeTail } from "@/components/NavBar/PageHeader";
 import HeaderButton from "@/components/shared/HeaderButton";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -600,6 +600,7 @@ export default function SpacesScreen() {
           { label: "취소", style: "cancel", onPress: () => {} },
         ]}
       />
+      <HeaderFadeTail />
 
       {isLoading ? (
         <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>

@@ -47,7 +47,7 @@ import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
-import { PageHeader } from "@/components/NavBar/PageHeader";
+import { PageHeader, HEADER_FADE_HEIGHT } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, ReaderTokens, Shadows, Sizing, Spacing, Typography, readerFontSize } from "@/constants/tokens";
@@ -104,7 +104,9 @@ import { isListSearchBoundaryGesture } from "@/lib/dateGroupVerticalSnap";
 import { useIsOnline } from "@/lib/useIsOnline";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
-const FILTER_GRADIENT_OVERLAP = 12;
+// Shared with the other tab headers so every screen's fade/overlap band feels
+// the same size (see components/NavBar/PageHeader.tsx: HeaderFadeTail).
+const FILTER_GRADIENT_OVERLAP = HEADER_FADE_HEIGHT;
 const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
