@@ -108,6 +108,7 @@ import {
   invalidateDirectThoughtCreation,
   insertThoughtInRecordCache,
   patchArticleInRecordCaches,
+  upsertArticleInRecordCaches,
   patchThoughtInRecordCaches,
   removeRecordFromCache,
   restoreRecordListCaches,
@@ -1704,6 +1705,14 @@ export default function WritingScreen() {
       content: promotedContent,
       status: "DIVIDING",
       pages: [],
+    });
+    removeRecordFromCache(queryClient, { id: thoughtId, kind: "thought" });
+    upsertArticleInRecordCaches(queryClient, {
+      ...promoted,
+      title: promotedTitle,
+      content: promotedContent,
+      status: "DIVIDING",
+      pages: promoted.pages ?? [],
     });
 
     // Update editor without remounting. The response is authoritative, but

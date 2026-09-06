@@ -20,6 +20,7 @@ import {
   snapshotRecordDeletion,
   snapshotRecordListCaches,
   stageArticleTransitionSnapshot,
+  upsertArticleInRecordCaches,
   upsertThoughtInRecordCaches,
 } from "../queryInvalidation";
 import { buildUnifiedRecords, mergeRecordSession } from "../recordList";
@@ -103,6 +104,43 @@ describe("direct thought creation cache invalidation", () => {
 
     expect(optimistic.map((record) => record.id)).toEqual(["same-time-z", "same-time-a"]);
     expect(reconciled.map((record) => record.id)).toEqual(["same-time-z", "same-time-a"]);
+  });
+});
+
+describe("promoted article cache handoff", () => {
+  it("adds the confirmed snapshot only to article lists whose filters match", () => {
+    const queryClient = new QueryClient();
+    const allKey = getListArticlesQueryKey({ authorId: "author" });
+    const dividingKey = getListArticlesQueryKey({ authorId: "author", status: "DIVIDING" });
+    const letterKey = getListArticlesQueryKey({ authorId: "author", status: "LETTER" });
+    const matchingTitleKey = getListArticlesQueryKey({ titleQuery: "최신" });
+    const otherTitleKey = getListArticlesQueryKey({ titleQuery: "다른 제목" });
+    const otherAuthorKey = getListArticlesQueryKey({ authorId: "other-author" });
+    queryClient.setQueryData(allKey, []);
+    queryClient.setQueryData(dividingKey, []);
+    queryClient.setQueryData(letterKey, []);
+    queryClient.setQueryData(matchingTitleKey, []);
+    queryClient.setQueryData(otherTitleKey, []);
+    queryClient.setQueryData(otherAuthorKey, []);
+
+    const promoted = {
+      id: "promoted",
+      authorId: "author",
+      title: "최신 제목",
+      content: "최신 본문",
+      status: "DIVIDING",
+      createdAt: "2026-09-06T00:00:00.000Z",
+      updatedAt: "2026-09-06T00:00:00.000Z",
+      pages: [],
+    };
+    upsertArticleInRecordCaches(queryClient, promoted as never);
+
+    expect(queryClient.getQueryData(allKey)).toEqual([promoted]);
+    expect(queryClient.getQueryData(dividingKey)).toEqual([promoted]);
+    expect(queryClient.getQueryData(letterKey)).toEqual([]);
+    expect(queryClient.getQueryData(matchingTitleKey)).toEqual([promoted]);
+    expect(queryClient.getQueryData(otherTitleKey)).toEqual([]);
+    expect(queryClient.getQueryData(otherAuthorKey)).toEqual([]);
   });
 });
 

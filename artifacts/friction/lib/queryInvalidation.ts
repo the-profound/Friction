@@ -17,6 +17,7 @@ import {
 import type {
   Article,
   InboxItem,
+  ListArticlesParams,
   Thought,
   ThoughtQuestionQueueResponse,
 } from "@workspace/api-client-react";
@@ -357,6 +358,27 @@ export function patchArticleInRecordCaches(qc: QueryClient, id: string, patch: P
     });
     return changed ? next : previous;
   });
+}
+
+export function upsertArticleInRecordCaches(qc: QueryClient, article: Article) {
+  for (const [queryKey, previous] of qc.getQueriesData<Article[]>({
+    queryKey: getListArticlesQueryKey(),
+  })) {
+    if (!previous) continue;
+    const params = queryKey[1] as ListArticlesParams | undefined;
+    const matches =
+      (!params?.authorId || params.authorId === article.authorId)
+      && (!params?.status || params.status === article.status)
+      && (!params?.titleQuery || article.title.toLocaleLowerCase().includes(
+        params.titleQuery.toLocaleLowerCase(),
+      ));
+    if (!matches) continue;
+    const withoutPreviousSnapshot = previous.filter((item) => item.id !== article.id);
+    qc.setQueryData(
+      queryKey,
+      [...withoutPreviousSnapshot, article].sort(compareRecordsNewestFirst),
+    );
+  }
 }
 
 /**

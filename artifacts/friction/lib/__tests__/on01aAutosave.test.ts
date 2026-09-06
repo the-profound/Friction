@@ -188,6 +188,33 @@ describe("on-01a editor hydration and initialization", () => {
     );
   });
 
+  it("reinjects native Markdown into the document before marking it applied", () => {
+    const editorSource = readEditorSource();
+    const initFlow = editorSource.slice(
+      editorSource.indexOf('case "init":'),
+      editorSource.indexOf('case "setMarkdown":'),
+    );
+    const setMarkdownFlow = editorSource.slice(
+      editorSource.indexOf('case "setMarkdown":'),
+      editorSource.indexOf('case "setTitle":'),
+    );
+
+    expect(initFlow).toContain(
+      "const html = markdownToHtml(initialMarkdown, ensureTrailingParagraph);",
+    );
+    expect(initFlow.indexOf("editor.commands.setContent(html);")).toBeLessThan(
+      initFlow.indexOf("lastAppliedMarkdown = initialMarkdown;"),
+    );
+    expect(setMarkdownFlow).toContain('const next = cmd.markdown ?? "";');
+    expect(setMarkdownFlow).toContain(
+      "const html = markdownToHtml(next, ensureTrailingParagraph);",
+    );
+    expect(setMarkdownFlow.indexOf("editor.commands.setContent(html);")).toBeLessThan(
+      setMarkdownFlow.indexOf("lastAppliedMarkdown = next;"),
+    );
+    expect(setMarkdownFlow).not.toContain("const html = editor.getHTML();");
+  });
+
   it("combines native keyboard events with WebView focus", () => {
     const screen = readScreen();
     const keyboardTracking = screen.slice(
@@ -356,6 +383,24 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(screen).toContain("title: payload.title ?? titleRef.current");
     expect(screen).toContain("const latestTitle = latestSnapshot.title;");
     expect(screen).toContain("const latestContent = latestSnapshot.content;");
+  });
+
+  it("publishes the confirmed promotion snapshot to detail and list caches before route replacement", () => {
+    const screen = readScreen();
+    const promotionFlow = screen.slice(
+      screen.indexOf("const promotedContent ="),
+      screen.indexOf("// 공간 컨텍스트를 AsyncStorage에 저장"),
+    );
+
+    expect(promotionFlow).toContain("title: promotedTitle");
+    expect(promotionFlow).toContain("content: promotedContent");
+    expect(promotionFlow).toContain(
+      'removeRecordFromCache(queryClient, { id: thoughtId, kind: "thought" });',
+    );
+    expect(promotionFlow).toContain("upsertArticleInRecordCaches(queryClient, {");
+    expect(promotionFlow.indexOf("upsertArticleInRecordCaches")).toBeLessThan(
+      promotionFlow.indexOf("commitAutosaveTransition"),
+    );
   });
 
   it("treats an explicit dividing route as an article while its query reloads", () => {
@@ -1022,7 +1067,7 @@ describe("on-01a keyboard reactivation", () => {
     expect(nativeEditorSource).toContain("editor.commands.focus()");
     expect(nativeEditorBundle).toContain("startedOnBlankSurface");
     expect(nativeEditorBundle).toContain('addEventListener("touchcancel"');
-    expect(nativeEditorBundle).toContain("3.27.0-");
+    expect(nativeEditorBundle).toContain("3.28.0-");
 
     expect(webEditorSource).toContain('container.addEventListener("pointerdown"');
     expect(webEditorSource).toContain('container.addEventListener("pointermove"');
