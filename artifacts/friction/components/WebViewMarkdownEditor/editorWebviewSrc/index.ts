@@ -1,6 +1,5 @@
 import { Editor, Extension, Node as TipTapNode } from "@tiptap/core";
 import { Document } from "@tiptap/extension-document";
-import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
 import { Bold } from "@tiptap/extension-bold";
 import { Italic } from "@tiptap/extension-italic";
@@ -24,9 +23,15 @@ import { BODY_FONT_FALLBACK_PROBE_TEXT } from "../../shared/bodyTypographyFonts"
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 import {
+  CARET_PARAGRAPH_ATTRIBUTE,
+  CARET_PARAGRAPH_HTML,
+  createEmptyParagraphMarker,
   isPreservedBlankParagraphLine,
   preserveMarkdownBlankLinesForEditor,
+  PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE,
+  restoreEmptyParagraphMarkers,
 } from "../../../lib/markdownBlankLines";
+import { BlankAwareParagraph } from "../blankAwareParagraph";
 import { handleTitleEnter, insertTitleSoftBreak } from "../titleKeyboardContract";
 import { createHeadingWithParagraphShortcut } from "../headingKeyboardShortcuts";
 import {
@@ -602,7 +607,7 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
       }
 
       if (isPreservedBlankParagraphLine(line)) {
-        blocks.push("<p></p>");
+        blocks.push(`<p ${PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE}="true"></p>`);
         i++;
         continue;
       }
@@ -740,7 +745,7 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
     // 불가능해진다. 기존 편집기는 항상 빈 단락을 마지막에 보장한다.
     const last = blocks[blocks.length - 1];
     if (ensureTrailingParagraph && (!last || !/<\/p>$/.test(last))) {
-      blocks.push("<p></p>");
+      blocks.push(CARET_PARAGRAPH_HTML);
     }
 
     return blocks.join("");
@@ -753,14 +758,18 @@ function htmlToMarkdown(html: string, onError?: (error: unknown) => void): strin
   try {
     const container = document.createElement("div");
     container.innerHTML = html || "";
-    // Remove the caret-only trailing paragraph (and any other document-edge
-    // empty paragraphs) before internal empty paragraphs are serialized.
-    while (
+    // Remove only the editor-owned caret target. Unmarked terminal empty
+    // paragraphs were authored by the user and must be serialized.
+    if (
       container.lastElementChild?.tagName.toLowerCase() === "p"
-      && !container.lastElementChild.textContent?.trim()
+      && container.lastElementChild.getAttribute(CARET_PARAGRAPH_ATTRIBUTE) === "true"
+      && !container.lastElementChild.hasChildNodes()
     ) {
       container.lastElementChild.remove();
     }
+    const emptyParagraphMarker = createEmptyParagraphMarker(
+      container.textContent ?? "",
+    );
 
     function inlineMd(node: Node): string {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -803,7 +812,7 @@ function htmlToMarkdown(html: string, onError?: (error: unknown) => void): strin
       if (tag === "h3") return `### ${childrenToInline(el)}\n\n`;
       if (tag === "p") {
         const txt = childrenToInline(el);
-        if (!txt.trim()) return "\n";
+        if (!el.hasChildNodes()) return `${emptyParagraphMarker}\n\n`;
         return `${txt}\n\n`;
       }
       if (tag === "ul" || tag === "ol") {
@@ -865,7 +874,10 @@ function htmlToMarkdown(html: string, onError?: (error: unknown) => void): strin
     for (const child of Array.from(container.children)) {
       md += blockMd(child as HTMLElement, 0);
     }
-    return md.trimEnd();
+    return restoreEmptyParagraphMarkers(
+      md.replace(/\n\n$/, ""),
+      emptyParagraphMarker,
+    );
   } catch (error) {
     onError?.(error);
     return "";
@@ -1496,7 +1508,7 @@ function spellFindRange(
       element: el,
       extensions: [
         Document,
-        Paragraph,
+        BlankAwareParagraph,
         Text,
         createHeadingWithParagraphShortcut().configure({ levels: [1, 2, 3] }),
         Bold,

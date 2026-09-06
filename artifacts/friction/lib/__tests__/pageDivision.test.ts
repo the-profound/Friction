@@ -149,7 +149,18 @@ describe("editor blank-line round trips", () => {
   });
 
   it("keeps the existing document-boundary cleanup contract", () => {
-    expect(preserveMarkdownBlankLinesForEditor("\n\n\n본문\n\n\n")).toBe("본문");
+    expect(preserveMarkdownBlankLinesForEditor("\n\n\n본문\n\n")).toBe("본문");
+  });
+
+  it("preserves three-or-more terminal newlines as authored empty paragraphs", () => {
+    expect(preserveMarkdownBlankLinesForEditor("본문\n\n\n")).toBe(
+      '본문\n\n<p data-friction-preserved-blank="true"></p>',
+    );
+    expect(
+      preserveMarkdownBlankLinesForEditor("본문\n\n\n\n").match(
+        /data-friction-preserved-blank/g,
+      ),
+    ).toHaveLength(2);
   });
 
   it("restores empty editor paragraphs to their exact newline count", () => {
@@ -166,6 +177,12 @@ describe("editor blank-line round trips", () => {
         marker,
       ),
     ).toBe("앞\n\n\n\n뒤");
+    expect(restoreEmptyParagraphMarkers(`끝\n\n${marker}`, marker)).toBe(
+      "끝\n\n\n",
+    );
+    expect(
+      restoreEmptyParagraphMarkers(`끝\n\n${marker}\n\n${marker}`, marker),
+    ).toBe("끝\n\n\n\n");
   });
 
   it("never mistakes authored marker-like text for an empty paragraph", () => {

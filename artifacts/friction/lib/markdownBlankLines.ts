@@ -1,4 +1,11 @@
-const PRESERVED_BLANK_PARAGRAPH = '<p data-friction-preserved-blank="true"></p>';
+export const PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE = "data-friction-preserved-blank";
+export const CARET_PARAGRAPH_ATTRIBUTE = "data-friction-caret-paragraph";
+
+const PRESERVED_BLANK_PARAGRAPH =
+  `<p ${PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE}="true"></p>`;
+
+export const CARET_PARAGRAPH_HTML =
+  `<p ${CARET_PARAGRAPH_ATTRIBUTE}="true"></p>`;
 
 /**
  * CommonMark collapses every run of two-or-more newlines into one block
@@ -6,18 +13,29 @@ const PRESERVED_BLANK_PARAGRAPH = '<p data-friction-preserved-blank="true"></p>'
  * beyond that boundary so authored vertical whitespace survives a round trip.
  */
 export function preserveMarkdownBlankLinesForEditor(markdown: string): string {
-  return String(markdown ?? "")
+  const normalized = String(markdown ?? "")
     .replace(/\r\n?/g, "\n")
-    // Editor document boundaries are canonicalized; only body-internal blank
-    // lines are authored structure.
-    .replace(/^\n+|\n+$/g, "")
-    .replace(/\n{3,}/g, (run) => {
+    .replace(/^\n+/, "");
+  const trailingNewlineCount = normalized.match(/\n+$/)?.[0].length ?? 0;
+  const body = trailingNewlineCount > 0
+    ? normalized.slice(0, -trailingNewlineCount)
+    : normalized;
+  const preservedBody = body.replace(/\n{3,}/g, (run) => {
       const emptyParagraphCount = run.length - 2;
       return `\n\n${Array.from(
         { length: emptyParagraphCount },
         () => PRESERVED_BLANK_PARAGRAPH,
       ).join("\n\n")}\n\n`;
     });
+
+  if (!preservedBody || trailingNewlineCount < 3) {
+    return preservedBody;
+  }
+
+  return `${preservedBody}\n\n${Array.from(
+    { length: trailingNewlineCount - 2 },
+    () => PRESERVED_BLANK_PARAGRAPH,
+  ).join("\n\n")}`;
 }
 
 export function isPreservedBlankParagraphLine(line: string): boolean {
@@ -38,11 +56,20 @@ export function createEmptyParagraphMarker(existingText: string): string {
 
 export function restoreEmptyParagraphMarkers(markdown: string, marker: string): string {
   const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return markdown.replace(
+  const restoreRun = (match: string) => {
+    const count = match.match(new RegExp(escaped, "g"))?.length ?? 0;
+    return "\n".repeat(count + 2);
+  };
+
+  // Turndown and the native serializer both trim their final block separator.
+  // Restore a terminal authored-empty run before handling body-internal runs.
+  const withTerminalRunRestored = markdown.replace(
+    new RegExp(`\\n\\n${escaped}(?:\\n\\n${escaped})*$`),
+    restoreRun,
+  );
+
+  return withTerminalRunRestored.replace(
     new RegExp(`\\n\\n((?:${escaped}\\n\\n)+)`, "g"),
-    (_match, markerRun: string) => {
-      const count = markerRun.match(new RegExp(escaped, "g"))?.length ?? 0;
-      return "\n".repeat(count + 2);
-    },
+    restoreRun,
   );
 }

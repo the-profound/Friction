@@ -35,10 +35,13 @@ import { handleTitleEnter, insertTitleSoftBreak } from "./titleKeyboardContract"
 import { createHeadingWithParagraphShortcut } from "./headingKeyboardShortcuts";
 import { Colors } from "@/constants/tokens";
 import {
+  CARET_PARAGRAPH_ATTRIBUTE,
+  CARET_PARAGRAPH_HTML,
   createEmptyParagraphMarker,
   preserveMarkdownBlankLinesForEditor,
   restoreEmptyParagraphMarkers,
 } from "@/lib/markdownBlankLines";
+import { BlankAwareParagraph } from "./blankAwareParagraph";
 import {
   createEditorSurfaceTouchSession,
   isBlankEditorSurfaceTarget,
@@ -68,7 +71,7 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
     // 아래를 탭/클릭해도 ProseMirror에 커서를 잡을 노드가 없어 입력이
     // 불가능해진다. 기존 편집기는 항상 빈 단락을 보장한다.
     if (ensureTrailingParagraph && !/<\/p>\s*$/.test(html)) {
-      html += "<p></p>";
+      html += CARET_PARAGRAPH_HTML;
     }
     return html;
   } catch (e: unknown) {
@@ -90,18 +93,18 @@ function htmlToMarkdown(html: string): string {
     root.querySelectorAll("img[data-original-src]").forEach((image) => {
       image.setAttribute("src", image.getAttribute("data-original-src") ?? "");
     });
-    // The editor appends an empty paragraph after terminal non-paragraph
-    // blocks so the caret has somewhere to land. Empty document-boundary
-    // paragraphs are not authored body whitespace and must not be exported.
-    while (
+    // Only the editor-owned caret paragraph is synthetic. Unmarked empty
+    // paragraphs, including terminal ones, are authored whitespace.
+    if (
       root.lastElementChild?.tagName.toLowerCase() === "p"
-      && !root.lastElementChild.textContent?.trim()
+      && root.lastElementChild.getAttribute(CARET_PARAGRAPH_ATTRIBUTE) === "true"
+      && !root.lastElementChild.hasChildNodes()
     ) {
       root.lastElementChild.remove();
     }
     const emptyParagraphMarker = createEmptyParagraphMarker(root.textContent ?? "");
     root.querySelectorAll("p").forEach((paragraph) => {
-      if (!paragraph.textContent?.trim()) {
+      if (!paragraph.hasChildNodes()) {
         paragraph.textContent = emptyParagraphMarker;
       }
     });
@@ -189,7 +192,8 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
 
     const editor = useEditor({
       extensions: [
-        StarterKit.configure({ heading: false }),
+        StarterKit.configure({ heading: false, paragraph: false }),
+        BlankAwareParagraph,
         createHeadingWithParagraphShortcut().configure({ levels: [1, 2, 3] }),
         Placeholder.configure({ placeholder: placeholder || "여기에 메모를 작성하세요..." }),
         Underline,
