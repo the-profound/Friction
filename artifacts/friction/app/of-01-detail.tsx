@@ -371,6 +371,11 @@ export default function PersonalCollectionDetailScreen() {
                 onPress={() => {
                   if (entry.article && entry.article.authorId === userId) {
                     openLetterOverlay(entry.article, {
+                      // This grid renders with the restrained carousel shadow
+                      // token; the overlay must open/close using the same
+                      // token or the shadow visibly pops to the larger
+                      // standard token right at the card's rounded corners.
+                      originUsesCarouselShadow: true,
                       meta: {
                         collectionName: collection?.name ?? null,
                         collectionId: id ?? null,

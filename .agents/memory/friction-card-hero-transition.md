@@ -122,3 +122,23 @@ unreliable.
 Any field the overlay shows must also be shown by the source card, or the card
 visibly gains content on tap. Space detail feeds the space name through as
 `collectionName`; the overlay derives the same value from `space.name`.
+
+## Shadow-token parity (`originUsesCarouselShadow`)
+
+If the source grid renders `ArticleCardItem` with `carouselShadow` (the
+restrained `Shadows.carouselCard` token, used by tighter carousels/grids),
+the matching `openLetterOverlay(...)` call must also pass
+`originUsesCarouselShadow: true`.
+
+**Why:** without the flag, `CardSelectOverlay` opens/closes using the larger
+standard `Shadows.card` token by default. The shadow visibly "pops" to the
+bigger token right at the card's rounded corners during the hero transition —
+a corner-leak bug distinct from (and easy to conflate with) the
+CanonicalCardSlot radius/clip issue above.
+
+**How to apply:** treat `carouselShadow` on the source card and
+`originUsesCarouselShadow` on its `openLetterOverlay` call as one pair that
+must always be set together. When adding a new grid/carousel that opts a
+letter cover into `carouselShadow`, grep other `carouselShadow` call sites
+(`on.tsx`, `index.tsx`, `of-01-detail.tsx` as of this writing) to confirm the
+pairing convention before assuming a new site is correct by copy-paste.

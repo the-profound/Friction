@@ -42,6 +42,7 @@ import RecordRow from "@/components/RecordRow/RecordRow";
 import SwipeableRow, { type SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 import RecordCardMarkdownPreview from "@/components/RecordCardMarkdownPreview/RecordCardMarkdownPreview";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
 import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
@@ -235,18 +236,23 @@ function RecordSourceCard({
   if (record.kind === "letter") {
     return (
       <View style={NON_SELECTABLE_WEB_STYLE}>
-        <ArticleCardItem
-          title={record.article.title || "제목 없음"}
-          authorName={record.article.authorNickname ?? undefined}
-          collectionName={record.article.collectionName ?? null}
-              spaceName={spaceNameFallback ?? null}
-          cover={record.article.cover}
-          cardWidth={width}
-          carouselShadow={true}
-          visibility={letterVisibility}
-          onPress={onPress}
-          onLongPress={onLongPress}
-        />
+        {/* Outer wrapper owns the final corner radius + clip (see
+            CanonicalCardSlot), matching every other screen's card grid so a
+            hairline sliver of whatever sits behind the card can never show
+            through its rounded corners during press or overlay handoff. */}
+        <CanonicalCardSlot width={width} height={height}>
+          <ArticleCardItem
+            title={record.article.title || "제목 없음"}
+            authorName={record.article.authorNickname ?? undefined}
+            collectionName={record.article.collectionName ?? null}
+            spaceName={spaceNameFallback ?? null}
+            cover={record.article.cover}
+            carouselShadow={true}
+            visibility={letterVisibility}
+            onPress={onPress}
+            onLongPress={onLongPress}
+          />
+        </CanonicalCardSlot>
       </View>
     );
   }
@@ -941,6 +947,11 @@ function OnScreenContent() {
                   measureOrigin((layout) => {
                     openLetterOverlay(record.article, {
                       fallbackOrigin: layout,
+                      // The source card renders with the restrained carousel
+                      // shadow token; the overlay must open/close using the
+                      // same token or the shadow visibly pops to the larger
+                      // standard token right at the card's rounded corners.
+                      originUsesCarouselShadow: true,
                       meta: {
                         // Overlay header shows spaceName for space letters; falls
                         // back to collectionName (personal folder) otherwise.
