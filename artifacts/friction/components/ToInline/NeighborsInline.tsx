@@ -460,11 +460,6 @@ export function NeighborsInline({
             <Feather name="users" size={40} color={Colors.zinc300} />
             <Text style={styles.emptyTitle}>아직 이웃이 없어요</Text>
             <Text style={styles.emptySubtitle}>닉네임으로 이웃을 찾아보세요</Text>
-            <ScalePressable onPress={() => setAddSheetVisible(true)}>
-              <View style={styles.addButton}>
-                <Text style={styles.addButtonText}>이웃 추가</Text>
-              </View>
-            </ScalePressable>
           </RefreshableEmpty>
         ) : (
           <FlatList
