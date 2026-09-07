@@ -183,7 +183,17 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
         sendCommand({ type: "clearSpellHighlight" });
       },
       applySpellFix(original: string, replacement: string, contextHint: string, occurrenceIndex: number) {
-        sendCommand({ type: "applySpellFix", original, replacement, contextHint, occurrenceIndex });
+        // Round-trip via bridge.request() (not the fire-and-forget sendCommand)
+        // so the caller can tell a real edit from a silently-failed match —
+        // see the WebView-side "applySpellFix" handler in editorWebviewSrc.
+        return bridge
+          .request<{ applied?: boolean }>(
+            "applySpellFix",
+            { original, replacement, contextHint, occurrenceIndex },
+            { timeoutMs: 4000 },
+          )
+          .then((result) => !!result?.applied)
+          .catch(() => false);
       },
     }), [bridge, sendCommand, ensureTrailingParagraph]);
 

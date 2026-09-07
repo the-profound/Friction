@@ -909,6 +909,19 @@ function postToRN(event: object) {
   } catch {}
 }
 
+// Replies to an RN webViewBridge.request() round-trip (e.g. applySpellFix)
+// via the shim's __rnBridge.respond(). No-op when requestId is missing —
+// callers that still fire-and-forget must not crash.
+function respondToRN(requestId: string | undefined, result: unknown) {
+  if (!requestId) return;
+  try {
+    const w = window as unknown as {
+      __rnBridge?: { respond?: (id: string, result: unknown) => void };
+    };
+    w.__rnBridge?.respond?.(requestId, result);
+  } catch {}
+}
+
 interface InitPayload {
   initialMarkdown?: string;
   titleValue?: string;
@@ -994,6 +1007,19 @@ function localOffsetToPmPos(segs: TextSegment[], offset: number): number {
   return last.pmStart + last.text.length;
 }
 
+// Markdown inline-formatting delimiters (bold **/__, italic */_, strikethrough
+// ~~, inline code `) never appear as literal characters inside a ProseMirror
+// text node — TipTap represents them as marks instead, so collectBlockSegments()
+// (which walks only real text nodes) never sees them. The spell-check API,
+// however, builds `original`/`context` from the raw Markdown source string, so
+// a change whose context window sits right next to a formatting boundary
+// (e.g. "그리고 **단어** 이다") still contains the literal `**`. Left unstripped,
+// that context (or, rarely, the original span itself) can never be found
+// against the rendered plain text and the match silently fails.
+function stripInlineFormattingSymbols(s: string): string {
+  return s.replace(/[*_~`]/g, "");
+}
+
 // occurrenceIndex: 0-based index among all within-block occurrences of `original`.
 // Disambiguation priority:
 //  1. contextHint found inside a block → prefer occurrences in that block.
@@ -1001,10 +1027,15 @@ function localOffsetToPmPos(segs: TextSegment[], offset: number): number {
 //  2. occurrenceIndex as tiebreaker (clamped to available count).
 function spellFindRange(
   doc: PMNode,
-  original: string,
-  contextHint: string,
+  originalRaw: string,
+  contextHintRaw: string,
   occurrenceIndex = 0,
 ): { from: number; to: number } | null {
+  // Normalize both to the same "rendered plain text" alphabet that
+  // collectBlockSegments() produces, so a context window straddling a
+  // formatting boundary still matches.
+  const original = stripInlineFormattingSymbols(originalRaw);
+  const contextHint = stripInlineFormattingSymbols(contextHintRaw);
   if (!original) return null;
 
   // Collect all within-block occurrences
@@ -2339,6 +2370,11 @@ function spellFindRange(
           break;
         }
         case "applySpellFix": {
+          // Reported back to RN via respondToRN() below so handleSpellApply()
+          // can tell a real fix from a silently-skipped one (task #912): this
+          // command used to be pure fire-and-forget, so a failed match looked
+          // identical to a successful apply from RN's point of view.
+          let applied = false;
           if (editor && !editor.isDestroyed) {
             // Always re-resolve from cmd.original/contextHint/occurrenceIndex.
             // Do NOT use plugin state — it may hold a range from a different
@@ -2361,9 +2397,11 @@ function spellFindRange(
                 editor.view.dispatch(
                   editor.state.tr.replaceWith(range.from, range.to, repNode ? [repNode] : []),
                 );
+                applied = true;
               } catch {}
             }
           }
+          respondToRN(cmd.requestId, { applied });
           break;
         }
       }

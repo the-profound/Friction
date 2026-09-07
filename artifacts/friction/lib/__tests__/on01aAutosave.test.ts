@@ -918,7 +918,210 @@ describe("on-01a guarded return navigation", () => {
     expect(spellHandler).toContain("spellCheckInFlightRef.current = true;");
     expect(spellHandler).toContain("spellCheckInFlightRef.current = false;");
     expect(spellHandler).toContain("finally");
-    expect(closeHandler).toContain("if (spellCheckInFlightRef.current) return;");
+    expect(closeHandler).toContain(
+      "if (spellCheckInFlightRef.current || spellApplyInFlightRef.current) return;",
+    );
+  });
+
+  it("matches spell-check original/context against plain text stripped of markdown formatting symbols", () => {
+    // Task #912: the spell-check API derives `original`/`context` from raw
+    // Markdown (formatting symbols like ** _ ~ ` still present), but
+    // spellFindRange() searches collectBlockSegments()'s rendered plain text,
+    // which never contains those symbols (TipTap represents them as marks).
+    // A context window straddling a formatting boundary must still resolve.
+    const editorSource = readEditorSource();
+    const spellFindRangeFn = editorSource.slice(
+      editorSource.indexOf("function spellFindRange"),
+      editorSource.indexOf("\nfunction ", editorSource.indexOf("function spellFindRange") + 1),
+    );
+
+    expect(editorSource).toContain(
+      "function stripInlineFormattingSymbols(s: string): string {",
+    );
+    expect(editorSource).toContain('s.replace(/[*_~`]/g, "")');
+    expect(spellFindRangeFn).toContain(
+      "const original = stripInlineFormattingSymbols(originalRaw);",
+    );
+    expect(spellFindRangeFn).toContain(
+      "const contextHint = stripInlineFormattingSymbols(contextHintRaw);",
+    );
+  });
+
+  it("reports whether applySpellFix actually located and replaced the match, instead of firing and forgetting", () => {
+    // Task #912: a failed spellFindRange() lookup used to silently no-op —
+    // RN had no way to distinguish that from a real edit. applySpellFix must
+    // reply with { applied } over the bridge.request()/respond() round trip.
+    const editorSource = readEditorSource();
+    const applyCase = editorSource.slice(
+      editorSource.indexOf('case "applySpellFix": {'),
+      editorSource.indexOf('case "applySpellFix": {') + 1500,
+    );
+
+    expect(editorSource).toContain(
+      "function respondToRN(requestId: string | undefined, result: unknown) {",
+    );
+    expect(applyCase).toContain("let applied = false;");
+    expect(applyCase).toContain("applied = true;");
+    expect(applyCase).toContain("respondToRN(cmd.requestId, { applied });");
+
+    const nativeEditor = readEditorNative();
+    expect(nativeEditor).toContain(
+      'bridge\n          .request<{ applied?: boolean }>(\n            "applySpellFix",',
+    );
+    expect(nativeEditor).toContain(".then((result) => !!result?.applied)");
+    expect(nativeEditor).toContain(".catch(() => false)");
+
+    const types = readEditorTypes();
+    expect(types).toContain(
+      "applySpellFix: (original: string, replacement: string, contextHint: string, occurrenceIndex: number) => Promise<boolean>;",
+    );
+    expect(types).not.toContain(
+      '{ type: "applySpellFix"; original: string; replacement: string; contextHint: string; occurrenceIndex: number }',
+    );
+  });
+
+  it("only counts a spell fix as applied once the WebView confirms it, and does not silently swallow a failed match", () => {
+    const screen = readScreen();
+    const applyHandler = screen.slice(
+      screen.indexOf("const handleSpellApply = useCallback"),
+      screen.indexOf("const handleCloseSpellTab"),
+    );
+
+    // Must await the real result before touching any bookkeeping.
+    expect(applyHandler).toContain(
+      "applied = (await editorRef.current?.applySpellFix(",
+    );
+    expect(applyHandler.indexOf("await editorRef.current?.applySpellFix(")).toBeLessThan(
+      applyHandler.indexOf("if (applied) {"),
+    );
+
+    // Success path: occurrence bookkeeping only advances, and the toast/failure
+    // counter only fire, on their respective branches — never unconditionally.
+    const successBranch = applyHandler.slice(
+      applyHandler.indexOf("if (applied) {"),
+      applyHandler.indexOf("} else {"),
+    );
+    const failureBranch = applyHandler.slice(
+      applyHandler.indexOf("} else {"),
+      applyHandler.indexOf("setSpellState((prev) => {"),
+    );
+    expect(successBranch).toContain("[item.original]: appliedSoFar + 1,");
+    expect(successBranch).toContain("const latest = await getEditorContent();");
+    expect(successBranch).toContain("markDirty(titleRef.current, latest);");
+    expect(failureBranch).toContain("spellFailureCountRef.current += 1;");
+    expect(failureBranch).toContain("showToast({");
+    expect(applyHandler).not.toContain(
+      "spellAppliedCountRef.current[item.original] ?? 0;\n      editorRef.current?.applySpellFix(item.original, item.replacement, item.context ?? \"\", effectiveIdx);\n      spellAppliedCountRef.current = {",
+    );
+
+    // A run with any failure must not present the final state as a clean,
+    // silent "검토 완료" — the panel branches on `hadFailures`.
+    expect(screen).toContain(
+      '| { status: "done"; hadFailures: boolean }',
+    );
+    expect(applyHandler).toContain(
+      'return { status: "done", hadFailures: spellFailureCountRef.current > 0 };',
+    );
+    expect(screen).toContain("spellState.hadFailures ? (");
+  });
+
+  it("resolves duplicate spell-check matches to distinct occurrences instead of re-hitting the first one", () => {
+    // Task #912: when the same `original` string appears multiple times,
+    // each accepted/applied item must consume one occurrence so the next
+    // lookup for the same string targets the next instance in the document,
+    // not the one that was just fixed.
+    const screen = readScreen();
+    const runHandler = screen.slice(
+      screen.indexOf("const handleRunSpellCheck = useCallback"),
+      screen.indexOf("const handleSpellSkip"),
+    );
+    const applyHandler = screen.slice(
+      screen.indexOf("const handleSpellApply = useCallback"),
+      screen.indexOf("const handleCloseSpellTab"),
+    );
+
+    expect(runHandler).toContain("const counts: Record<string, number> = {};");
+    expect(runHandler).toContain("const idx = counts[c.original] ?? 0;");
+    expect(applyHandler).toContain(
+      "const appliedSoFar = spellAppliedCountRef.current[item.original] ?? 0;",
+    );
+    expect(applyHandler).toContain(
+      "const effectiveIdx = Math.max(0, baseIdx - appliedSoFar);",
+    );
+    // Only a confirmed apply shifts later same-original lookups forward —
+    // a failed one must leave appliedSoFar (and thus effectiveIdx for the
+    // next occurrence of the same string) unchanged.
+    const successBranch = applyHandler.slice(
+      applyHandler.indexOf("if (applied) {"),
+      applyHandler.indexOf("} else {"),
+    );
+    expect(successBranch).toContain("appliedSoFar + 1");
+  });
+
+  it("holds the apply lock through the review-index advance, so a fast second tap cannot corrupt the next occurrence", () => {
+    // Task #912 follow-up: an earlier version released spellApplyInFlightRef
+    // right after the WebView round trip, before the content sync and the
+    // setSpellState() advance that follows it. That re-enabled "적용" while
+    // the in-flight closure still targeted the just-reviewed item, so a fast
+    // second tap could apply to the NEXT occurrence of the same original
+    // text before the first tap's own state update had landed. The lock must
+    // only release in a `finally` that wraps the entire operation, including
+    // the state advance.
+    const screen = readScreen();
+    const applyHandler = screen.slice(
+      screen.indexOf("const handleSpellApply = useCallback"),
+      screen.indexOf("const handleCloseSpellTab"),
+    );
+
+    const setBusyTrueIdx = applyHandler.indexOf("setSpellApplyBusy(true);");
+    const tryIdx = applyHandler.indexOf("try {", setBusyTrueIdx);
+    const stateAdvanceIdx = applyHandler.indexOf("setSpellState((prev) => {");
+    const finallyIdx = applyHandler.indexOf("} finally {");
+    const releaseInFlightIdx = applyHandler.indexOf(
+      "spellApplyInFlightRef.current = false;",
+    );
+    const releaseBusyIdx = applyHandler.indexOf("setSpellApplyBusy(false);", finallyIdx);
+
+    expect(setBusyTrueIdx).toBeGreaterThan(-1);
+    expect(tryIdx).toBeGreaterThan(setBusyTrueIdx);
+    expect(stateAdvanceIdx).toBeGreaterThan(tryIdx);
+    // The state-advancing setSpellState call, and its closing `});`, must be
+    // inside the try block — i.e. before the matching `finally`, not after.
+    expect(finallyIdx).toBeGreaterThan(stateAdvanceIdx);
+    // Both flags must be released only inside that finally, not earlier.
+    expect(releaseInFlightIdx).toBeGreaterThan(finallyIdx);
+    expect(releaseBusyIdx).toBeGreaterThan(finallyIdx);
+    // Guard against a regression where the flags are reset immediately after
+    // the round trip result is known instead: there must be exactly one
+    // `spellApplyInFlightRef.current = false;` in the whole handler.
+    expect(
+      applyHandler.split("spellApplyInFlightRef.current = false;").length - 1,
+    ).toBe(1);
+  });
+
+  it("blocks closing or backing out of the spell-review panel while an apply round trip is in flight", () => {
+    // A close/back during an in-flight applySpellFix() would let its eventual
+    // resolution mutate spellState/spellAppliedCountRef for a review session
+    // the user already dismissed.
+    const screen = readScreen();
+    const closeHandler = screen.slice(
+      screen.indexOf("const handleCloseSpellTab = useCallback"),
+      screen.indexOf("const stageMenuDisabled"),
+    );
+    const backHandler = screen.slice(
+      screen.indexOf("const handleHeaderBack = useCallback"),
+      screen.indexOf("const handlePreventedRemoval"),
+    );
+
+    expect(closeHandler).toContain("spellApplyInFlightRef.current");
+    expect(backHandler).toContain("spellApplyInFlightRef.current");
+    // The back-handler guard must sit inside the spellTabVisible branch and
+    // return before any state is reset.
+    const spellTabBranch = backHandler.slice(
+      backHandler.indexOf("if (spellTabVisible) {"),
+      backHandler.indexOf('setSpellState({ status: "idle" });'),
+    );
+    expect(spellTabBranch).toContain("if (spellApplyInFlightRef.current) return;");
   });
 
   it("keeps the return lock held until the deferred route dispatch", () => {

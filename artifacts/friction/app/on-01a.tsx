@@ -527,11 +527,21 @@ export default function WritingScreen() {
     | { status: "idle" }
     | { status: "loading" }
     | { status: "reviewing"; items: SpellChange[]; index: number; occurrenceIndices: number[] }
-    | { status: "done" }
+    // hadFailures: true when at least one item in this review session could
+    // not be located in the document and was silently un-applied (task #912)
+    // — the panel must not present that as a clean "검토 완료".
+    | { status: "done"; hadFailures: boolean }
     | { status: "empty" }
     | { status: "error"; message: string };
   const [spellState, setSpellState] = useState<SpellState>({ status: "idle" });
   const spellAppliedCountRef = useRef<Record<string, number>>({});
+  // Counts items in the current review session whose applySpellFix() round
+  // trip resolved false (WebView could not find/apply the match).
+  const spellFailureCountRef = useRef(0);
+  // Guards against a second "적용" tap firing another applySpellFix while one
+  // is still in flight (would race occurrence bookkeeping / doc mutations).
+  const spellApplyInFlightRef = useRef(false);
+  const [spellApplyBusy, setSpellApplyBusy] = useState(false);
   const spellCheckInFlightRef = useRef(false);
   const [spellTabVisible, setSpellTabVisible] = useState(false);
   const returnBlockScrollDoneRef = useRef(false);
@@ -2344,10 +2354,15 @@ export default function WritingScreen() {
   // ── 헤더/하드웨어 뒤로가기 통합 ────────────────────────────────────────────
   const handleHeaderBack = useCallback((removalAction?: NavigationAction) => {
     if (spellTabVisible) {
+      // An apply round trip in flight must finish (and its state advance
+      // must land) before back/close is allowed to reset spell review state
+      // out from under it — see handleCloseSpellTab.
+      if (spellApplyInFlightRef.current) return;
       editorRef.current?.clearSpellHighlight();
       setSpellTabVisible(false);
       setSpellState({ status: "idle" });
       spellAppliedCountRef.current = {};
+      spellFailureCountRef.current = 0;
       return;
     }
     handleDraftBack(removalAction);
@@ -2674,6 +2689,7 @@ export default function WritingScreen() {
     setSpellTabVisible(true);
     setSpellState({ status: "loading" });
     spellAppliedCountRef.current = {};
+    spellFailureCountRef.current = 0;
     editorRef.current?.blur();
     Keyboard.dismiss();
     try {
@@ -2704,12 +2720,13 @@ export default function WritingScreen() {
   }, [getEditorContent]);
 
   const handleSpellSkip = useCallback(() => {
+    if (spellApplyInFlightRef.current) return;
     setSpellState((prev) => {
       if (prev.status !== "reviewing") return prev;
       const next = prev.index + 1;
       if (next >= prev.items.length) {
         editorRef.current?.clearSpellHighlight();
-        return { status: "done" };
+        return { status: "done", hadFailures: spellFailureCountRef.current > 0 };
       }
       const nextItem = prev.items[next];
       const baseIdx = prev.occurrenceIndices[next];
@@ -2720,37 +2737,91 @@ export default function WritingScreen() {
     });
   }, []);
 
-  const handleSpellApply = useCallback(() => {
-    setSpellState((prev) => {
-      if (prev.status !== "reviewing") return prev;
-      const item = prev.items[prev.index];
-      const baseIdx = prev.occurrenceIndices[prev.index];
-      const applied = spellAppliedCountRef.current[item.original] ?? 0;
-      const effectiveIdx = Math.max(0, baseIdx - applied);
-      editorRef.current?.applySpellFix(item.original, item.replacement, item.context ?? "", effectiveIdx);
-      spellAppliedCountRef.current = {
-        ...spellAppliedCountRef.current,
-        [item.original]: applied + 1,
-      };
-      const next = prev.index + 1;
-      if (next >= prev.items.length) {
-        return { status: "done" };
+  // applySpellFix() is a real WebView round trip (task #912): the fix is only
+  // real once the WebView confirms it found and replaced the match. A resolved
+  // false must not be treated like a success — occurrence bookkeeping must not
+  // advance, and the user needs to know that item still needs a manual edit.
+  const handleSpellApply = useCallback(async () => {
+    if (spellApplyInFlightRef.current) return;
+    if (spellState.status !== "reviewing") return;
+    const { items, index, occurrenceIndices } = spellState;
+    const item = items[index];
+    const appliedSoFar = spellAppliedCountRef.current[item.original] ?? 0;
+    const baseIdx = occurrenceIndices[index];
+    const effectiveIdx = Math.max(0, baseIdx - appliedSoFar);
+
+    // The lock/busy flag must stay held through the WebView round trip, the
+    // post-apply content sync, AND the state advance below — releasing it
+    // right after the round trip (as an earlier version of this fix did)
+    // re-enables "적용" while this closure still targets the just-reviewed
+    // item, so a fast second tap can land on — and corrupt — the NEXT
+    // occurrence of the same original text before this one finishes.
+    spellApplyInFlightRef.current = true;
+    setSpellApplyBusy(true);
+    try {
+      const applied = (await editorRef.current?.applySpellFix(
+        item.original,
+        item.replacement,
+        item.context ?? "",
+        effectiveIdx,
+      )) ?? false;
+
+      if (applied) {
+        spellAppliedCountRef.current = {
+          ...spellAppliedCountRef.current,
+          [item.original]: appliedSoFar + 1,
+        };
+        // Sync contentRef right away instead of trusting only the WebView's own
+        // debounced onChange export — a "검토 완료" followed immediately by
+        // leaving/saving the screen must not race that debounce and lose the
+        // fix that was just applied.
+        try {
+          const latest = await getEditorContent();
+          markDirty(titleRef.current, latest);
+        } catch {
+          // Ignored here — flushLatestEditorSnapshot() retries on the next
+          // save/navigation boundary.
+        }
+      } else {
+        spellFailureCountRef.current += 1;
+        showToast({
+          message: "이 항목은 자동으로 반영하지 못했어요. 직접 고쳐주세요.",
+          type: "error",
+        });
       }
-      const nextItem = prev.items[next];
-      const nextBase = prev.occurrenceIndices[next];
-      const nextApplied = spellAppliedCountRef.current[nextItem.original] ?? 0;
-      const nextEffective = Math.max(0, nextBase - nextApplied);
-      editorRef.current?.setSpellHighlight(nextItem.original, nextItem.context ?? "", nextEffective);
-      return { status: "reviewing", items: prev.items, index: next, occurrenceIndices: prev.occurrenceIndices };
-    });
-  }, []);
+
+      setSpellState((prev) => {
+        if (prev.status !== "reviewing" || prev.items !== items || prev.index !== index) {
+          return prev;
+        }
+        const next = prev.index + 1;
+        if (next >= prev.items.length) {
+          editorRef.current?.clearSpellHighlight();
+          return { status: "done", hadFailures: spellFailureCountRef.current > 0 };
+        }
+        const nextItem = prev.items[next];
+        const nextBase = prev.occurrenceIndices[next];
+        const nextApplied = spellAppliedCountRef.current[nextItem.original] ?? 0;
+        const nextEffective = Math.max(0, nextBase - nextApplied);
+        editorRef.current?.setSpellHighlight(nextItem.original, nextItem.context ?? "", nextEffective);
+        return { status: "reviewing", items: prev.items, index: next, occurrenceIndices: prev.occurrenceIndices };
+      });
+    } finally {
+      spellApplyInFlightRef.current = false;
+      setSpellApplyBusy(false);
+    }
+  }, [spellState, getEditorContent, markDirty, showToast]);
 
   const handleCloseSpellTab = useCallback(() => {
-    if (spellCheckInFlightRef.current) return;
+    // Also block while an apply round trip is in flight — closing mid-apply
+    // would let its eventual resolution mutate state for a review session
+    // that the user already dismissed.
+    if (spellCheckInFlightRef.current || spellApplyInFlightRef.current) return;
     editorRef.current?.clearSpellHighlight();
     setSpellTabVisible(false);
     setSpellState({ status: "idle" });
     spellAppliedCountRef.current = {};
+    spellFailureCountRef.current = 0;
   }, []);
 
   const stageMenuDisabled =
@@ -3172,8 +3243,19 @@ export default function WritingScreen() {
 
             {spellState.status === "done" && (
               <View style={styles.spellCenter}>
-                <Feather name="check-circle" size={28} color="#22c55e" />
-                <Text style={styles.spellHintText}>검사 완료</Text>
+                {spellState.hadFailures ? (
+                  <>
+                    <Feather name="alert-circle" size={28} color="#f59e0b" />
+                    <Text style={styles.spellHintText}>
+                      검사 완료 — 일부 항목은 자동으로 반영하지 못했어요. 직접 확인해주세요.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Feather name="check-circle" size={28} color="#22c55e" />
+                    <Text style={styles.spellHintText}>검사 완료</Text>
+                  </>
+                )}
               </View>
             )}
 
@@ -3223,11 +3305,25 @@ export default function WritingScreen() {
                   </View>
                   <Text style={styles.spellReasonText} numberOfLines={2}>{item.reason}</Text>
                   <View style={styles.spellActions}>
-                    <ScalePressable style={styles.spellSkipButton} contentStyle={styles.spellSkipButtonContent} onPress={handleSpellSkip}>
+                    <ScalePressable
+                      style={styles.spellSkipButton}
+                      contentStyle={styles.spellSkipButtonContent}
+                      onPress={handleSpellSkip}
+                      disabled={spellApplyBusy}
+                    >
                       <Text style={styles.spellSkipText}>건너뛰기</Text>
                     </ScalePressable>
-                    <ScalePressable style={styles.spellApplyButton} contentStyle={styles.spellApplyButtonContent} onPress={handleSpellApply}>
-                      <Text style={styles.spellApplyText}>적용</Text>
+                    <ScalePressable
+                      style={styles.spellApplyButton}
+                      contentStyle={[styles.spellApplyButtonContent, spellApplyBusy && styles.spellApplyButtonContentBusy]}
+                      onPress={handleSpellApply}
+                      disabled={spellApplyBusy}
+                    >
+                      {spellApplyBusy ? (
+                        <ActivityIndicator size="small" color={Colors.white} />
+                      ) : (
+                        <Text style={styles.spellApplyText}>적용</Text>
+                      )}
                     </ScalePressable>
                   </View>
                 </View>
@@ -3517,6 +3613,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#3b82f6",
     alignItems: "center",
     justifyContent: "center",
+  },
+  spellApplyButtonContentBusy: {
+    backgroundColor: "#93c5fd",
   },
   spellApplyText: {
     ...Typography.caption,

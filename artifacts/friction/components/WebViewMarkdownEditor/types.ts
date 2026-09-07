@@ -54,8 +54,10 @@ export type RNToWebViewCommand =
   | { type: "autoSplitImages" }
   | { type: "scrollToBlock"; pageIndex: number; blockIndex: number }
   | { type: "setSpellHighlight"; original: string; contextHint: string; occurrenceIndex: number }
-  | { type: "clearSpellHighlight" }
-  | { type: "applySpellFix"; original: string; replacement: string; contextHint: string; occurrenceIndex: number };
+  | { type: "clearSpellHighlight" };
+// applySpellFix is intentionally not in this fire-and-forget union — it is
+// sent via webViewBridge.request() (see WebViewMarkdownEditor's ref impl) so
+// RN can await whether the WebView actually found and applied the fix.
 
 export interface OnChangePayload {
   isDirty: boolean;
@@ -130,7 +132,14 @@ export interface WebViewMarkdownEditorRef {
   scrollToBlock: (pageIndex: number, blockIndex: number) => void;
   setSpellHighlight: (original: string, contextHint: string, occurrenceIndex: number) => void;
   clearSpellHighlight: () => void;
-  applySpellFix: (original: string, replacement: string, contextHint: string, occurrenceIndex: number) => void;
+  /**
+   * Resolves to whether the WebView actually located `original` (via
+   * spellFindRange) and dispatched the replacement. Callers must not count a
+   * fix as applied — or advance any occurrence bookkeeping — until this
+   * resolves true; a resolved false (or a rejected/timed-out request) means
+   * the document was not changed.
+   */
+  applySpellFix: (original: string, replacement: string, contextHint: string, occurrenceIndex: number) => Promise<boolean>;
 }
 
 export interface WebViewMarkdownEditorProps {

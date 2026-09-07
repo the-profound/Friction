@@ -532,6 +532,10 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       clearSpellHighlight() {
       },
       applySpellFix(_original: string, _replacement: string, _contextHint: string) {
+        // Web preview stub — spell-check review only runs against the native
+        // WebView editor. Resolve false (not applied) rather than throwing,
+        // matching the "false = document unchanged" contract callers rely on.
+        return Promise.resolve(false);
       },
     }), [editor, requestExportMarkdown, onError, ensureTrailingParagraph]);
 
