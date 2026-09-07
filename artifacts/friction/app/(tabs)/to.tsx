@@ -474,7 +474,7 @@ export default function MyScreen() {
     myTab === "letters"
       ? articlesQuery.isError
         ? renderError("편지를 불러오지 못했어요", () => articlesQuery.refetch())
-        : renderEmpty("아직 보낸 편지가 없어요")
+        : renderEmpty("아직 보낸 편지가 없거나 수신자 공개 처리되어 있어요")
       : myTab === "spaces"
         ? spacesQuery.isError
           ? renderError("공간을 불러오지 못했어요", () => spacesQuery.refetch())
