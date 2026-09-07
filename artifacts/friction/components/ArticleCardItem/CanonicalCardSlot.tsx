@@ -1,5 +1,10 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
+import RAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { Sizing } from "@/constants/tokens";
 
 interface CanonicalCardSlotProps {
@@ -34,6 +39,17 @@ const CANONICAL_RADIUS_RATIO = 16 / Sizing.cardSlotW;
  * whatever sits behind the slot visible at the corners. The inner view owns
  * the canonical card dimensions, so ArticleCardItem never recalculates
  * typography, padding, radius, or shadow from a small cardWidth.
+ *
+ * The single ArticleCardItem child is expected to expose a `pressScale`
+ * prop (all current usages satisfy this). This component creates that
+ * shared value, hands it to the child so ScalePressable's press-in/out
+ * animation writes into it instead of transforming the child's own subtree,
+ * and applies the same value as a transform on this OUTER view — the one
+ * that actually owns the final radius + clip. Because the outer scale and
+ * the inner (already-clipped) content are then the same transformed node
+ * tree, the clip boundary and the card content always shrink together at
+ * the same ratio and around the same center, so no corner gap or
+ * mismatched-radius stair-step can appear while pressed.
  */
 const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
   ({ width, height, children, borderRadius }, ref) => {
@@ -42,10 +58,26 @@ const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
     const resolvedRadius =
       borderRadius ?? Math.max(8, Math.round(width * CANONICAL_RADIUS_RATIO));
 
+    const pressScale = useSharedValue(1);
+    const animatedOuterStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: pressScale.value }],
+    }));
+
+    const content = React.isValidElement(children)
+      ? React.cloneElement(
+          children as React.ReactElement<{ pressScale?: SharedValue<number> }>,
+          { pressScale },
+        )
+      : children;
+
     return (
-      <View
+      <RAnimated.View
         ref={ref}
-        style={[styles.outer, { width, height, borderRadius: resolvedRadius }]}
+        style={[
+          styles.outer,
+          { width, height, borderRadius: resolvedRadius },
+          animatedOuterStyle,
+        ]}
       >
         <View
           style={[
@@ -59,9 +91,9 @@ const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
             },
           ]}
         >
-          {children}
+          {content}
         </View>
-      </View>
+      </RAnimated.View>
     );
   },
 );

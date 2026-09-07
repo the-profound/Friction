@@ -215,6 +215,13 @@ export default function ArticleCardCover({
           height: height ?? "100%",
           borderRadius,
           backgroundColor: presentation.backgroundColor,
+          // This view owns clipping its own corners. The cover image used to
+          // rely solely on its own internal border-radius clip, which can
+          // drift a hairline out of sync with this view's background/corner
+          // rendering — most visible while a ScalePressable press-transform
+          // is live. Clipping here guarantees the image, overlay, and
+          // background all share the exact same rounded-rect boundary.
+          overflow: "hidden",
         },
       ]}
       onLayout={handleLayout}

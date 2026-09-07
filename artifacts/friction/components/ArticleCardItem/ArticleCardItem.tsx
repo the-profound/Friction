@@ -53,6 +53,15 @@ interface ArticleCardItemProps {
   shadowProgress?: SharedValue<number>;
   /** Called after the image, or its explicit fallback, is visibly rendered. */
   onImageReady?: () => void;
+  /**
+   * Supplied by CanonicalCardSlot when this card is rendered inside it. The
+   * slot's own outer clip box (which owns the final radius) reads this same
+   * shared value and scales itself as a unit, so ScalePressable's press
+   * animation must write into it instead of applying its own transform here
+   * — otherwise the clip boundary and the card content shrink at different
+   * times/ratios and a corner gap opens up during the press animation.
+   */
+  pressScale?: SharedValue<number>;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -90,6 +99,7 @@ function ArticleCardItem({
   shadowProgress,
   noShadow = false,
   onImageReady,
+  pressScale,
 }: ArticleCardItemProps) {
   const w = cardWidth ?? CARD_W;
   const h = w * Sizing.cardRatio;
@@ -115,6 +125,8 @@ function ArticleCardItem({
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
+      externalScale={pressScale}
+      applyScaleStyle={!pressScale}
     >
       <RAnimated.View
         style={[

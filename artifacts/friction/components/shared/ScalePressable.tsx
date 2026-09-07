@@ -5,11 +5,28 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   Easing,
+  type SharedValue,
 } from "react-native-reanimated";
 
 export interface ScalePressableProps extends PressableProps {
   scaleTo?: number;
   contentStyle?: StyleProp<ViewStyle>;
+  /**
+   * When provided, this shared value is animated on press in/out instead of
+   * an internally-created one. Lets an ancestor outside this component's own
+   * render tree (e.g. CanonicalCardSlot's outer clip box) read the exact
+   * same press-driven scale and apply it to its own layer, so a clip
+   * boundary owned elsewhere always shrinks in lockstep with this
+   * component's content instead of drifting apart into a corner gap.
+   */
+  externalScale?: SharedValue<number>;
+  /**
+   * Set to false when an ancestor already applies `externalScale` as its own
+   * transform, so the scale is not applied twice (once here, once on the
+   * ancestor). Defaults to true, which preserves this component's normal
+   * standalone behavior.
+   */
+  applyScaleStyle?: boolean;
 }
 
 const PRESS_DURATION = 80;
@@ -57,18 +74,21 @@ export default function ScalePressable({
   contentStyle,
   children,
   disabled = false,
+  externalScale,
+  applyScaleStyle = true,
   ...rest
 }: ScalePressableProps) {
-  const scale = useSharedValue(1);
+  const localScale = useSharedValue(1);
+  const scale = externalScale ?? localScale;
   /**
    * Largest rendered dimension (width or height), stored as a shared value so
    * it can be read inside onPressIn without triggering a re-render.
    */
   const maxDimension = useSharedValue(0);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const animatedStyle = useAnimatedStyle(() =>
+    applyScaleStyle ? { transform: [{ scale: scale.value }] } : {},
+  );
 
   const handleLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
