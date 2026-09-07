@@ -34,6 +34,20 @@ let notificationsModule: typeof NotificationsType | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   notificationsModule = require("expo-notifications") as typeof NotificationsType;
+
+  // Without an explicit handler, expo-notifications suppresses the banner
+  // and sound while the app is in the foreground. Letter-arrived pushes are
+  // meant to be a normal, noticeable notification (banner + sound) whether
+  // the app is foregrounded, backgrounded, or closed — so opt in explicitly
+  // instead of relying on the (silencing) default.
+  notificationsModule.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
 } catch (err) {
   console.warn(
     "[safeNotifications] expo-notifications native module is unavailable; push notifications will be disabled for this session.",

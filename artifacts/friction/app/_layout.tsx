@@ -402,23 +402,30 @@ export default function RootLayout() {
     }
   }, []);
 
-  // Register the Android silent-notification channel on startup.
+  // Register the Android letter-arrived notification channel on startup.
   // The channel must exist before any notification with this channelId is
   // delivered; creating it multiple times is idempotent.
+  // Channel id must match the one the server sends with (pushSender.ts).
   useEffect(() => {
     if (Platform.OS !== "android") return;
     const Notifications = getNotificationsModule();
     if (!Notifications) return;
-    Notifications.setNotificationChannelAsync("letter-arrived-silent", {
+    Notifications.setNotificationChannelAsync("letter-arrived", {
       name: "편지 도착 알림",
-      importance: Notifications.AndroidImportance.LOW,
-      vibrationPattern: null,
-      sound: null,
-      enableLights: false,
-      enableVibrate: false,
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      sound: "default",
+      enableLights: true,
+      enableVibrate: true,
     }).catch((err) => {
       console.warn("[notifications] setNotificationChannelAsync failed:", err);
     });
+    // Remove the old silent channel from installs that created it before
+    // this change; Android doesn't let us mutate an existing channel's
+    // importance, which is why the new behavior uses a different channel id.
+    Notifications.deleteNotificationChannelAsync("letter-arrived-silent").catch(
+      () => {},
+    );
   }, []);
 
   useEffect(() => {

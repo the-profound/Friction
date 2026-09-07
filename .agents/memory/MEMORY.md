@@ -1,4 +1,5 @@
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
+- [Expo notifications foreground handler](friction-expo-notifications-foreground-handler.md) — no `setNotificationHandler` means foreground pushes are silently suppressed; a plausible-looking plugin option (`iosDisplayInForeground`) may not even exist in the installed version.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
 - [api-zod enum barrel gap](friction-api-zod-enum-barrel-gap.md) — generated enums (ServerFeature, ThoughtStatus, ...) export only as a TS type from `@workspace/api-zod`, never a runtime const; use string literals.

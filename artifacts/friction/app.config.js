@@ -237,12 +237,11 @@ module.exports = {
       ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
-      [
-        "expo-notifications",
-        {
-          iosDisplayInForeground: false,
-        },
-      ],
+      // Foreground banner/sound behavior is controlled at runtime via
+      // Notifications.setNotificationHandler (see lib/safeNotifications.ts),
+      // not via a config plugin option — expo-notifications' plugin doesn't
+      // expose an "iosDisplayInForeground" prop.
+      "expo-notifications",
     ],
     experiments: {
       typedRoutes: true,

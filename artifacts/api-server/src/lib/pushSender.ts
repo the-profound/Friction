@@ -1,8 +1,9 @@
 /**
  * Expo Push Notification sender.
  *
- * Wraps the expo-server-sdk to send silent push notifications.
- * Cleans up DeviceNotRegistered tokens from the DB automatically.
+ * Wraps the expo-server-sdk to send standard (banner + sound) push
+ * notifications. Cleans up DeviceNotRegistered tokens from the DB
+ * automatically.
  */
 import Expo, { ExpoPushMessage, ExpoPushTicket } from "expo-server-sdk";
 import { db, pushTokensTable } from "@workspace/db";
@@ -16,7 +17,7 @@ import {
 // Singleton Expo client
 const expo = new Expo();
 
-export interface SilentPushTarget {
+export interface PushTarget {
   userId: string;
   token: string;
   platform: string;
@@ -30,15 +31,17 @@ export interface PushSendResult {
 }
 
 /**
- * Sends a silent push notification to the given tokens.
+ * Sends a standard (banner + sound) push notification to the given tokens.
  *
- * iOS:  sound: null, interruption-level: passive (via APNs extras)
- * Android: channelId 'letter-arrived-silent', priority 'normal', sound: null
+ * iOS: default interruption level, default sound — shows a banner and plays
+ * a sound like any other notification.
+ * Android: channelId 'letter-arrived' (must match the channel registered by
+ * the client in app/_layout.tsx), priority 'high', default sound.
  *
  * DeviceNotRegistered tokens are removed from the DB.
  */
-export async function sendSilentPush(
-  targets: SilentPushTarget[],
+export async function sendPush(
+  targets: PushTarget[],
   body: string,
   data?: Record<string, unknown>,
   options?: { correlationId?: string },
@@ -80,24 +83,22 @@ export async function sendSilentPush(
       to: t.token,
       body,
       data: data ?? {},
-      sound: undefined, // no sound
+      sound: "default",
       badge: 0,
     };
 
     if (t.platform === "ios") {
-      return {
-        ...base,
-        // APNs passive interruption level — delivered silently to notification center
-        // Expo SDK v7 uses `interruptionLevel` (not `_interruptionLevel`)
-        interruptionLevel: "passive" as const,
-      };
+      // Default (active) interruption level — shows a banner and plays the
+      // default sound like a normal notification.
+      return base;
     }
 
-    // Android
+    // Android — must match the 'letter-arrived' channel registered by the
+    // client in app/_layout.tsx.
     return {
       ...base,
-      channelId: "letter-arrived-silent",
-      priority: "normal",
+      channelId: "letter-arrived",
+      priority: "high",
     };
   });
 

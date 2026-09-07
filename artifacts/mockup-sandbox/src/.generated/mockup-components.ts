@@ -4,6 +4,8 @@ export const modules: ModuleMap = {
   "./components/mockups/friction-navbar/FrictionNavBar.tsx": () => import("../components/mockups/friction-navbar/FrictionNavBar.tsx"),
   "./components/mockups/friction-navbar/ProposedNavBar.tsx": () => import("../components/mockups/friction-navbar/ProposedNavBar.tsx"),
   "./components/mockups/friction-navbar/ProposedNavBarRed.tsx": () => import("../components/mockups/friction-navbar/ProposedNavBarRed.tsx"),
+  "./components/mockups/envelope-inbox/EnvelopeInbox.tsx": () => import("../components/mockups/envelope-inbox/EnvelopeInbox.tsx"),
+  "./components/mockups/envelope-inbox/SealedEnvelopeInbox.tsx": () => import("../components/mockups/envelope-inbox/SealedEnvelopeInbox.tsx"),
   "./components/mockups/question-block/QuestionBlockPreview.tsx": () => import("../components/mockups/question-block/QuestionBlockPreview.tsx"),
   "./components/mockups/envelope-inbox/EnvelopeInbox.tsx": () => import("../components/mockups/envelope-inbox/EnvelopeInbox.tsx"),
   "./components/mockups/envelope-inbox/SealedEnvelopeInbox.tsx": () => import("../components/mockups/envelope-inbox/SealedEnvelopeInbox.tsx"),
@@ -13,6 +15,6 @@ export const modules: ModuleMap = {
   "./components/mockups/question-card-swipe/QuestionCardSwipePreview.tsx": () => import("../components/mockups/question-card-swipe/QuestionCardSwipePreview.tsx"),
   "./components/mockups/safe-area-layout/SafeAreaLayoutDiagram.tsx": () => import("../components/mockups/safe-area-layout/SafeAreaLayoutDiagram.tsx"),
   "./components/mockups/writing-screen/ActiveToolbar.tsx": () => import("../components/mockups/writing-screen/ActiveToolbar.tsx"),
-  "./components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx": () => import("../components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx"),
-  "./components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx": () => import("../components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx")
+  "./components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx": () => import("../components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx"),
+  "./components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx": () => import("../components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx")
 };

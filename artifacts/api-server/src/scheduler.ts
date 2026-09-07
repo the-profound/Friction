@@ -8,7 +8,7 @@
  *
  * Letter-arrived push:
  *   Runs daily at 06:00 KST.  For users who received ≥1 new letter in the
- *   past 24 hours (visible_at within window), sends a silent Expo push.
+ *   past 24 hours (visible_at within window), sends a banner+sound Expo push.
  *   A random message from 5 templates is chosen per user.
  *
  * Reservation processing:
@@ -28,7 +28,7 @@ import { logger } from "./lib/logger";
 import { dispatchNotification } from "./lib/notifications";
 import { getNewLetterRecipients } from "./lib/letterNotificationQuery";
 import { buildLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/notificationMessages";
-import { sendSilentPush } from "./lib/pushSender";
+import { sendPush } from "./lib/pushSender";
 import { processDueScheduledSends } from "./lib/scheduledSendProcessor";
 import { synchronizeSpaceRoundStatuses } from "./lib/spaceRoundStatus";
 import {
@@ -205,7 +205,7 @@ async function sendLetterArrivedNotifications(): Promise<void> {
         platform: t.platform,
       }));
 
-      const results = await sendSilentPush(targets, message, {
+      const results = await sendPush(targets, message, {
         type: "LETTER_ARRIVED",
         newLetterCount: recipient.newLetterCount,
         target: "inbox",

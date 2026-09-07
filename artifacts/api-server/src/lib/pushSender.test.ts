@@ -38,7 +38,7 @@ vi.mock("./logger", () => ({
   },
 }));
 
-const { sendSilentPush } = await import("./pushSender");
+const { sendPush } = await import("./pushSender");
 
 describe("push operational outcomes", () => {
   beforeEach(() => {
@@ -50,7 +50,7 @@ describe("push operational outcomes", () => {
       { status: "error", details: { error: "DeviceNotRegistered" } },
     ]);
 
-    const results = await sendSilentPush(
+    const results = await sendPush(
       [{
         userId: "private-user",
         token: "ExponentPushToken[private-token]",
@@ -72,10 +72,41 @@ describe("push operational outcomes", () => {
     expect(operationalLog).not.toContain("private letter");
   });
 
+  it("sends a normal (banner + sound) notification, not a silent one", async () => {
+    state.send.mockResolvedValueOnce([{ status: "ok" }]);
+
+    await sendPush(
+      [{ userId: "ios-user", token: "ExponentPushToken[ios-token]", platform: "ios" }],
+      "body",
+      { type: "LETTER_ARRIVED" },
+      { correlationId: "req_abcdefghijklmnopqrst" },
+    );
+
+    const [iosMessages] = state.send.mock.calls[0]!;
+    expect(iosMessages[0]).toMatchObject({ sound: "default" });
+    expect(iosMessages[0]).not.toHaveProperty("interruptionLevel");
+
+    state.send.mockResolvedValueOnce([{ status: "ok" }]);
+
+    await sendPush(
+      [{ userId: "android-user", token: "ExponentPushToken[android-token]", platform: "android" }],
+      "body",
+      { type: "LETTER_ARRIVED" },
+      { correlationId: "req_abcdefghijklmnopqrst" },
+    );
+
+    const [androidMessages] = state.send.mock.calls[1]!;
+    expect(androidMessages[0]).toMatchObject({
+      sound: "default",
+      channelId: "letter-arrived",
+      priority: "high",
+    });
+  });
+
   it("classifies a thrown Expo chunk as a retryable delivery failure", async () => {
     state.send.mockRejectedValueOnce(new Error("upstream response body"));
 
-    const results = await sendSilentPush(
+    const results = await sendPush(
       [{
         userId: "user",
         token: "ExponentPushToken[token]",
