@@ -300,6 +300,30 @@ describe("non-blocking editor transitions", () => {
     expect(screen).toContain("const exportPromptOpenRef = useRef(false);");
     expect(screen).toContain("if (isActionInProgressRef.current || exportPromptOpenRef.current) return;");
   });
+
+  it("confirms the complete transition body and pages before immediate export", () => {
+    const screen = readScreen("app/on-01c.tsx");
+    const exportHandler = screen.slice(
+      screen.indexOf("const handleConfirmExport"),
+      screen.indexOf("const handleCoverUploadStateChange"),
+    );
+
+    expect(exportHandler).toContain("pages.length === 0 || !article?.content?.trim()");
+    expect(exportHandler).toContain("content: article.content");
+    expect(exportHandler).toContain("pages,");
+    expect(exportHandler.indexOf("await updateArticle.mutateAsync")).toBeLessThan(
+      exportHandler.indexOf("await transitionStatus.mutateAsync"),
+    );
+    expect(exportHandler.indexOf("await transitionStatus.mutateAsync")).toBeLessThan(
+      exportHandler.indexOf("await finalizeExport()"),
+    );
+    expect(exportHandler).toContain("status !== 400 && status !== 409");
+    expect(exportHandler).toContain("const confirmed = await getArticle(id!)");
+    expect(exportHandler).not.toContain("queryClient.fetchQuery");
+    expect(exportHandler).toContain('confirmed.status !== "CLOSING"');
+    expect(exportHandler).not.toContain("pagesChanged");
+    expect(exportHandler).not.toContain("initialPagesRef");
+  });
 });
 
 describe("record list background work", () => {

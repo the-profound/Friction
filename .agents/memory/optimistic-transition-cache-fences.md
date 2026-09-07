@@ -9,6 +9,12 @@ An optimistic record transition needs a cache-level generation fence in addition
 
 **How to apply:** Stage the complete destination snapshot before navigation, retain its generation until a newer response confirms the staged fields, and keep background failures from restoring older cache data. Use a durable local recovery snapshot for content that has not reached the server yet.
 
+When a mutation race must be resolved from authoritative server state, do not use a normal React Query `fetchQuery` immediately after writing mutation data into the cache. A configured `staleTime` can return that fresh local value without making a request.
+
+**Why:** A concurrent status transition may already have committed on the server while the just-written mutation response and local cache still report the previous status.
+
+**How to apply:** Call the generated network client directly (then update the cache from its result), or explicitly force an actual refetch. Continue only after the returned server status confirms the expected transition.
+
 During a transition that changes entity identity, the destination may be shown before the new server ID exists, but controls that mutate only the destination entity must remain disabled until that identity is confirmed.
 
 **Why:** A provisional review surface can still carry the thought route ID; enabling article-only actions in that window sends valid-looking mutations to the wrong resource.

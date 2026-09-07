@@ -35,6 +35,7 @@ import {
   useFinalizeArticle,
   TransitionArticleBodyTargetStatus,
   getGetArticleQueryKey,
+  getArticle,
   useGetSpace,
   getGetSpaceQueryKey,
   SpaceLetterVisibility,
@@ -176,10 +177,6 @@ export default function ClosingScreen() {
   const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0) ? article.layoutWidth : null;
   const exportedArticleIdRef = useRef<string | null>(null);
   const initializedRef = useRef(false);
-  // Step 3(E) — pages 변경 여부 추적: 분할 화면에서 이미 저장된 pages를 다시
-  // 보내지 않도록, 서버에서 받은 초기 pages 스냅샷을 저장해 둔다. on-01c는
-  // 현재 pages를 편집하지 않으므로 거의 항상 변경되지 않은 상태로 남는다.
-  const initialPagesRef = useRef<string[] | null>(null);
 
   const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
     if (navigationCommittedRef.current) return;
@@ -202,10 +199,6 @@ export default function ClosingScreen() {
     // C1 fix: removed isDataFresh gate — initialize on first data regardless of
     // cache age. initializedRef ensures title/cover are only set once (user edits
     // these fields, so we must not overwrite on background refetch).
-    // initialPagesRef also snapshotted on first data to keep diff detection accurate.
-    if (initialPagesRef.current === null) {
-      initialPagesRef.current = incoming;
-    }
     if (!initializedRef.current) {
       initializedRef.current = true;
       setTitle(article.title || "");
@@ -357,27 +350,54 @@ export default function ClosingScreen() {
     setConfirmVisible(false);
     if (id && isCoverPhotoUploadInProgress(id)) return;
     if (isActionInProgressRef.current) return;
+    if (pages.length === 0 || !article?.content?.trim()) {
+      showToast({
+        message: "최신 페이지를 확인하지 못했습니다. 다시 시도해주세요.",
+        type: "error",
+      });
+      return;
+    }
     isActionInProgressRef.current = true;
     setIsExporting(true);
     try {
-      // Step 3(E) — PATCH 페이로드 최소화:
-      // pages는 분할 화면(on-01b)에서 이미 저장됐고 이 화면에서는 편집되지 않으므로,
-      // 초기 스냅샷과 다를 때만 포함한다 (실질적으로 거의 항상 생략된다). title은
-      // blur 전 입력까지 확정한다. cover는 표지 편집 화면(on-01c-cover)에서
-      // 뒤로가기 전에 이미 저장되었으므로 여기서 다시 쓰지 않는다.
-      const patchData: { title?: string; pages?: string[] } = {
+      // The closing screen may have opened from a durable local transition
+      // snapshot while the review save is still in flight. Always confirm the
+      // complete body/pages atomically before finalizing so an immediate export
+      // cannot promote an older one-page server snapshot.
+      const patchData: { title: string; content: string; pages: string[] } = {
         title,
+        content: article.content,
+        pages,
       };
-      const initialPages = initialPagesRef.current;
-      const pagesChanged =
-        initialPages === null || JSON.stringify(initialPages) !== JSON.stringify(pages);
-      if (pagesChanged) {
-        patchData.pages = pages;
-      }
-      await updateArticle.mutateAsync({
+      const savedSnapshot = await updateArticle.mutateAsync({
         id: id!,
         data: patchData,
       });
+      queryClient.setQueryData(getGetArticleQueryKey(id!), savedSnapshot);
+
+      // The review screen's detached save may lose its expected-content race
+      // against the snapshot above and therefore never perform its own status
+      // transition. Closing owns this boundary too: establish CLOSING before
+      // finalize, and treat a concurrent transition as success only after a
+      // fresh detail read confirms the server reached CLOSING.
+      if (savedSnapshot.status !== "CLOSING") {
+        try {
+          const transitioned = await transitionStatus.mutateAsync({
+            id: id!,
+            data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
+          });
+          queryClient.setQueryData(getGetArticleQueryKey(id!), transitioned);
+        } catch (transitionError: unknown) {
+          const status = (transitionError as { status?: unknown } | null)?.status;
+          if (status !== 400 && status !== 409) throw transitionError;
+          // Bypass React Query's 30-second staleTime. The just-written PATCH
+          // response can still say DIVIDING even when another request has
+          // already moved the server row to CLOSING.
+          const confirmed = await getArticle(id!);
+          queryClient.setQueryData(getGetArticleQueryKey(id!), confirmed);
+          if (confirmed.status !== "CLOSING") throw transitionError;
+        }
+      }
       exportedArticleIdRef.current = id!;
       await finalizeExport();
     } catch (e: unknown) {
@@ -391,7 +411,17 @@ export default function ClosingScreen() {
         isActionInProgressRef.current = false;
       }
     }
-  }, [id, title, pages, updateArticle, finalizeExport, showToast]);
+  }, [
+    id,
+    title,
+    pages,
+    article?.content,
+    updateArticle,
+    transitionStatus,
+    queryClient,
+    finalizeExport,
+    showToast,
+  ]);
 
   const handleCancelExport = useCallback(() => {
     exportPromptOpenRef.current = false;

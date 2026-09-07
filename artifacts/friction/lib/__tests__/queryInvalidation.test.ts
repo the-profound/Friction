@@ -269,6 +269,80 @@ describe("optimistic record cache operations", () => {
       });
   });
 
+  it("protects a complete multi-page transition from a late one-page response", () => {
+    const queryClient = new QueryClient();
+    const detailKey = getGetArticleQueryKey("article-pages");
+    const original = {
+      id: "article-pages",
+      status: "DIVIDING",
+      title: "제목",
+      content: "이전 본문",
+      pages: ["이전 한 쪽"],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    queryClient.setQueryData(detailKey, original as never);
+
+    const completePages = ["첫 쪽", "둘째 쪽", "셋째 쪽"];
+    stageArticleTransitionSnapshot(queryClient, original.id, {
+      content: "최신 본문",
+      pages: completePages,
+      status: "CLOSING" as never,
+    });
+
+    const lateResponse = {
+      ...original,
+      updatedAt: "2026-01-01T00:00:01.000Z",
+    };
+    queryClient.setQueryData(detailKey, lateResponse as never);
+
+    expect(getProtectedArticleDetailSnapshot(queryClient, original.id, lateResponse as never))
+      .toMatchObject({
+        content: "최신 본문",
+        pages: completePages,
+        status: "CLOSING",
+      });
+  });
+
+  it("accepts a server confirmation with an equal multi-page array", () => {
+    const queryClient = new QueryClient();
+    const detailKey = getGetArticleQueryKey("article-confirmed-pages");
+    const original = {
+      id: "article-confirmed-pages",
+      status: "DIVIDING",
+      title: "제목",
+      content: "이전 본문",
+      pages: ["이전 한 쪽"],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    queryClient.setQueryData(detailKey, original as never);
+
+    stageArticleTransitionSnapshot(queryClient, original.id, {
+      content: "최신 본문",
+      pages: ["첫 쪽", "둘째 쪽"],
+      status: "CLOSING" as never,
+    });
+    const confirmed = {
+      ...original,
+      content: "최신 본문",
+      pages: ["첫 쪽", "둘째 쪽"],
+      status: "CLOSING",
+      updatedAt: "2026-01-01T00:00:01.000Z",
+    };
+    queryClient.setQueryData(detailKey, confirmed as never, { updatedAt: Date.now() + 1 });
+
+    expect(getProtectedArticleDetailSnapshot(queryClient, original.id, confirmed as never))
+      .toBe(confirmed);
+
+    const laterServerEdit = {
+      ...confirmed,
+      content: "서버의 더 최신 본문",
+      pages: ["새 첫 쪽", "새 둘째 쪽", "새 셋째 쪽"],
+      updatedAt: "2026-01-01T00:00:02.000Z",
+    };
+    expect(getProtectedArticleDetailSnapshot(queryClient, original.id, laterServerEdit as never))
+      .toBe(laterServerEdit);
+  });
+
   it("keeps a local stage transition when an older detail request finishes late", async () => {
     const queryClient = new QueryClient();
     const articleKey = getListArticlesQueryKey({ authorId: "author" });

@@ -54,6 +54,19 @@ type OptimisticArticleTransition = {
 let articleTransitionGeneration = 0;
 const optimisticArticleTransitions = new Map<string, OptimisticArticleTransition>();
 
+function transitionValueMatches(incoming: unknown, staged: unknown) {
+  if (Object.is(incoming, staged)) return true;
+  if (
+    incoming === null
+    || staged === null
+    || typeof incoming !== "object"
+    || typeof staged !== "object"
+  ) {
+    return false;
+  }
+  return JSON.stringify(incoming) === JSON.stringify(staged);
+}
+
 function snapshotIsNewer(
   incoming: RecordDetailSnapshot,
   current: RecordDetailSnapshot | undefined,
@@ -82,8 +95,8 @@ export function getProtectedArticleDetailSnapshot(
   if (!transition || !incoming) return incoming;
 
   const state = qc.getQueryState(getGetArticleQueryKey(id));
-  const matchesPatch = Object.entries(transition.patch).every(
-    ([key, value]) => incoming[key as keyof Article] === value,
+  const matchesPatch = Object.entries(transition.patch).every(([key, value]) =>
+    transitionValueMatches(incoming[key as keyof Article], value),
   );
   if (matchesPatch && (state?.dataUpdatedAt ?? 0) > transition.stagedAt) {
     optimisticArticleTransitions.delete(id);
