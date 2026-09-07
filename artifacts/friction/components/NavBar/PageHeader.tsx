@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Image, ImageSourcePropType, Keyboard, Platform, StyleSheet, Text, TouchableWithoutFeedback, useWindowDimensions, View } from "react-native";
+import { Image, ImageSourcePropType, Keyboard, Platform, StyleSheet, Text, TouchableWithoutFeedback, useWindowDimensions, View, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ScalePressable from "@/components/shared/ScalePressable";
@@ -21,6 +21,7 @@ const Gradient = LinearGradient as unknown as React.ComponentType<any>;
  * Shared so every screen's overlap/reveal band feels the same size.
  */
 export const HEADER_FADE_HEIGHT = 24;
+const HEADER_OVERLAY_SEAM_OVERLAP = 2;
 
 /** Converts a "#RRGGBB" (or "#RGB") hex color into an "rgba(r,g,b,alpha)" string. */
 function hexToRgba(hex: string, alpha: number): string {
@@ -68,6 +69,66 @@ export function HeaderFadeTail({
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
+    </View>
+  );
+}
+
+/**
+ * Shared layout contract for controls floated above scrolling content.
+ * The solid control band and fading tail are one absolute overlay, while every
+ * non-control layer lets list scrolling and card presses pass through.
+ */
+export function HeaderFadeOverlay({
+  controlHeight,
+  children,
+  backgroundColor = Colors.white,
+  fadeHeight = HEADER_FADE_HEIGHT,
+  style,
+}: {
+  controlHeight: number;
+  children: React.ReactNode;
+  backgroundColor?: string;
+  fadeHeight?: number;
+  style?: ViewStyle;
+}) {
+  return (
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.fadeOverlay,
+        {
+          top: -HEADER_OVERLAY_SEAM_OVERLAP,
+          height: controlHeight + fadeHeight + HEADER_OVERLAY_SEAM_OVERLAP,
+        },
+        style,
+      ]}
+    >
+      <View
+        pointerEvents="none"
+        style={[
+          styles.fadeOverlaySolid,
+          {
+            height: controlHeight + HEADER_OVERLAY_SEAM_OVERLAP,
+            backgroundColor,
+          },
+        ]}
+      />
+      <Gradient
+        pointerEvents="none"
+        colors={[hexToRgba(backgroundColor, 1), hexToRgba(backgroundColor, 0)]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={[
+          styles.fadeOverlayTail,
+          {
+            top: controlHeight + HEADER_OVERLAY_SEAM_OVERLAP,
+            height: fadeHeight,
+          },
+        ]}
+      />
+      <View pointerEvents="box-none" style={styles.fadeOverlayControls}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -292,6 +353,29 @@ export function PageHeader({
 }
 
 const styles = StyleSheet.create({
+  fadeOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 5,
+  },
+  fadeOverlaySolid: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  fadeOverlayTail: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+  },
+  fadeOverlayControls: {
+    position: "absolute",
+    top: HEADER_OVERLAY_SEAM_OVERLAP,
+    left: 0,
+    right: 0,
+  },
   shell: {
     position: "relative",
     backgroundColor: Colors.white,

@@ -13,7 +13,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import { QueryClientContext, useQueryClient } from "@tanstack/react-query";
 import {
@@ -47,7 +46,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
-import { PageHeader } from "@/components/NavBar/PageHeader";
+import { HeaderFadeOverlay, PageHeader } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, ReaderTokens, Shadows, Sizing, Spacing, Typography, readerFontSize } from "@/constants/tokens";
@@ -101,7 +100,6 @@ import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { useIsOnline } from "@/lib/useIsOnline";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
-const FILTER_GRADIENT_OVERLAP = 24;
 const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
@@ -115,8 +113,6 @@ function getScreenForStatus(status: ArticleStatus): "/on-01a" | "/on-01b" | "/on
 
 const NON_SELECTABLE_WEB_STYLE =
   Platform.OS === "web" ? ({ userSelect: "none" } as object) : undefined;
-const Gradient = LinearGradient as unknown as React.ComponentType<any>;
-
 function RecordListText({
   style,
   ...props
@@ -1119,15 +1115,7 @@ function OnScreenContent() {
           </RefreshableEmpty>
         )}
 
-        <View style={styles.filtersOverlay} pointerEvents="box-none">
-          <Gradient
-            colors={["rgba(255,255,255,1)", "rgba(255,255,255,0.85)", "rgba(255,255,255,0)"]}
-            locations={[0, 0.55, 1]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-            pointerEvents="none"
-          />
+        <HeaderFadeOverlay controlHeight={FILTER_BAR_HEIGHT}>
           <View pointerEvents="box-none" style={styles.filters}>
             <View
               pointerEvents="box-none"
@@ -1154,7 +1142,7 @@ function OnScreenContent() {
               </View>
             </View>
           </View>
-        </View>
+        </HeaderFadeOverlay>
       </View>
 
       {renderLetterOverlay()}
@@ -1252,18 +1240,6 @@ export default function OnScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
   contentArea: { flex: 1 },
-  filtersOverlay: {
-    position: "absolute",
-    // Extend 2px above the content area's top edge so this overlay's opaque
-    // white top always overlaps PageHeader's own white bottom edge — without
-    // this, sub-pixel layout rounding can leave a hairline gap between two
-    // separately-clipped adjacent views on some devices.
-    top: -2,
-    left: 0,
-    right: 0,
-    height: FILTER_BAR_HEIGHT + FILTER_GRADIENT_OVERLAP + 2,
-    zIndex: 5,
-  },
   filters: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 28 },
   filterControls: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   kindFilterGroup: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },

@@ -88,9 +88,7 @@ describe("record filter UI regression", () => {
     // absolute positioning (not a negative-margin sibling overlap), so every
     // scrollable branch below it must reserve FILTER_BAR_HEIGHT of top padding.
     expect(recordsScreen).toContain("height: FILTER_BAR_HEIGHT,");
-    expect(recordsScreen).toContain("<View style={styles.filtersOverlay} pointerEvents=\"box-none\">");
-    expect(recordsScreen).toMatch(/height:\s*FILTER_BAR_HEIGHT \+ FILTER_GRADIENT_OVERLAP/);
-    expect(recordsScreen).toContain('position: "absolute"');
+    expect(recordsScreen).toContain("<HeaderFadeOverlay controlHeight={FILTER_BAR_HEIGHT}>");
     expect(recordsScreen).not.toContain("filtersAnimated");
     expect(recordsScreen).not.toContain("marginBottom: -FILTER_GRADIENT_OVERLAP");
     expect(recordsScreen).not.toContain("outputRange: [0, FILTER_BAR_HEIGHT]");

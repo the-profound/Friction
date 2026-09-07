@@ -8,7 +8,6 @@ import {
   RefreshControl,
   useWindowDimensions,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -16,7 +15,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { keepPreviousData, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
-import { PageHeader } from "@/components/NavBar/PageHeader";
+import { HeaderFadeOverlay, PageHeader } from "@/components/NavBar/PageHeader";
 import HeaderButton from "@/components/shared/HeaderButton";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -51,18 +50,7 @@ import {
   runOperatorPendingRetry,
 } from "@/lib/operatorPendingSpaceCodeRequestsQuery";
 
-// expo-linear-gradient's types don't line up with the RN style array pattern
-// used throughout this file; other screens cast it the same way (see on.tsx).
-const Gradient = LinearGradient as unknown as React.ComponentType<any>;
-
-// The kebab-menu row's own background fades from opaque white to transparent
-// across its full height, then overlaps the list below it by this amount —
-// noticeably more than the shared 24px HeaderFadeTail band — so scrolled
-// content dissolves into the header instead of getting hard-cut. See
-// app/(tabs)/on.tsx's filtersOverlay for the same technique.
 const HEADER_ROW_CONTENT_HEIGHT = 4 + Sizing.searchButtonSize + 16; // marginTop + button + marginBottom
-const HEADER_ROW_GRADIENT_OVERLAP = 24;
-const HEADER_ROW_GRADIENT_HEIGHT = HEADER_ROW_CONTENT_HEIGHT + HEADER_ROW_GRADIENT_OVERLAP;
 
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
@@ -651,15 +639,7 @@ export default function SpacesScreen() {
           />
         )}
 
-        <View style={styles.headerActionRowOverlay} pointerEvents="box-none">
-          <Gradient
-            colors={["rgba(255,255,255,1)", "rgba(255,255,255,0.85)", "rgba(255,255,255,0)"]}
-            locations={[0, 0.55, 1]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-            pointerEvents="none"
-          />
+        <HeaderFadeOverlay controlHeight={HEADER_ROW_CONTENT_HEIGHT}>
           <View style={styles.headerActionRow} pointerEvents="box-none">
             <HeaderButton
               variant="menu"
@@ -667,7 +647,7 @@ export default function SpacesScreen() {
               accessibilityLabel="공간 메뉴 열기"
             />
           </View>
-        </View>
+        </HeaderFadeOverlay>
       </View>
 
       <ActionSheetModal
@@ -751,18 +731,6 @@ const styles = StyleSheet.create({
   },
   contentArea: {
     flex: 1,
-  },
-  headerActionRowOverlay: {
-    position: "absolute",
-    // Extend 2px above the content area's top edge so this overlay's opaque
-    // white top always overlaps PageHeader's own white bottom edge — without
-    // this, sub-pixel layout rounding can leave a hairline gap between two
-    // separately-clipped adjacent views on some devices.
-    top: -2,
-    left: 0,
-    right: 0,
-    height: HEADER_ROW_GRADIENT_HEIGHT + 2,
-    zIndex: 5,
   },
   headerActionRow: {
     minHeight: Sizing.searchButtonSize,

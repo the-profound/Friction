@@ -24,7 +24,7 @@ import {
   readerFontSize,
 } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
-import { PageHeader, HeaderFadeTail } from "@/components/NavBar/PageHeader";
+import { HeaderFadeOverlay, PageHeader } from "@/components/NavBar/PageHeader";
 import { useUser } from "@/contexts/UserContext";
 import { useToast } from "@/contexts/ToastContext";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
@@ -55,6 +55,7 @@ import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 
 type ArchiveSubTab = "personal" | "sentence";
 const FILTER_BUTTON_HEIGHT = 36;
+const FILTER_ROW_HEIGHT = 4 + FILTER_BUTTON_HEIGHT + 16;
 const SENTENCE_BADGE_OVERFLOW = 12;
 
 const COLLECTION_PREVIEW_LIMIT = 3;
@@ -425,7 +426,7 @@ export default function ArchiveScreen() {
     <RefreshableEmpty
       refreshing={isManualRefreshing}
       onRefresh={handleRefresh}
-      contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
+      contentContainerStyle={[styles.emptyContainer, { paddingTop: FILTER_ROW_HEIGHT, paddingBottom: navBottom }]}
     >
       <Feather name="folder" size={40} color={Colors.zinc300} />
       <Text style={styles.emptyTitle}>내 모음이 없어요</Text>
@@ -446,7 +447,7 @@ export default function ArchiveScreen() {
     <RefreshableEmpty
       refreshing={isManualRefreshing}
       onRefresh={handleRefresh}
-      contentContainerStyle={[styles.emptyContainer, { paddingBottom: navBottom }]}
+      contentContainerStyle={[styles.emptyContainer, { paddingTop: FILTER_ROW_HEIGHT, paddingBottom: navBottom }]}
     >
       <Feather name="bookmark" size={40} color={Colors.zinc300} />
       <Text style={styles.emptyTitle}>문장이 없어요</Text>
@@ -457,7 +458,7 @@ export default function ArchiveScreen() {
   const renderContent = () => {
     if (isLoading) {
       return (
-        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
+        <View style={[styles.emptyContainer, { paddingTop: FILTER_ROW_HEIGHT, paddingBottom: navBottom }]}>
           <Text style={styles.loadingText}>불러오는 중...</Text>
         </View>
       );
@@ -465,7 +466,7 @@ export default function ArchiveScreen() {
 
     if (isError) {
       return (
-        <View style={[styles.emptyContainer, { paddingBottom: navBottom }]}>
+        <View style={[styles.emptyContainer, { paddingTop: FILTER_ROW_HEIGHT, paddingBottom: navBottom }]}>
           <Feather name="alert-circle" size={40} color={Colors.zinc300} />
           <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
           <ScalePressable
@@ -493,7 +494,7 @@ export default function ArchiveScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderPersonalItem}
            extraData={recentArticlesByCollectionId}
-          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
+          contentContainerStyle={[styles.listContent, { paddingTop: FILTER_ROW_HEIGHT, paddingBottom: navBottom }]}
           refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} tintColor={Colors.zinc400} />}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
@@ -543,7 +544,10 @@ export default function ArchiveScreen() {
         contentContainerStyle={[
           styles.listContent,
           styles.sentenceListContent,
-          { paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom },
+          {
+            paddingTop: FILTER_ROW_HEIGHT,
+            paddingBottom: selectionMode ? insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 80 : navBottom,
+          },
         ]}
         refreshControl={
           !selectionMode ? (
@@ -578,82 +582,85 @@ export default function ArchiveScreen() {
         />
       )}
 
-      <View style={styles.filterRow}>
-        <View style={styles.filterGroup}>
-          <ScalePressable
-            style={styles.filterButton}
-            contentStyle={[
-              styles.filterButtonContent,
-              activeSubTab === "personal" && styles.filterButtonContentActive,
-            ]}
-            onPress={() => {
-              closeSentenceOpenRow();
-              setActiveSubTab("personal");
-              exitSelectionMode();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="모음 보기"
-            accessibilityState={{ selected: activeSubTab === "personal" }}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              activeSubTab === "personal" && styles.filterButtonTextActive,
-            ]}>
-              모음
-            </Text>
-          </ScalePressable>
-          <ScalePressable
-            style={styles.filterButton}
-            contentStyle={[
-              styles.filterButtonContent,
-              activeSubTab === "sentence" && styles.filterButtonContentActive,
-            ]}
-            onPress={() => {
-              closeSentenceOpenRow();
-              setActiveSubTab("sentence");
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="문장 보기"
-            accessibilityState={{ selected: activeSubTab === "sentence" }}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              activeSubTab === "sentence" && styles.filterButtonTextActive,
-            ]}>
-              문장
-            </Text>
-          </ScalePressable>
-        </View>
-        {activeSubTab === "personal" ? (
-          <HeaderButton
-            variant="add"
-            onPress={handleAdd}
-            accessibilityLabel="새 모음 만들기"
-          />
-        ) : !selectionMode ? (
-          <HeaderButton
-            variant="add"
-            onPress={handleAdd}
-            onLongPress={enterSelectionMode}
-            accessibilityLabel="문장 추가"
-            accessibilityHint="새 문장 추가 화면으로 이동합니다. 길게 누르면 문장 선택 모드가 열립니다"
-            accessibilityActions={[
-              { name: "activate", label: "문장 추가" },
-              { name: "longpress", label: "문장 선택 모드 열기" },
-            ]}
-            onAccessibilityAction={({ nativeEvent }) => {
-              if (nativeEvent.actionName === "longpress") {
-                enterSelectionMode();
-              } else if (nativeEvent.actionName === "activate") {
-                handleAdd();
-              }
-            }}
-          />
-        ) : null}
-      </View>
-      <HeaderFadeTail />
+      <View style={styles.contentArea}>
+        {renderContent()}
 
-      {renderContent()}
+        <HeaderFadeOverlay controlHeight={FILTER_ROW_HEIGHT}>
+          <View style={styles.filterRow} pointerEvents="box-none">
+            <View style={styles.filterGroup}>
+              <ScalePressable
+                style={styles.filterButton}
+                contentStyle={[
+                  styles.filterButtonContent,
+                  activeSubTab === "personal" && styles.filterButtonContentActive,
+                ]}
+                onPress={() => {
+                  closeSentenceOpenRow();
+                  setActiveSubTab("personal");
+                  exitSelectionMode();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="모음 보기"
+                accessibilityState={{ selected: activeSubTab === "personal" }}
+              >
+                <Text style={[
+                  styles.filterButtonText,
+                  activeSubTab === "personal" && styles.filterButtonTextActive,
+                ]}>
+                  모음
+                </Text>
+              </ScalePressable>
+              <ScalePressable
+                style={styles.filterButton}
+                contentStyle={[
+                  styles.filterButtonContent,
+                  activeSubTab === "sentence" && styles.filterButtonContentActive,
+                ]}
+                onPress={() => {
+                  closeSentenceOpenRow();
+                  setActiveSubTab("sentence");
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="문장 보기"
+                accessibilityState={{ selected: activeSubTab === "sentence" }}
+              >
+                <Text style={[
+                  styles.filterButtonText,
+                  activeSubTab === "sentence" && styles.filterButtonTextActive,
+                ]}>
+                  문장
+                </Text>
+              </ScalePressable>
+            </View>
+            {activeSubTab === "personal" ? (
+              <HeaderButton
+                variant="add"
+                onPress={handleAdd}
+                accessibilityLabel="새 모음 만들기"
+              />
+            ) : !selectionMode ? (
+              <HeaderButton
+                variant="add"
+                onPress={handleAdd}
+                onLongPress={enterSelectionMode}
+                accessibilityLabel="문장 추가"
+                accessibilityHint="새 문장 추가 화면으로 이동합니다. 길게 누르면 문장 선택 모드가 열립니다"
+                accessibilityActions={[
+                  { name: "activate", label: "문장 추가" },
+                  { name: "longpress", label: "문장 선택 모드 열기" },
+                ]}
+                onAccessibilityAction={({ nativeEvent }) => {
+                  if (nativeEvent.actionName === "longpress") {
+                    enterSelectionMode();
+                  } else if (nativeEvent.actionName === "activate") {
+                    handleAdd();
+                  }
+                }}
+              />
+            ) : null}
+          </View>
+        </HeaderFadeOverlay>
+      </View>
 
       {isSentenceSelectionMode && (
         <View style={[styles.selectionBar, { paddingBottom: insets.bottom + Spacing.navBarBottom + Sizing.navBarHeight + 12 }]}>
@@ -747,6 +754,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  contentArea: {
+    flex: 1,
   },
   selectionHeader: {
     flexDirection: "row",
