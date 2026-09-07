@@ -15,8 +15,14 @@ const POPUP_W = 140;
 const TOOLBAR_H = 60;
 
 interface AddMenuPopupProps {
-  /** 현재 키보드 높이. 팝업은 키보드 + 툴바 위에 floating 한다. */
-  keyboardHeight: number;
+  /**
+   * 툴바/InlineMenuPanel과 동일한 floating chrome bottom 오프셋
+   * (`resolveFloatingChromeOffset`). 반드시 그 함수가 반환한 값을 그대로
+   * 전달해야 한다 — 여기서만 raw keyboardHeight를 쓰면 키보드가 내려간
+   * 상태로 패널을 거쳐 열리는 addMenu가 툴바와 다른 높이에 떴다가
+   * 재조정되는 이중 점프가 생긴다.
+   */
+  chromeOffset: number;
   /** 툴바 [+] 버튼 중심의 화면 X 좌표. null이면 화면 중앙 기준. */
   plusBtnCenterX: number | null;
   onDismiss: () => void;
@@ -29,7 +35,7 @@ interface AddMenuPopupProps {
  * 읽기 메모(read.tsx)와 기록 작성(on-01a.tsx) 양쪽에서 공유한다.
  */
 export default function AddMenuPopup({
-  keyboardHeight,
+  chromeOffset,
   plusBtnCenterX,
   onDismiss,
   onSelectQuote,
@@ -49,7 +55,7 @@ export default function AddMenuPopup({
       <View
         style={[
           styles.popup,
-          { bottom: keyboardHeight + TOOLBAR_H + 4, left },
+          { bottom: chromeOffset + TOOLBAR_H + 4, left },
         ]}
       >
         <View style={styles.inner}>

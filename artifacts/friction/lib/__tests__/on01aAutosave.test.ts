@@ -1070,7 +1070,7 @@ describe("on-01a keyboard reactivation", () => {
     expect(nativeEditorSource).toContain("editor.commands.focus()");
     expect(nativeEditorBundle).toContain("startedOnBlankSurface");
     expect(nativeEditorBundle).toContain('addEventListener("touchcancel"');
-    expect(nativeEditorBundle).toContain("3.28.0-");
+    expect(nativeEditorBundle).toContain("3.29.1-");
 
     expect(webEditorSource).toContain('container.addEventListener("pointerdown"');
     expect(webEditorSource).toContain('container.addEventListener("pointermove"');
@@ -1240,7 +1240,9 @@ describe("shared title keyboard contract", () => {
     expect(editorBundle).toContain('"compositionstart"');
     expect(editorBundle).toContain('"compositionend"');
     expect(editorBundle).toContain("keyCode!==229");
-    expect(editorBundle).toMatch(/addEventListener\("keydown",\w+\)/);
+    // esbuild's minified identifier for the handler can include `$`
+    // (e.g. `$c`), which `\w` alone doesn't cover.
+    expect(editorBundle).toMatch(/addEventListener\("keydown",[\w$]+\)/);
     expect(editorBundle).toContain('focus("start",{scrollIntoView:!1})');
   });
 

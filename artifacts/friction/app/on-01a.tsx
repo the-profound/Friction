@@ -141,6 +141,7 @@ import {
   reduceEditorKeyboardState,
   resolveMemoToolbarRenderContract,
 } from "@/lib/readingMemoToolbar";
+import { resolveFloatingChromeOffset } from "@/lib/floatingChromeOffset";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
@@ -443,12 +444,18 @@ export default function WritingScreen() {
     setKeyboardRestorePending(false);
   }, [isReadingMemoContext]);
 
-  // 인라인 메뉴 패널 높이: 키보드가 한 번이라도 올라왔으면 그 높이를,
-  // 아직 키보드 이벤트가 없었으면 화면의 40%로 폴백한다.
-  const inlinePanelHeight =
-    lastKeyboardHeightRef.current > 0
-      ? lastKeyboardHeightRef.current
-      : Math.min(320, Math.round(screenHeight * 0.4));
+  // 키보드/인라인 패널/플로팅 메뉴가 공유하는 단일 bottom 오프셋.
+  // 세 표면(툴바·InlineMenuPanel·AddMenuPopup)이 각자 오프셋을 계산하면
+  // Keyboard.dismiss() 직후처럼 keyboardVisible이 false로 바뀌는 전환에서
+  // 서로 다른 값을 잠깐 쓰는 이중 점프가 생긴다 — 반드시 이 값 하나만 쓴다.
+  const floatingChromeOffset = resolveFloatingChromeOffset({
+    keyboardVisible,
+    keyboardHeight,
+    lastKnownKeyboardHeight: lastKeyboardHeightRef.current,
+    screenHeight,
+  });
+  // InlineMenuPanel의 panelHeight prop 이름은 유지하되 동일한 오프셋을 참조한다.
+  const inlinePanelHeight = floatingChromeOffset;
 
   const contentRef = useRef("");
   const titleRef = useRef("");
@@ -3093,7 +3100,7 @@ export default function WritingScreen() {
           <View
             style={[
               styles.memoToolbarWrap,
-              { bottom: keyboardVisible ? keyboardHeight : inlinePanelHeight },
+              { bottom: floatingChromeOffset },
             ]}
             pointerEvents="box-none"
           >
@@ -3104,7 +3111,7 @@ export default function WritingScreen() {
         {/* ── [+] 팝업 메뉴 (addMenu) ── */}
         {!isNavigating && !isReadingMemoContext && inlineMenuMode === "addMenu" && (
           <AddMenuPopup
-            keyboardHeight={keyboardHeight}
+            chromeOffset={floatingChromeOffset}
             plusBtnCenterX={plusBtnCenterX}
             onDismiss={() => setInlineMenuMode(null)}
             onSelectQuote={handleSelectQuoteFromAddMenu}

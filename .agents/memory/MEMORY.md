@@ -13,6 +13,7 @@
 - [Android shadow stacking](friction-android-shadow-stacking.md) — elevated empty shadow siblings can paint above card content; Android elevation belongs on the containing surface.
 - [Friction memo overlay rendering](friction-memo-overlay-rendering.md) — RN `color: "transparent"` unreliable for hiding overlay text; use exact background hex match instead.
 - [Friction memo card scroll vs page-flip gesture](friction-memo-gesture-split.md) — keyboard-open drag translates the card (WebView scroll disabled); typing-overflow auto-split only reports the cut, RN must apply it via setMarkdown.
+- [Friction floating chrome offset unification](friction-floating-chrome-offset.md) — writing-screen toolbar/InlineMenuPanel/AddMenuPopup must share one bottom-offset resolver, never independent inline ternaries.
 - [Sheet close dead zone](friction-sheet-close-unlock.md) — dismissed sheet still eats taps: outer container keeps full height while only inner panel slides; RN hit-test never falls through. Not a JS-thread issue.
 - [Reanimated cancelled-callback cleanup](friction-reanimated-cancelled-callback.md) — never gate withTiming cleanup on `finished`; cancellation (finished:false) is common with interruptible gestures and skipping cleanup leaves UI stuck.
 - [Worklet ref mutation](friction-worklet-ref-mutation.md) — `ref.current = x` inside a worklet is silently dropped (only a WARN); commit refs+state via one runOnJS JS function instead.

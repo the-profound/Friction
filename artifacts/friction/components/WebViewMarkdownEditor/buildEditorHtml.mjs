@@ -112,7 +112,7 @@ body.hide-title{padding-top:0}
 body.hide-title #editor-content{padding-bottom:24px}
 `.trim();
 
-const VERSION = "3.28.0";
+const VERSION = "3.29.1";
 
 const tsContent = `import { buildWebViewPerfHeadScript } from "@/lib/webviewPerf";
 import { buildWebViewBridgeHeadScript } from "@/lib/webViewBridgeShim";

@@ -1321,6 +1321,13 @@ function spellFindRange(
   const LARGE_PASTE_MIN_CHARS = 800;
   const LARGE_PASTE_MIN_LINES = 6;
   const CARET_VIEWPORT_MARGIN_PX = 16;
+  // 사용자가 손가락으로 직접 스크롤하는 도중에는 예약된 보정(resize/paste)이
+  // window.scrollTo를 호출해 손끝 아래에서 문서를 잡아채면 안 된다. 터치가
+  // 떠 있는 동안은 보정을 미루고, 손을 떼는 순간 한 번만(캐럿이 실제로
+  // 보이는 영역 밖일 때만 실제로 이동하는 기존 margin 체크를 그대로 거쳐)
+  // 재시도한다.
+  let activeTouchCount = 0;
+  let pendingViewportCorrectionAfterTouch = false;
 
   function getDocumentScrollTop(): number {
     return (
@@ -1338,7 +1345,36 @@ function spellFindRange(
     );
   }
 
+  // setContent 로 문서를 통째로 교체한 직후, 새 문단 높이가 아직 완전히
+  // 반영되지 않은 상태에서 한 번, 레이아웃이 안정된 뒤(rAF) 한 번 더 같은
+  // 목표 위치로 되돌린다. 두 번째 시도가 없으면 폰트/이미지 리플로우가
+  // 뒤늦게 스크롤을 밀어내는 경우를 놓친다. 목표 위치는 항상 새 문서
+  // 길이에 맞게 clamp 해 짧아진 문서에서 화면을 문서 밖으로 밀어내지
+  // 않는다. 그 사이 사용자가 직접 화면을 만지기 시작하면 건드리지 않는다.
+  function restoreDocumentScrollTop(target: number) {
+    const apply = () => {
+      if (activeTouchCount > 0) return;
+      const scrollingElement = document.scrollingElement || document.documentElement;
+      const viewportHeight = getDocumentViewportHeight();
+      const maxScrollTop = Math.max(0, scrollingElement.scrollHeight - viewportHeight);
+      const clamped = Math.min(Math.max(0, target), maxScrollTop);
+      if (typeof scrollingElement.scrollTop === "number") {
+        scrollingElement.scrollTop = clamped;
+      }
+      window.scrollTo(0, clamped);
+    };
+    apply();
+    requestAnimationFrame(apply);
+  }
+
   function correctDocumentViewport(keepEditorSelectionVisible: boolean) {
+    if (activeTouchCount > 0) {
+      // 사용자가 지금 화면을 만지고 있다 — 이번 보정은 건너뛰고, 손을 뗀
+      // 직후 한 번 더 시도하도록 표시만 남긴다.
+      pendingViewportCorrectionAfterTouch =
+        pendingViewportCorrectionAfterTouch || keepEditorSelectionVisible;
+      return;
+    }
     const scrollingElement = document.scrollingElement || document.documentElement;
     const viewportHeight = getDocumentViewportHeight();
     const maxScrollTop = Math.max(0, scrollingElement.scrollHeight - viewportHeight);
@@ -1736,6 +1772,15 @@ function spellFindRange(
             // 같은 동기 실행 흐름 안에서 즉시 재포커스해 blur 가 실제
             // 키보드 숨김으로 이어지기 전에 되돌린다.
             const wasFocused = editor.isFocused;
+            // setContent 는 화면 전체를 다시 그리는 트랜잭션이라 문단 높이가
+            // 재계산되면서 브라우저가 스크롤 위치를 밀어낼 수 있다. 모드
+            // 전환(초안↔검토)이나 자동 분할 재주입처럼 "같은 화면을 계속 보고
+            // 있다"고 느껴야 하는 교체에서는 사용자가 보던 위치를 그대로
+            // 유지해야 하므로, 교체 전 스크롤 위치를 기억해 뒀다가 레이아웃이
+            // 다시 안정된 뒤 그대로 복원한다. 사용자가 지금 손가락으로 화면을
+            // 만지고 있으면 그 제스처를 방해하지 않도록 건드리지 않는다.
+            const scrollTopBeforeReplace =
+              activeTouchCount === 0 ? getDocumentScrollTop() : null;
             // setContent 는 docChanged 트랜잭션을 발생시켜 onUpdate 를 trigger 한다.
             // 프로그래매틱 변경임을 표시해 spurious onChange 가 RN 으로 가지 않도록 한다.
             programmaticUpdatePending = true;
@@ -1746,6 +1791,9 @@ function spellFindRange(
             } else if (wasFocused) {
               // 새 페이지 콘텐츠의 끝으로 커서를 옮기며 동기적으로 재포커스한다.
               editor.commands.focus("end", { scrollIntoView: false });
+            }
+            if (scrollTopBeforeReplace !== null) {
+              restoreDocumentScrollTop(scrollTopBeforeReplace);
             }
             lastAppliedMarkdown = next;
             // 새 본문이 들어왔으니 export 캐시도 비운다.
@@ -2402,6 +2450,16 @@ function spellFindRange(
       if (t) {
         selHandleDragStartX = t.clientX;
         selHandleDragStartY = t.clientY;
+        // 이 세션이 없으면 touchend의 isStationaryBlankSurfaceTap이 항상
+        // session=null로 조기 반환해 "빈 표면 정지 탭으로 편집기 재포커스"가
+        // 전혀 동작하지 않는다 — 시작 지점/블랭크 여부를 여기서 반드시 기록한다.
+        surfaceTouchSession = createEditorSurfaceTouchSession(
+          t.clientX,
+          t.clientY,
+          isBlankEditorSurfaceTarget(e.target),
+        );
+      } else {
+        surfaceTouchSession = null;
       }
       selHandleDragging = false;
     }, { passive: true });
@@ -2438,9 +2496,13 @@ function spellFindRange(
       ) {
         return;
       }
-      var t = e.touches[0];
+      // touchend 시점의 e.touches는 이미 손을 뗀 마지막 터치를 포함하지
+      // 않는다(단일 터치라면 빈 배열) — 종료 지점은 changedTouches에서 읽어야
+      // 한다. e.touches[0]을 쓰면 t가 undefined가 되어 여기서 매번 던진다.
+      var t = e.changedTouches[0];
       if (
-        !isStationaryBlankSurfaceTap(
+        !t
+        || !isStationaryBlankSurfaceTap(
           session,
           t.clientX,
           t.clientY,
@@ -2469,7 +2531,13 @@ function spellFindRange(
       if (!keyboardOpen) return;
       if (window.scrollY > 0) return;
       if (selHandleHasActiveSelection || selHandleDragging) return;
-      var dy = t.clientY - selHandleDragStartY;
+      // 이전에는 정의되지 않은 `t`(다른 핸들러의 지역변수)와, 스와이프
+      // 시작점이 아닌 selHandleDragStartY(선택 핸들 드래그 시작점)를
+      // 참조해 매 touchmove마다 ReferenceError를 던졌다 — 스와이프-다운
+      // 키보드 내리기 제스처가 항상 동작하지 않았다.
+      var touch = e.touches[0];
+      if (!touch) return;
+      var dy = touch.clientY - swipeStartY;
       if (dy > SWIPE_THRESHOLD) {
         swipeDismissed = true;
         postToRN({ type: "onSwipeDownToDismiss" });
@@ -2479,6 +2547,28 @@ function spellFindRange(
     document.addEventListener("touchend", function () {
       swipeDismissed = false;
     }, { passive: true });
+
+    // ── 뷰포트 보정 vs 사용자 스크롤 우선순위 ──
+    // resize(키보드 열림/닫힘)나 대량 붙여넣기로 예약된 보정(180ms 지연 포함)이
+    // 사용자가 손가락으로 스크롤하는 도중에 발동하면 window.scrollTo가 그
+    // 스크롤을 되돌려 뺏는다. 활성 터치 수를 추적해 터치 중에는 보정을
+    // 미루고, 마지막 손가락을 뗀 직후 한 번만 재시도한다 — 실제 이동 여부는
+    // correctDocumentViewport 내부의 margin 체크(캐럿이 보이면 무이동)가
+    // 그대로 결정한다.
+    document.addEventListener("touchstart", function (e) {
+      activeTouchCount = e.touches.length;
+    }, { passive: true });
+    document.addEventListener("touchmove", function (e) {
+      activeTouchCount = e.touches.length;
+    }, { passive: true });
+    const releaseTouchAndRetryCorrection = function (e: TouchEvent) {
+      activeTouchCount = e.touches.length;
+      if (activeTouchCount > 0 || !pendingViewportCorrectionAfterTouch) return;
+      pendingViewportCorrectionAfterTouch = false;
+      correctDocumentViewport(editorFocused);
+    };
+    document.addEventListener("touchend", releaseTouchAndRetryCorrection, { passive: true });
+    document.addEventListener("touchcancel", releaseTouchAndRetryCorrection, { passive: true });
 
     // ── Selection handle drag detection ──
     // When the user drags an OS selection handle (the blue teardrop), the
