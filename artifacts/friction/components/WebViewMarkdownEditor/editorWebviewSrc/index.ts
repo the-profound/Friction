@@ -1888,11 +1888,7 @@ function spellFindRange(
           break;
         }
         case "setOverflowProbeConfig": {
-            const next = insertTitleSoftBreak(
-              titleInput.value,
-              titleInput.selectionStart,
-              titleInput.selectionEnd,
-            );
+          const next = cmd.availableContentHeightPx;
           const prev = overflowAvailableContentHeight;
           overflowAvailableContentHeight = (next != null && next > 0) ? next : null;
           overflowAutoSplit = !!cmd.autoSplit;

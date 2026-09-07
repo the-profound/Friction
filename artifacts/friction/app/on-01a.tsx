@@ -563,7 +563,12 @@ export default function WritingScreen() {
       : isThoughtMode
       ? thought?.content ?? ""
       : article?.content ?? "";
-    const activeTitle = isThoughtMode ? "" : article?.title ?? "";
+    // Promotion renders the review surface before the article response arrives.
+    // Keep that exact snapshot authoritative until the identity handoff finishes;
+    // a late thought/article query must not temporarily replace it with "".
+    const promotionTitle = pendingPromotionSnapshotRef.current?.title;
+    const activeTitle = promotionTitle
+      ?? (isThoughtMode ? "" : article?.title ?? titleRef.current);
 
     if (!isThoughtMode && !article) return;
     if (!activeContent && isThoughtMode && !thought && !isLocalDirectDraft) return;
@@ -598,8 +603,9 @@ export default function WritingScreen() {
     } else if (contentRef.current === serverContentRef.current) {
       // 백그라운드 refetch: 사용자가 편집하지 않았을 때만 서버 값 재주입.
       const c = activeContent;
-      const t = activeTitle;
-      if (c !== serverContentRef.current) {
+      const t = activeTitle || titleRef.current;
+      if (c !== serverContentRef.current || t !== titleRef.current) {
+        const contentChanged = c !== serverContentRef.current;
         serverContentRef.current = c;
         contentRef.current = c;
         articleContentRef.current = c;
@@ -608,7 +614,7 @@ export default function WritingScreen() {
         titleRef.current = t;
         if (editorReady) {
           serverInjectionPendingRef.current = true;
-          editorRef.current?.setMarkdown(c);
+          if (contentChanged) editorRef.current?.setMarkdown(c);
           editorRef.current?.setTitle(t);
         }
         console.log("[on-01 init] re-inject from server dirty?=false injected:", JSON.stringify(c.slice(0, 60)));
@@ -1661,6 +1667,7 @@ export default function WritingScreen() {
     setDebouncedContent(transitionSnapshot.content);
     serverInjectionPendingRef.current = true;
     editorRef.current?.setTitle(transitionSnapshot.title);
+    editorRef.current?.setOverflowProbeConfig(availableContentHeight);
     editorRef.current?.setMarkdown(transitionSnapshot.content);
     setRecordKindIntent("editing");
     setModeBoth("dividing");

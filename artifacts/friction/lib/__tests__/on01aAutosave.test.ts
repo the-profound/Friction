@@ -873,6 +873,35 @@ describe("on-01a guarded return navigation", () => {
     expect(autoSplit).toContain("splittingRef.current = false");
   });
 
+  it("keeps the promotion title authoritative and activates the review overflow probe", () => {
+    const screen = readScreen();
+    const editorSource = readEditorSource();
+    const promotion = screen.slice(
+      screen.indexOf("const promotionTitle ="),
+      screen.indexOf("// The server validates and commits"),
+    );
+    const nativeProbe = editorSource.slice(
+      editorSource.indexOf('case "setOverflowProbeConfig"'),
+      editorSource.indexOf('case "setBodyMetrics"'),
+    );
+
+    expect(promotion).toContain("pendingPromotionSnapshotRef.current?.title");
+    expect(promotion).toContain("const t = activeTitle || titleRef.current;");
+    expect(promotion).toContain(
+      "if (c !== serverContentRef.current || t !== titleRef.current)",
+    );
+    expect(promotion).toContain(
+      "editorRef.current?.setOverflowProbeConfig(availableContentHeight);",
+    );
+    expect(screen).toContain(
+      'editorRef.current.setOverflowProbeConfig(mode === "dividing" ? availableContentHeight : null);',
+    );
+    expect(nativeProbe).toContain("const next = cmd.availableContentHeightPx;");
+    expect(nativeProbe).toContain("scheduleOverflowProbe(50);");
+    expect(nativeProbe).toContain("ranges: []");
+    expect(nativeProbe).not.toContain("insertTitleSoftBreak");
+  });
+
   it("guards spell checks against repeated activation and keeps close disabled while loading", () => {
     const screen = readScreen();
     const spellHandler = screen.slice(
