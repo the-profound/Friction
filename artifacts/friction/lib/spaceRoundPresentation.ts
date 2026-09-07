@@ -288,14 +288,3 @@ export function sortSpaceRoundsForDetail<T extends DatedSpaceRoundPresentation>(
     return b.roundNumber - a.roundNumber;
   });
 }
-
-/**
- * Completed-round covers stay vivid in the space detail carousel. Other letter
- * lists retain the shared card's normal read-state dimming.
- */
-export function shouldDimSpaceRoundLetter(
-  roundStatus: string,
-  isRead: boolean | null | undefined,
-): boolean {
-  return roundStatus !== "COMPLETED" && !!isRead;
-}

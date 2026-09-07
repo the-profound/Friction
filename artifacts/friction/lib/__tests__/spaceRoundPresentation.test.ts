@@ -9,7 +9,6 @@ import {
   resolveUpcomingRoundCenterCards,
   roundStatusLabel,
   sortSpaceRoundSlotsForPresentation,
-  shouldDimSpaceRoundLetter,
   sortSpaceRoundsForDetail,
   sortSpaceRoundsNewestFirst,
 } from "../spaceRoundPresentation";
@@ -174,13 +173,6 @@ describe("space round presentation", () => {
         (round) => round.id,
       ),
     ).toEqual(["stored-completed-but-active", "stored-upcoming-but-completed"]);
-  });
-
-  it("keeps read covers vivid only in completed-round carousels", () => {
-    expect(shouldDimSpaceRoundLetter("COMPLETED", true)).toBe(false);
-    expect(shouldDimSpaceRoundLetter("ACTIVE", true)).toBe(true);
-    expect(shouldDimSpaceRoundLetter("UPCOMING", true)).toBe(true);
-    expect(shouldDimSpaceRoundLetter("ACTIVE", false)).toBe(false);
   });
 
   it("derives upcoming, active, and completed states by inclusive KST date range", () => {

@@ -69,7 +69,6 @@ import {
   isOpeningSlotReservable,
   roundStatusLabel,
   sortSpaceRoundSlotsForPresentation,
-  shouldDimSpaceRoundLetter,
   sortSpaceRoundsForDetail,
   resolveUpcomingRoundCenterCards,
   doesSpaceLetterOccupyRoundSlot,
@@ -136,7 +135,6 @@ type SpaceCarouselItem =
 
 function SpaceCarousel({
   letters,
-  roundStatus,
   isAnonymous,
   spaceName,
   onCardPress,
@@ -147,7 +145,6 @@ function SpaceCarousel({
   orderedItems,
 }: {
   letters: SpaceLetter[];
-  roundStatus: string;
   isAnonymous: boolean;
   spaceName: string;
   onCardPress: (letter: SpaceLetter, layout: OriginLayout) => void;
@@ -296,7 +293,9 @@ function SpaceCarousel({
             authorName={authorName}
             spaceName={spaceName}
             cover={((letter as any).articleCover ?? null) as ArticleCover | null}
-            isRead={shouldDimSpaceRoundLetter(roundStatus, letter.isRead)}
+            // Space-detail round carousel never dims covers, regardless of
+            // read state or round status.
+            isRead={false}
             isActive={true}
             onPress={handlePress}
           />
@@ -582,7 +581,6 @@ function UpcomingRoundSlots({
   return (
     <SpaceCarousel
       letters={[]}
-      roundStatus="UPCOMING"
       isAnonymous={isAnonymous}
       spaceName={spaceName}
       onCardPress={onPressLetter}
@@ -761,7 +759,9 @@ function RoundSection({
                   authorName={authorName}
                   spaceName={spaceName}
                   cover={((letter as any).articleCover ?? null) as ArticleCover | null}
-                  isRead={letter.isRead}
+                  // Space-detail round carousel never dims covers, regardless
+                  // of read state.
+                  isRead={false}
                   isActive={true}
                   onPress={handleUpcomingOpeningPress}
                 />
@@ -809,7 +809,6 @@ function RoundSection({
     letterArea = (
       <SpaceCarousel
         letters={letters}
-        roundStatus={roundStatus}
         isAnonymous={isAnonymous}
         spaceName={spaceName}
         onCardPress={onPressLetter}
@@ -1266,10 +1265,6 @@ export default function SpaceDetailScreen() {
       } as Article;
       // ViewModel adapter centralises author-name resolution and field separation.
       const vm = spaceLetterToViewModel(letter, space?.name ?? "", isAnonymousSpace);
-      const tappedRound = rounds.find((r) => r.id === letter.spaceRoundId);
-      const tappedRoundStatus = tappedRound
-        ? getSpaceRoundPresentationStatus(tappedRound, now)
-        : "ACTIVE";
       openLetterOverlay(seededArticle, {
         fallbackOrigin: layout,
         meta: {
@@ -1279,7 +1274,9 @@ export default function SpaceDetailScreen() {
           collectionName: vm.spaceName ?? null,
           spaceId: vm.spaceId ?? null,
           date: vm.date ?? letter.createdAt,
-          isRead: shouldDimSpaceRoundLetter(tappedRoundStatus, letter.isRead),
+          // Space-detail round carousel never dims covers, regardless of read
+          // state or round status — see spaceRoundPresentation.ts history.
+          isRead: false,
         },
         // Already inside this space's own detail screen — keep the space name inactive.
         currentSpaceId: id,
