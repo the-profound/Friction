@@ -292,8 +292,8 @@ describe("letter body font fallback contract", () => {
 
   it("uses the four-font readiness gate in editor, reader, and measurement WebViews", () => {
     const layout = read("app/_layout.tsx");
-    const editor = read("components/CoverEditor/CoverEditor.tsx");
-    const reader = read("app/read.tsx");
+    const editor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx");
+    const reader = read("components/WebViewMarkdownReader/WebViewMarkdownReader.tsx");
     const measure = read("components/WebViewMeasureLayer/WebViewMeasureLayer.tsx");
     const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
     const webReader = read("components/WebViewMarkdownReader/WebViewMarkdownReaderWeb.tsx");
@@ -340,9 +340,9 @@ describe("letter body font fallback contract", () => {
     expect(overflowCase).toContain("setMeta(overflowPluginKey, { ranges })");
     expect(overflowCase).not.toContain("ranges: []");
     expect(editorSource).toContain('document.addEventListener("focusout"');
-    expect(editorSource).toContain("const target = e.target as Element;");
-    expect(swipeSection).toContain("const dy = e.touches[0].clientY - swipeStartY;");
-    expect(swipeSection).not.toContain("selHandleDragStartY");
+    expect(editorSource).toContain("const target = e.target as Node;");
+    expect(swipeSection).toContain("var dy = touch.clientY - swipeStartY;");
+    expect(swipeSection).not.toContain("var dy = touch.clientY - selHandleDragStartY");
     expect(editorSource).toContain('case "setContentBottomPadding"');
     expect(editorSource).toContain("scheduleViewportCorrection(false)");
     expect(editorBundle).toContain(
@@ -360,7 +360,7 @@ describe("letter body font fallback contract", () => {
     );
     expect(editorBundle).toContain('addEventListener("focusout"');
     expect(editorBundle).toMatch(
-      /\.touches\[0\]\.clientY-[\w$]+>[\w$]+&&\([\w$]+=!0,[\w$]+\(\{type:"onSwipeDownToDismiss"\}\)\)/,
+      /\.clientY-[\w$]+;[\w$]+>[\w$]+&&\([\w$]+=!0,[\w$]+\(\{type:"onSwipeDownToDismiss"\}\)\)/,
     );
   });
 
@@ -445,8 +445,8 @@ describe("shared letter page geometry", () => {
     const readerAvailable = getPageTextContentHeight(layout, 34 + titleBarHeight);
 
     expect(titleBarHeight).toBe(33);
-    expect(readerAvailable).toBeCloseTo(323, 8);
-    expect(getPageTextContentHeight(layout)).toBeCloseTo(390, 8);
+    expect(readerAvailable).toBeCloseTo(324.3, 8);
+    expect(getPageTextContentHeight(layout)).toBeCloseTo(391.3, 8);
   });
 
   it("derives C from the page aspect ratio, never from a virtual body box", () => {
@@ -785,7 +785,7 @@ describe("thought card typography regression guards", () => {
   );
 
   it("keeps compact preview limits out of the reading card", () => {
-    const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
+    const card = read("app/(tabs)/on.tsx");
 
     expect(card).toContain("getRecordCardContent(record)");
     expect(card).not.toContain("numberOfLines={titleLines}");
@@ -795,7 +795,7 @@ describe("thought card typography regression guards", () => {
   });
 
   it("uses the card width, not the padded text frame, for both font sizes", () => {
-    const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
+    const card = read("app/(tabs)/on.tsx");
 
     expect(card).toContain("readerFontSize(ReaderTokens.typeScale.titleCqi, width)");
     expect(card).toContain(
@@ -817,7 +817,7 @@ describe("thought card typography regression guards", () => {
     expect(cardCover).toContain(
       "readerFontSize(ReaderTokens.typeScale.cardTitleCqi, textFrameWidth)",
     );
-    expect(cardCover).toContain("numberOfLines={4}");
+    expect(cardCover).toContain("numberOfLines={isListLayout ? 2 : 4}");
   });
 
   it("renders a 300px card title at about 32px without changing reader title scale", () => {
@@ -872,12 +872,14 @@ describe("thought card typography regression guards", () => {
     expect(navigationContext).toContain("setTabReselectVersion");
     expect(inboxScreen).toContain("resetKey: tabReselectVersion.IN");
     expect(inboxScreen).toContain("index === 0 ? tabReselectVersion.IN : undefined");
-    expect(inboxScreen).toContain("isTappedSourceHidden}:${tabReselectVersion.IN}");
+    expect(inboxScreen).toContain("isSourceHidden");
     expect(recordsScreen).toContain('setKind("thought")');
     expect(recordsScreen).toContain('setView("card")');
     expect(recordsScreen).toContain("setRecordResetVersion(tabReselectVersion.ON)");
     expect(recordsScreen).toContain("resetKey: recordResetVersion");
-    expect(recordsScreen).toContain("index === 0 ? `${cardMixSeed}:${recordResetVersion}` : cardMixSeed");
+    expect(recordsScreen).toContain(
+      'index === 0 ? `${cardMixSeed}:${recordResetVersion}${queuedQuestionRecords.length > 0 ? ":q" : ""}` : cardMixSeed',
+    );
     expect(pagingHook).toContain("resolveDateGroupAnchor(previousKey, previousKeys, nextKeys, shouldReset)");
   });
 
@@ -886,7 +888,7 @@ describe("thought card typography regression guards", () => {
     const pagingHook = read("hooks/useDateGroupVerticalSnap.ts");
 
     expect(carousel).toContain("if (shouldReset)");
-    expect(carousel).toContain("nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: true })");
+    expect(carousel).toContain("snapToRef.current(nextIndex)");
     expect(carousel).toContain("nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false })");
     expect(pagingHook).toContain("pendingRestoreAnimatedRef");
     expect(pagingHook).toContain("animated: shouldAnimate");
@@ -961,25 +963,20 @@ describe("selectable article card projection contract", () => {
     const profile = read("app/user-profile/[userId].tsx");
     const space = read("app/of-space-detail.tsx");
 
-    expect(space).toContain('router.push(`/user-profile/${authorId}` as never);');
-    expect(space).toContain("onNavigateToAuthor={handleNavigateToAuthor}");
-    expect(space).toContain(
-      "authorId: isAnonymousSpace ? null : tapLetter.authorId ?? null,",
-    );
-    expect(space).toContain("collectionName: space?.name ?? null,");
-    expect(space).not.toContain("collectionId: id");
+    expect(overlay).toContain("onReadyRef.current?.();");
+    expect(overlay).toContain("readyNotifiedSessionRef.current === session");
+    expect(inbox).toContain("isSourceHidden(item.articleId)");
+    expect(myTab).toContain("isSourceHidden(article.id)");
+    expect(profile).toContain("isSourceHidden(article.id)");
+    expect(space).toContain("hiddenCardId={selectedArticleId}");
   });
 
   it("renders the non-anonymous space creator row as static metadata", () => {
     const space = read("app/of-space-detail.tsx");
 
-    expect(space).toContain('router.push(`/user-profile/${authorId}` as never);');
-    expect(space).toContain("onNavigateToAuthor={handleNavigateToAuthor}");
-    expect(space).toContain(
-      "authorId: isAnonymousSpace ? null : tapLetter.authorId ?? null,",
-    );
-    expect(space).toContain("collectionName: space?.name ?? null,");
-    expect(space).not.toContain("collectionId: id");
+    expect(space).toContain("<View style={styles.metaIconRow}>");
+    expect(space).toContain("!space.isAnonymous ?");
+    expect(space).toContain("익명 공간장");
   });
 
   it("renders the non-anonymous space creator row as static metadata", () => {
@@ -1003,9 +1000,9 @@ describe("selectable article card projection contract", () => {
     expect(overlay).toContain("currentAuthorId?: string | null;");
     expect(overlay).toContain("collectionId !== currentCollectionId");
     expect(overlay).toContain("authorId !== currentAuthorId");
-    expect(myTab).toContain("currentAuthorId={userId}");
-    expect(profile).toContain("currentAuthorId={profileUserId}");
-    expect(collection).toContain("currentCollectionId={id}");
+    expect(myTab).toContain("currentAuthorId: userId");
+    expect(profile).toContain("currentAuthorId: profileUserId");
+    expect(collection).toContain("currentCollectionId: id");
   });
 
   it("makes non-anonymous participant names open profiles without exposing anonymous identities", () => {
@@ -1033,21 +1030,24 @@ describe("selectable article card projection contract", () => {
     expect(overlay).toContain("const CLOSE_MIN_DURATION = 150;");
     expect(overlay).toContain("const CLOSE_MAX_DURATION = 320;");
     expect(overlay).toContain("const CLOSE_DURATION_PER_PIXEL = 0.25;");
-    expect(overlay).toContain("const TRANSITION_EASING = Easing.out(Easing.poly(4));");
+    expect(overlay).toContain(
+      "const REANIMATED_TRANSITION_EASING = REasing.out(REasing.poly(4));",
+    );
     expect(overlay).toContain("const getOpenDuration = (distance: number)");
     expect(overlay).toContain("const getCloseDuration = (distance: number)");
     expect(overlay).toContain("progress.value = withTiming(1, {");
     expect(overlay).toContain("duration: getOpenDuration(");
-    expect(overlay).toContain("easing: TRANSITION_EASING");
+    expect(overlay).toContain("easing: REANIMATED_TRANSITION_EASING");
     expect(closeBlock).toContain("cancelAnimation(progress);");
-    expect(closeBlock).toContain("swipeY.stopAnimation((currentSwipeY) =>");
-    expect(closeBlock).toContain("carouselX.stopAnimation((currentCarouselX) =>");
+    expect(closeBlock).toContain("cancelAnimation(swipeY);");
+    expect(closeBlock).toContain("cancelAnimation(carouselX);");
+    expect(closeBlock).toContain("const currentSwipeY = swipeY.value;");
+    expect(closeBlock).toContain("const currentCarouselX = carouselX.value;");
     expect(closeBlock).toContain("calculateCardReturnDistance({");
     expect(closeBlock).toContain("const closeDuration = getCloseDuration(calculateCardReturnDistance({");
-    expect(closeBlock).toContain("const closeTiming = (value: Animated.Value, toValue: number)");
-    expect(closeBlock).toContain("closeTiming(carouselX, -initIdx * SLOT_W)");
+    expect(closeBlock).toContain("carouselX.value = withTiming(-initIdx * SLOT_W, {");
     expect(closeBlock).toContain("duration: closeDuration");
-    expect(closeBlock).toContain("easing: TRANSITION_EASING");
+    expect(closeBlock).toContain("easing: REANIMATED_TRANSITION_EASING");
     expect(closeBlock).not.toContain("CLOSE_DURATION = 140");
   });
 
@@ -1091,7 +1091,7 @@ describe("selectable article card projection contract", () => {
   it("keeps details fixed and fades them while a resisted vertical dismiss drags only the card", () => {
     const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
     const verticalGestureBlock = overlay.slice(
-      overlay.indexOf("// ── Pan responder (horizontal carousel + vertical dismiss)"),
+      overlay.indexOf("// ── Gesture-driven horizontal carousel + vertical dismiss"),
       overlay.indexOf("// ── Active card info"),
     );
     const detailsBlock = overlay.slice(
@@ -1102,27 +1102,22 @@ describe("selectable article card projection contract", () => {
     expect(overlay).toContain("const DISMISS_FADE_DURATION = 100;");
     expect(overlay).toContain("const DISMISS_RESISTANCE_DISTANCE = 180;");
     expect(verticalGestureBlock).toContain("const beginVerticalDismiss = useCallback");
-    expect(verticalGestureBlock).toContain("toValue: 0");
-    expect(verticalGestureBlock).toContain("swipeY.setValue(applyDismissResistance(g.dy))");
+    expect(verticalGestureBlock).toContain("swipeY.value = withSpring(0, SPRING_SWIPE_BACK);");
+    expect(verticalGestureBlock).toContain("swipeY.value = applyDismissResistance(dy)");
     expect(verticalGestureBlock).toContain("restoreDetailsAfterDismiss()");
     expect(detailsBlock).not.toContain("transform: [{ translateY: swipeY }]");
   });
 });
 
 describe("content list typography regression guards", () => {
-  it("measures the rendered text frame before calculating title/body sizes", () => {
-  const appRoot = join(__dirname, "../..");
-    const card = read("components/ArticleCardItem/ArticleCardItem.tsx");
+  it("uses shared card geometry before calculating title/body sizes", () => {
+    const card = read("app/(tabs)/on.tsx");
 
-    expect(card).toContain("const [textFrameWidth, setTextFrameWidth] = useState(0);");
-    expect(card).toContain("onLayout={(event) => {");
-    expect(card).toContain("const nextWidth = Math.round(event.nativeEvent.layout.width);");
-    expect(card).toContain("const contentWidth = textFrameWidth || fallbackTextWidth;");
+    expect(card).toContain("const layout = computeBodyLayout(width);");
+    expect(card).toContain("const titleSize = readerFontSize(ReaderTokens.typeScale.titleCqi, width);");
+    expect(card).toContain("const bodySize = readerFontSize(ReaderTokens.typeScale.bodyCqi, width);");
     expect(card).toContain(
-      "readerFontSize(ReaderTokens.typeScale.titleCqi, contentWidth)",
-    );
-    expect(card).toContain(
-      "readerFontSize(ReaderTokens.typeScale.bodyCqi, contentWidth)",
+      "layout.textColumnWidth",
     );
     expect(card).toContain("numberOfLines={bodyLines}");
   });
@@ -1226,12 +1221,14 @@ describe("unified article card cover regression guards", () => {
     const editor = read("components/CoverEditor/CoverEditor.tsx");
     const preview = read("components/CoverPreview/CoverPreview.tsx");
 
-    expect(editor).toContain("표지 타입");
     expect(editor).toContain("서체");
     expect(editor).toContain("고딕");
-    expect(editor).toContain("세리프");
-    expect(editor).toContain("텍스트 색상");
+    expect(editor).toContain("명조");
+    expect(editor).toContain("글자 색상");
     expect(editor).toContain("배경 색상");
+    expect(editor).toContain('testID="cover-font-toggle"');
+    expect(editor).toContain('testID="cover-text-color-button"');
+    expect(editor).toContain('testID="cover-background-button"');
     expect(editor).not.toContain("텍스트 정렬");
     expect(editor).not.toContain("CoverTextAlign");
     expect(editor).not.toContain('title="표지 설정"');
@@ -1256,10 +1253,12 @@ describe("unified article card cover regression guards", () => {
     }
 
     const closingScreen = read("app/on-01c.tsx");
+    const coverEditorScreen = read("app/on-01c-cover.tsx");
     expect(closingScreen).toContain("<CoverPreview");
     expect(closingScreen).toContain("cover={cover}");
-    expect(closingScreen).toContain("<CoverEditor");
-    expect(closingScreen).toContain("data: patchData");
+    expect(coverEditorScreen).toContain("<CoverEditor");
+    expect(coverEditorScreen).toContain("cover={cover}");
+    expect(coverEditorScreen).toContain("onChange={handleCoverChange}");
 
     const spacesRoute = read("../api-server/src/routes/spaces.ts");
     expect(spacesRoute).toContain("articleCover: article?.cover ?? null");

@@ -67,6 +67,16 @@ If you bump `VERSION` in `buildEditorHtml.mjs` when rebuilding, also update the 
 version-substring assertion in `lib/__tests__/on01aAutosave.test.ts` (e.g. `toContain("3.26.0-")`)
 or vitest fails on an otherwise-correct bundle.
 
+Source-contract failures around the editor command switch should first be checked against
+`RNToWebViewCommand` before weakening the assertion. A bad merge can make a handler read a
+different command payload or discard valid ranges while the surrounding UI still appears correct.
+
+**Why:** source-level contract tests can expose real runtime drift in generated WebViews, not
+just stale test wording; changing the assertion alone can leave native editing behavior broken.
+
+**How to apply:** verify the command type and both source/bundle implementations, repair the
+handler when they disagree, then regenerate `editorHtml.ts` and rerun the focused contract suite.
+
 ## Pre-existing baselines (not your regression)
 - `artifacts/friction` has ~31 baseline `tsc` errors confined to
   `components/WebViewMarkdownEditor/editorWebviewSrc/index.ts` (DOM `Node` typing

@@ -1729,7 +1729,7 @@ function spellFindRange(
           const initialMarkdown = payload.initialMarkdown || "";
           const placeholder = payload.placeholder || "여기에 메모를 작성하세요...";
           const titleValue = payload.titleValue || "";
-            const ensureTrailingParagraph = cmd.ensureTrailingParagraph ?? true;
+          const ensureTrailingParagraph = payload.ensureTrailingParagraph ?? true;
           editorSessionId = payload.editorSessionId || "";
 
           if (titleInput) {
@@ -1866,11 +1866,7 @@ function spellFindRange(
           break;
         }
         case "setEditable": {
-            const next = insertTitleSoftBreak(
-              titleInput.value,
-              titleInput.selectionStart,
-              titleInput.selectionEnd,
-            );
+          const next = !!cmd.isEditable;
           // 같은 값을 재전송한 경우 ProseMirror/DOM 작업을 생략한다.
           if (lastEditable !== next) {
             if (editor && !editor.isDestroyed) {
@@ -1887,7 +1883,7 @@ function spellFindRange(
         case "setOverflowRanges": {
           if (editor && !editor.isDestroyed) {
             const ranges = cmd.ranges || [];
-              const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges: [] });
+            const tr = editor.state.tr.setMeta(overflowPluginKey, { ranges });
             editor.view.dispatch(tr);
           }
           break;
