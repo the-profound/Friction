@@ -480,7 +480,10 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(thoughtSave).toContain("content: data.content");
     expect(thoughtSave).not.toContain("const latestContent = await getEditorContent()");
     expect(thoughtSave).toContain("getGetThoughtQueryKey(thoughtId)");
-    expect(thoughtSave).toContain("patchThoughtInRecordCaches(queryClient, thoughtId");
+    expect(thoughtSave).toContain("savedThought.createdFrom === \"question\"");
+    expect(thoughtSave).toContain("savedThought.status === \"NORMAL\"");
+    expect(thoughtSave).toContain("upsertThoughtInRecordCaches(queryClient, savedThought)");
+    expect(thoughtSave).toContain("removeThoughtQuestionFromQueueCache(queryClient, thoughtId)");
   });
 });
 

@@ -70,7 +70,8 @@ describe("thought create idempotency contract", () => {
       source.indexOf("export function canPromoteThoughtToArticle"),
     );
 
-    expect(updateRoute).toContain(".set({ content, updatedAt: new Date() })");
+    expect(updateRoute).toContain("content,");
+    expect(updateRoute).toContain("updatedAt: new Date(),");
     expect(updateRoute).toContain("return { status: 200, body: updated }");
     expect(updateRoute).not.toContain(".set({ deletedAt })");
     expect(updateRoute).not.toContain("return \"deleted\"");

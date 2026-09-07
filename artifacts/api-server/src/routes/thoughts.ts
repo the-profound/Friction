@@ -202,6 +202,37 @@ async function normalizeQuestionQueue(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   userId: string,
 ) {
+  // Older clients could persist an answer before their separate activation
+  // request completed. A generated, unanswered card keeps the canonical Q.
+  // heading; a PRELIMINARY question without it is therefore an answered
+  // record that must be promoted rather than expired or trimmed.
+  const queuedBeforeCleanup = await getQueuedQuestions(tx, userId);
+  const answeredLegacyQuestions = queuedBeforeCleanup.filter(
+    ({ thought }) =>
+      thought.createdFrom === "question"
+      && !isQuestionThoughtMarkdown(thought.content),
+  );
+  for (const entry of answeredLegacyQuestions) {
+    await tx
+      .update(thoughtsTable)
+      .set({ status: "NORMAL", updatedAt: new Date() })
+      .where(
+        and(
+          eq(thoughtsTable.id, entry.thought.id),
+          eq(thoughtsTable.authorId, userId),
+          eq(thoughtsTable.status, "PRELIMINARY"),
+          eq(thoughtsTable.createdFrom, "question"),
+          isNull(thoughtsTable.deletedAt),
+        ),
+      );
+    await tx
+      .delete(thoughtQuestionQueueTable)
+      .where(eq(thoughtQuestionQueueTable.id, entry.queueId));
+  }
+  if (answeredLegacyQuestions.length > 0) {
+    await compactQuestionQueue(tx, userId);
+  }
+
   await cleanupQuestionQueue(tx, userId);
   const queued = await expireQuestionQueue(
     tx,
@@ -1419,6 +1450,9 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
   }
 
   const result = await db.transaction(async (tx) => {
+    // Serialize with activate/refresh/delete so an answer PATCH and a separate
+    // activation request always converge to one NORMAL, non-queued record.
+    await lockQuestionQueue(tx, userId);
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`thought-promotion:${id}`}))`,
     );
@@ -1426,6 +1460,8 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
       .select({
         id: thoughtsTable.id,
         authorId: thoughtsTable.authorId,
+        createdFrom: thoughtsTable.createdFrom,
+        status: thoughtsTable.status,
         migratedFromArticleId: thoughtsTable.migratedFromArticleId,
       })
       .from(thoughtsTable)
@@ -1457,9 +1493,15 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
       } as const;
     }
 
+    const promotesAnsweredQuestion =
+      existing.createdFrom === "question" && existing.status === "PRELIMINARY";
     const [updated] = await tx
       .update(thoughtsTable)
-      .set({ content, updatedAt: new Date() })
+      .set({
+        content,
+        ...(promotesAnsweredQuestion ? { status: "NORMAL" as const } : {}),
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(thoughtsTable.id, id),
@@ -1492,6 +1534,17 @@ router.patch("/thoughts/:id", requireAuth, async (req, res) => {
           error: "Thought changed while it was being updated. Please retry.",
         },
       } as const;
+    }
+    if (promotesAnsweredQuestion) {
+      await tx
+        .delete(thoughtQuestionQueueTable)
+        .where(
+          and(
+            eq(thoughtQuestionQueueTable.userId, userId),
+            eq(thoughtQuestionQueueTable.thoughtId, id),
+          ),
+        );
+      await compactQuestionQueue(tx, userId);
     }
     return { status: 200, body: updated } as const;
   });

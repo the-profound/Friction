@@ -85,6 +85,8 @@ const state = vi.hoisted(() => {
             return selected ? [{
               id: selected.id,
               authorId: selected.authorId,
+              createdFrom: selected.createdFrom,
+              status: selected.status,
               migratedFromArticleId: selected.migratedFromArticleId ?? null,
             }] : [];
           }
@@ -274,8 +276,9 @@ vi.mock("../services/generate-random-preliminary-thought-question", () => ({
 }));
 
 vi.mock("../services/preliminary-question-format", () => ({
-  formatPreliminaryQuestionMarkdown: (title: string, description: string) => `# ${title}\n\n${description}`,
-  isQuestionThoughtMarkdown: () => false,
+  formatPreliminaryQuestionMarkdown: (title: string, description: string) => `# Q. ${title}\n\n${description}`,
+  isQuestionThoughtMarkdown: (content: string | null) =>
+    /^#\s+Q\.\s+/i.test((content ?? "").split(/\r?\n/, 1)[0]?.trim() ?? ""),
 }));
 
 const { default: router, _drainBackgroundGenerations } = await import("./thoughts");
@@ -292,14 +295,15 @@ type QueueResponse = {
 };
 
 function thought(id: string, userId: string, status: "NORMAL" | "PRELIMINARY" = "PRELIMINARY") {
+  const persistedAt = new Date();
   return {
     id,
     authorId: userId,
-    content: `# ${id}\n\n내용`,
+    content: status === "PRELIMINARY" ? `# Q. ${id}\n\n내용` : `# ${id}\n\n내용`,
     createdFrom: status === "PRELIMINARY" ? "question" : "direct",
     status,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: persistedAt,
+    updatedAt: persistedAt,
     deletedAt: null,
     sourceArticleId: null,
     sourceStoredSentenceId: null,
@@ -360,7 +364,9 @@ async function withServer(test: (baseUrl: string) => Promise<void>) {
 async function request(baseUrl: string, userId: string, path: string, init?: RequestInit) {
   const selectedThoughtId =
     /^\/thoughts\/([^/]+)\/activate$/.exec(path)?.[1]
-    ?? (init?.method === "DELETE" ? /^\/thoughts\/([^/]+)$/.exec(path)?.[1] : undefined);
+    ?? (init?.method === "DELETE" || init?.method === "PATCH"
+      ? /^\/thoughts\/([^/]+)$/.exec(path)?.[1]
+      : undefined);
   return fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
@@ -773,6 +779,130 @@ describe("thought question queue API", () => {
     });
   });
 
+  it("promotes an answered queued question atomically when activation previously failed", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-b", {
+        method: "PATCH",
+        body: JSON.stringify({ content: "# 답변\n\n저장된 질문 답변" }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        id: "question-b",
+        content: "# 답변\n\n저장된 질문 답변",
+        createdFrom: "question",
+        status: "NORMAL",
+      });
+      expect(state.rowsForUser("user-a").map((entry) => entry.thought.id)).toEqual([
+        "question-a",
+        "question-c",
+      ]);
+    });
+  });
+
+  it("converges concurrent activation and answer autosave without a 409 or lost content", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+
+    await withServer(async (baseUrl) => {
+      const [activation, save] = await Promise.all([
+        request(baseUrl, "user-a", "/thoughts/question-b/activate", { method: "POST" }),
+        request(baseUrl, "user-a", "/thoughts/question-b", {
+          method: "PATCH",
+          body: JSON.stringify({ content: "# 답변\n\n동시에 저장한 본문" }),
+        }),
+      ]);
+
+      expect(activation.status).toBe(200);
+      expect(save.status).toBe(200);
+      expect(state.thoughts.get("question-b")).toMatchObject({
+        content: "# 답변\n\n동시에 저장한 본문",
+        status: "NORMAL",
+      });
+      expect(state.rowsForUser("user-a").some((entry) => entry.thought.id === "question-b")).toBe(false);
+    });
+  });
+
+  it("keeps answer PATCH retries idempotent after the question is already normal", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+
+    await withServer(async (baseUrl) => {
+      const save = () => request(baseUrl, "user-a", "/thoughts/question-b", {
+        method: "PATCH",
+        body: JSON.stringify({ content: "# 답변\n\n재시도해도 같은 본문" }),
+      });
+      const first = await save();
+      const retry = await save();
+
+      expect(first.status).toBe(200);
+      expect(retry.status).toBe(200);
+      expect(await retry.json()).toMatchObject({
+        content: "# 답변\n\n재시도해도 같은 본문",
+        status: "NORMAL",
+      });
+      expect(state.rowsForUser("user-a").filter((entry) => entry.thought.id === "question-b")).toHaveLength(0);
+    });
+  });
+
+  it("repairs a legacy answered PRELIMINARY question during safe queue normalization", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+    Object.assign(state.thoughts.get("question-b")!, {
+      content: "# 답변\n\n예전에 저장된 본문",
+      status: "PRELIMINARY",
+      createdFrom: "question",
+    });
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-queue");
+      expect(response.status).toBe(200);
+      expect(state.thoughts.get("question-b")).toMatchObject({
+        content: "# 답변\n\n예전에 저장된 본문",
+        status: "NORMAL",
+      });
+      expect(state.rowsForUser("user-a").some((entry) => entry.thought.id === "question-b")).toBe(false);
+    });
+  });
+
+  it("does not mistake a touched canonical question for a legacy answer", async () => {
+    seedQueue("user-a", ["question-a", "question-b", "question-c"]);
+    state.thoughts.get("question-b")!.updatedAt = new Date(Date.now() + 1_000);
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/question-queue");
+      expect(response.status).toBe(200);
+      expect(state.thoughts.get("question-b")).toMatchObject({
+        content: "# Q. question-b\n\n내용",
+        status: "PRELIMINARY",
+      });
+      expect(state.rowsForUser("user-a").some((entry) => entry.thought.id === "question-b")).toBe(true);
+    });
+  });
+
+  it("does not change normal direct-thought saves or unanswered queue entries", async () => {
+    seedQueue("user-a", ["question-a", "question-b"]);
+    state.thoughts.set("direct-a", thought("direct-a", "user-a", "NORMAL"));
+
+    await withServer(async (baseUrl) => {
+      const response = await request(baseUrl, "user-a", "/thoughts/direct-a", {
+        method: "PATCH",
+        body: JSON.stringify({ content: "# 일반 단상\n\n수정한 본문" }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        id: "direct-a",
+        content: "# 일반 단상\n\n수정한 본문",
+        createdFrom: "direct",
+        status: "NORMAL",
+      });
+      expect(state.rowsForUser("user-a").map((entry) => entry.thought.id)).toEqual([
+        "question-a",
+        "question-b",
+      ]);
+    });
+  });
+
   it("deletes only the selected queued question and serializes the queue mutation", async () => {
     seedQueue("user-a", ["question-a", "question-b", "question-c"]);
 
@@ -979,6 +1109,7 @@ describe("thought question queue API", () => {
     seedQueue("user-a", ["question-a", "question-b", "question-c"]);
     const stale = state.thoughts.get("question-a")!;
     stale.createdAt = new Date(Date.now() - 73 * 60 * 60 * 1000);
+    stale.updatedAt = stale.createdAt;
 
     await withServer(async (baseUrl) => {
       const body = (await (
@@ -1000,6 +1131,7 @@ describe("thought question queue API", () => {
     seedQueue("user-a", ["question-a", "question-b", "question-c"]);
     const recent = state.thoughts.get("question-a")!;
     recent.createdAt = new Date(Date.now() - 71 * 60 * 60 * 1000);
+    recent.updatedAt = recent.createdAt;
 
     await withServer(async (baseUrl) => {
       const body = (await (
@@ -1024,7 +1156,9 @@ describe("thought question queue API", () => {
       "question-5",
     ]);
     for (const id of ["question-4", "question-5"]) {
-      state.thoughts.get(id)!.createdAt = new Date(Date.now() - 90 * 60 * 60 * 1000);
+      const stale = state.thoughts.get(id)!;
+      stale.createdAt = new Date(Date.now() - 90 * 60 * 60 * 1000);
+      stale.updatedAt = stale.createdAt;
     }
     seedCandidates("user-a", 3);
 

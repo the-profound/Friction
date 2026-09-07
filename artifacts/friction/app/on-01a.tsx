@@ -117,6 +117,7 @@ import {
   snapshotRecordListCaches,
   upsertThoughtInRecordCaches,
   setThoughtQuestionQueueCache,
+  removeThoughtQuestionFromQueueCache,
 } from "@/lib/queryInvalidation";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -914,13 +915,18 @@ export default function WritingScreen() {
           });
           queryClient.setQueryData(
             getGetThoughtQueryKey(thoughtId),
-            (old: unknown) => {
-              if (!old || typeof old !== "object") return old;
-              return { ...old, content: data.content };
-            },
+            savedThought,
             { updatedAt: Date.now() },
           );
-          patchThoughtInRecordCaches(queryClient, thoughtId, { content: data.content });
+          if (
+            savedThought.createdFrom === "question"
+            && savedThought.status === "NORMAL"
+          ) {
+            upsertThoughtInRecordCaches(queryClient, savedThought);
+            removeThoughtQuestionFromQueueCache(queryClient, thoughtId);
+          } else {
+            patchThoughtInRecordCaches(queryClient, thoughtId, savedThought);
+          }
           void invalidateDirectThoughtCreation(queryClient);
           return {
             serverUpdatedAt: savedThought.updatedAt,
