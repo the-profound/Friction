@@ -1115,7 +1115,7 @@ function OnScreenContent() {
           </RefreshableEmpty>
         )}
 
-        <HeaderFadeOverlay controlHeight={FILTER_BAR_HEIGHT}>
+        <HeaderFadeOverlay controlHeight={FILTER_BAR_HEIGHT} fadeFromTop>
           <View pointerEvents="box-none" style={styles.filters}>
             <View
               pointerEvents="box-none"

@@ -67,7 +67,7 @@ export function HeaderFadeTail({
         colors={[hexToRgba(backgroundColor, 1), hexToRgba(backgroundColor, 0)]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
     </View>
   );
@@ -83,14 +83,18 @@ export function HeaderFadeOverlay({
   children,
   backgroundColor = Colors.white,
   fadeHeight = HEADER_FADE_HEIGHT,
+  fadeFromTop = false,
   style,
 }: {
   controlHeight: number;
   children: React.ReactNode;
   backgroundColor?: string;
   fadeHeight?: number;
+  /** Start the fade behind the control bar itself instead of below a solid band. */
+  fadeFromTop?: boolean;
   style?: ViewStyle;
 }) {
+  const overlayHeight = controlHeight + fadeHeight + HEADER_OVERLAY_SEAM_OVERLAP;
   return (
     <View
       pointerEvents="box-none"
@@ -98,21 +102,23 @@ export function HeaderFadeOverlay({
         styles.fadeOverlay,
         {
           top: -HEADER_OVERLAY_SEAM_OVERLAP,
-          height: controlHeight + fadeHeight + HEADER_OVERLAY_SEAM_OVERLAP,
+          height: overlayHeight,
         },
         style,
       ]}
     >
-      <View
-        pointerEvents="none"
-        style={[
-          styles.fadeOverlaySolid,
-          {
-            height: controlHeight + HEADER_OVERLAY_SEAM_OVERLAP,
-            backgroundColor,
-          },
-        ]}
-      />
+      {!fadeFromTop ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.fadeOverlaySolid,
+            {
+              height: controlHeight + HEADER_OVERLAY_SEAM_OVERLAP,
+              backgroundColor,
+            },
+          ]}
+        />
+      ) : null}
       <Gradient
         pointerEvents="none"
         colors={[hexToRgba(backgroundColor, 1), hexToRgba(backgroundColor, 0)]}
@@ -120,10 +126,12 @@ export function HeaderFadeOverlay({
         end={{ x: 0.5, y: 1 }}
         style={[
           styles.fadeOverlayTail,
-          {
-            top: controlHeight + HEADER_OVERLAY_SEAM_OVERLAP,
-            height: fadeHeight,
-          },
+          fadeFromTop
+            ? { top: 0, height: overlayHeight }
+            : {
+                top: controlHeight + HEADER_OVERLAY_SEAM_OVERLAP,
+                height: fadeHeight,
+              },
         ]}
       />
       <View pointerEvents="box-none" style={styles.fadeOverlayControls}>
