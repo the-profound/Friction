@@ -75,7 +75,7 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).not.toContain("showControlsForActivity");
     expect(recordsScreen).not.toContain("controlsVisible");
     expect(recordsScreen).not.toContain("controlsAnimation");
-    expect(recordsScreen).toContain('pointerEvents="box-none"\n            style={styles.filterControls}');
+    expect(recordsScreen).toMatch(/pointerEvents="box-none"\s*style={styles\.filterControls}/);
   });
 
   it("keeps the filter-bar layout space stable", () => {
@@ -84,11 +84,24 @@ describe("record filter UI regression", () => {
       "utf8",
     );
 
+    // The filter/view row is a fixed-height overlay floated above the list via
+    // absolute positioning (not a negative-margin sibling overlap), so every
+    // scrollable branch below it must reserve FILTER_BAR_HEIGHT of top padding.
     expect(recordsScreen).toContain("height: FILTER_BAR_HEIGHT,");
-    expect(recordsScreen).toContain("marginBottom: -FILTER_GRADIENT_OVERLAP,");
-    expect(recordsScreen).toContain("<View style={styles.filtersAnimated}>");
+    expect(recordsScreen).toContain("<View style={styles.filtersOverlay} pointerEvents=\"box-none\">");
+    expect(recordsScreen).toMatch(/height:\s*FILTER_BAR_HEIGHT \+ FILTER_GRADIENT_OVERLAP/);
+    expect(recordsScreen).toContain('position: "absolute"');
+    expect(recordsScreen).not.toContain("filtersAnimated");
+    expect(recordsScreen).not.toContain("marginBottom: -FILTER_GRADIENT_OVERLAP");
     expect(recordsScreen).not.toContain("outputRange: [0, FILTER_BAR_HEIGHT]");
     expect(recordsScreen).not.toContain("outputRange: [0, -FILTER_GRADIENT_OVERLAP]");
+
+    const paddingTopReservations = (
+      recordsScreen.match(/paddingTop:\s*FILTER_BAR_HEIGHT/g) ?? []
+    ).length;
+    // isLoading / offline-empty / card-view / content-view / empty-state all
+    // sit below the overlay and must each reserve the same top offset.
+    expect(paddingTopReservations).toBeGreaterThanOrEqual(4);
   });
 
   it("formats thought and editing card markdown while leaving question cards unchanged", () => {

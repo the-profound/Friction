@@ -8,6 +8,7 @@ import {
   RefreshControl,
   useWindowDimensions,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -15,7 +16,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { keepPreviousData, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
 import { useNavBarBottomSafeArea } from "@/hooks/useNavBarBottomSafeArea";
-import { PageHeader, HeaderFadeTail } from "@/components/NavBar/PageHeader";
+import { PageHeader } from "@/components/NavBar/PageHeader";
 import HeaderButton from "@/components/shared/HeaderButton";
 import ScalePressable from "@/components/shared/ScalePressable";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
@@ -49,6 +50,19 @@ import {
   getUserScopedOperatorPendingSpaceCodeRequestsQueryKey,
   runOperatorPendingRetry,
 } from "@/lib/operatorPendingSpaceCodeRequestsQuery";
+
+// expo-linear-gradient's types don't line up with the RN style array pattern
+// used throughout this file; other screens cast it the same way (see on.tsx).
+const Gradient = LinearGradient as unknown as React.ComponentType<any>;
+
+// The kebab-menu row's own background fades from opaque white to transparent
+// across its full height, then overlaps the list below it by this amount —
+// noticeably more than the shared 24px HeaderFadeTail band — so scrolled
+// content dissolves into the header instead of getting hard-cut. See
+// app/(tabs)/on.tsx's filtersOverlay for the same technique.
+const HEADER_ROW_CONTENT_HEIGHT = 4 + Sizing.searchButtonSize + 16; // marginTop + button + marginBottom
+const HEADER_ROW_GRADIENT_OVERLAP = 24;
+const HEADER_ROW_GRADIENT_HEIGHT = HEADER_ROW_CONTENT_HEIGHT + HEADER_ROW_GRADIENT_OVERLAP;
 
 const GRID_H_PADDING = Spacing.screenPx;
 const GRID_COLUMN_GAP = 10;
@@ -574,13 +588,88 @@ export default function SpacesScreen() {
         title="공간 목록"
         centeredBrandTitle
       />
-      <View style={styles.headerActionRow}>
-        <HeaderButton
-          variant="menu"
-          onPress={() => setShowMenuSheet(true)}
-          accessibilityLabel="공간 메뉴 열기"
-        />
+      <View style={styles.contentArea}>
+        {isLoading ? (
+          <View style={[styles.centerContainer, { paddingTop: HEADER_ROW_CONTENT_HEIGHT, paddingBottom: navBottom }]}>
+            <Text style={styles.loadingText}>불러오는 중...</Text>
+          </View>
+        ) : isError ? (
+          <View style={[styles.centerContainer, { paddingTop: HEADER_ROW_CONTENT_HEIGHT, paddingBottom: navBottom }]}>
+            <Feather name="alert-circle" size={40} color={Colors.zinc300} />
+            <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
+            <ScalePressable
+              style={styles.retryButtonOuter}
+              contentStyle={styles.retryButton}
+              onPress={handleRefresh}
+              disabled={isManualRefreshing}
+              accessibilityRole="button"
+              accessibilityLabel="다시 시도"
+              accessibilityState={{
+                disabled: isManualRefreshing,
+                busy: isManualRefreshing,
+              }}
+            >
+              {isManualRefreshing ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              )}
+            </ScalePressable>
+          </View>
+        ) : !hasRawContent ? (
+          <RefreshableEmpty
+            refreshing={isManualRefreshing}
+            onRefresh={handleRefresh}
+            contentContainerStyle={[styles.centerContainer, { paddingTop: HEADER_ROW_CONTENT_HEIGHT, paddingBottom: navBottom }]}
+          >
+            <Feather name="grid" size={40} color={Colors.zinc300} />
+            <Text style={styles.emptyTitle}>공간이 없어요</Text>
+            <Text style={styles.emptySubtitle}>함께 편지를 나눌 공간을 만들거나{"\n"}초대 문구로 참여해보세요</Text>
+            <OperatorPendingStatusBanner
+              visible={operatorPendingQuery.isError}
+              isRetrying={isOperatorRetrying}
+              onRetry={handleOperatorRetry}
+            />
+          </RefreshableEmpty>
+        ) : (
+          <FlatList
+            {...LIST_PERF_PRESET}
+            data={allSpaces}
+            keyExtractor={(item) => item.id}
+            renderItem={renderSpaceItem}
+            contentContainerStyle={[styles.listContent, { paddingTop: HEADER_ROW_CONTENT_HEIGHT, paddingBottom: navBottom }]}
+            refreshControl={
+              <RefreshControl
+                refreshing={isManualRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={Colors.zinc400}
+              />
+            }
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={listHeaderComponent}
+            extraData={recentLettersBySpaceId}
+          />
+        )}
+
+        <View style={styles.headerActionRowOverlay} pointerEvents="box-none">
+          <Gradient
+            colors={["rgba(255,255,255,1)", "rgba(255,255,255,0.85)", "rgba(255,255,255,0)"]}
+            locations={[0, 0.55, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+          <View style={styles.headerActionRow} pointerEvents="box-none">
+            <HeaderButton
+              variant="menu"
+              onPress={() => setShowMenuSheet(true)}
+              accessibilityLabel="공간 메뉴 열기"
+            />
+          </View>
+        </View>
       </View>
+
       <ActionSheetModal
         visible={showMenuSheet}
         onClose={() => setShowMenuSheet(false)}
@@ -600,69 +689,6 @@ export default function SpacesScreen() {
           { label: "취소", style: "cancel", onPress: () => {} },
         ]}
       />
-      <HeaderFadeTail />
-
-      {isLoading ? (
-        <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
-          <Text style={styles.loadingText}>불러오는 중...</Text>
-        </View>
-      ) : isError ? (
-        <View style={[styles.centerContainer, { paddingBottom: navBottom }]}>
-          <Feather name="alert-circle" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>불러오기에 실패했어요</Text>
-          <ScalePressable
-            style={styles.retryButtonOuter}
-            contentStyle={styles.retryButton}
-            onPress={handleRefresh}
-            disabled={isManualRefreshing}
-            accessibilityRole="button"
-            accessibilityLabel="다시 시도"
-            accessibilityState={{
-              disabled: isManualRefreshing,
-              busy: isManualRefreshing,
-            }}
-          >
-            {isManualRefreshing ? (
-              <ActivityIndicator size="small" color={Colors.white} />
-            ) : (
-              <Text style={styles.retryButtonText}>다시 시도</Text>
-            )}
-          </ScalePressable>
-        </View>
-      ) : !hasRawContent ? (
-        <RefreshableEmpty
-          refreshing={isManualRefreshing}
-          onRefresh={handleRefresh}
-          contentContainerStyle={[styles.centerContainer, { paddingBottom: navBottom }]}
-        >
-          <Feather name="grid" size={40} color={Colors.zinc300} />
-          <Text style={styles.emptyTitle}>공간이 없어요</Text>
-          <Text style={styles.emptySubtitle}>함께 편지를 나눌 공간을 만들거나{"\n"}초대 문구로 참여해보세요</Text>
-          <OperatorPendingStatusBanner
-            visible={operatorPendingQuery.isError}
-            isRetrying={isOperatorRetrying}
-            onRetry={handleOperatorRetry}
-          />
-        </RefreshableEmpty>
-      ) : (
-        <FlatList
-          {...LIST_PERF_PRESET}
-          data={allSpaces}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSpaceItem}
-          contentContainerStyle={[styles.listContent, { paddingBottom: navBottom }]}
-          refreshControl={
-            <RefreshControl
-              refreshing={isManualRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={Colors.zinc400}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderComponent}
-          extraData={recentLettersBySpaceId}
-        />
-      )}
     </View>
   );
 }
@@ -722,6 +748,21 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: 4,
+  },
+  contentArea: {
+    flex: 1,
+  },
+  headerActionRowOverlay: {
+    position: "absolute",
+    // Extend 2px above the content area's top edge so this overlay's opaque
+    // white top always overlaps PageHeader's own white bottom edge — without
+    // this, sub-pixel layout rounding can leave a hairline gap between two
+    // separately-clipped adjacent views on some devices.
+    top: -2,
+    left: 0,
+    right: 0,
+    height: HEADER_ROW_GRADIENT_HEIGHT + 2,
+    zIndex: 5,
   },
   headerActionRow: {
     minHeight: Sizing.searchButtonSize,

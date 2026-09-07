@@ -47,7 +47,7 @@ import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import SubmitProgressOverlay from "@/components/shared/SubmitProgressOverlay";
 import { DateGroupCarousel } from "@/components/DateGroupCarousel/DateGroupCarousel";
-import { PageHeader, HEADER_FADE_HEIGHT } from "@/components/NavBar/PageHeader";
+import { PageHeader } from "@/components/NavBar/PageHeader";
 import RefreshableEmpty from "@/components/RefreshableEmpty";
 import ScalePressable from "@/components/shared/ScalePressable";
 import { Colors, ReaderTokens, Shadows, Sizing, Spacing, Typography, readerFontSize } from "@/constants/tokens";
@@ -101,9 +101,7 @@ import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { useIsOnline } from "@/lib/useIsOnline";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
-// Shared with the other tab headers so every screen's fade/overlap band feels
-// the same size (see components/NavBar/PageHeader.tsx: HeaderFadeTail).
-const FILTER_GRADIENT_OVERLAP = HEADER_FADE_HEIGHT;
+const FILTER_GRADIENT_OVERLAP = 24;
 const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
 
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
@@ -993,167 +991,171 @@ function OnScreenContent() {
         title="기록함"
         centeredBrandTitle
       />
-      <View style={styles.filtersAnimated}>
-        <Gradient
-          colors={["rgba(255,255,255,1)", "rgba(255,255,255,0)"]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.filters}
-          pointerEvents="box-none"
-        >
+      <View style={styles.contentArea}>
+        {isLoading ? (
+          <View style={[styles.center, { paddingTop: FILTER_BAR_HEIGHT }]}><RecordListText style={styles.muted}>불러오는 중...</RecordListText></View>
+        ) : isOfflineWithoutCache ? (
+          <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingTop: FILTER_BAR_HEIGHT, paddingBottom: navBottom }]}>
+            <Feather name="wifi-off" size={22} color={Colors.zinc400} />
+            <RecordListText style={styles.emptyTitle}>오프라인 상태예요</RecordListText>
+            <RecordListText style={styles.muted}>네트워크에 연결하면 데이터를 불러올 수 있어요</RecordListText>
+          </RefreshableEmpty>
+        ) : view === "card" && cardGroups.length > 0 ? (
           <View
-            pointerEvents="box-none"
-            style={styles.filterControls}
+            style={styles.recordListViewport}
+            onLayout={verticalDateSnap.onLayout}
+            {...verticalDateSnap.panHandlers}
+            {...({ onWheel: verticalDateSnap.onWheel } as object)}
           >
-            <View style={styles.kindFilterGroup}>
-              <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
-              <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
-              <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
-            </View>
-            <View style={styles.viewFilterGroup}>
-              <RecordViewButton
-                icon="list"
-                label="목록형으로 보기"
-                active={view === "content"}
-                onPress={() => setView("content")}
-              />
-              <RecordViewButton
-                icon="layers"
-                label="하나씩 보기"
-                active={view === "card"}
-                onPress={() => setView("card")}
-              />
+            <FlatList
+              ref={recordListRef}
+              data={cardGroups}
+              extraData={`${recordResetVersion}:${selectedArticleId ?? ""}:${spaceLetterByArticleId.size}`}
+              nestedScrollEnabled
+              keyExtractor={(group) => group.dateKey}
+              renderItem={({ item, index }) => {
+                const cardHeight = getRecordGroupCardHeight(item.records, cardWidth);
+                return (
+                  <View style={NON_SELECTABLE_WEB_STYLE}>
+                    <DateGroupCarousel
+                      dateLabel={item.label}
+                      countLabel={`${item.records.length}개`}
+                      items={item.records}
+                      itemKey={cardRecordKey}
+                      cardWidth={cardWidth}
+                      cardHeight={cardHeight}
+                      resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}${queuedQuestionRecords.length > 0 ? ":q" : ""}` : cardMixSeed}
+                      renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, context.measureOrigin, cardHeight)}
+                      shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
+                    />
+                  </View>
+                );
+              }}
+              refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
+              onScroll={handleRecordScroll}
+              onScrollBeginDrag={verticalDateSnap.onScrollBeginDrag}
+              scrollEventThrottle={16}
+              snapToInterval={estimatedGroupHeight}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              contentContainerStyle={[styles.recordGroupList, { paddingTop: FILTER_BAR_HEIGHT, paddingBottom: navBottom }]}
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={Platform.OS !== "web"}
+            />
+          </View>
+        ) : visibleRecords.length > 0 ? (
+          <View style={styles.recordListViewport}>
+            <FlatList
+              data={visibleRecords}
+              keyExtractor={(record) => `${record.kind}-${record.id}`}
+              renderItem={({ item }) => {
+                const isCurrentQuestion = item.kind === "thought" && item.isQuestion;
+                const row = (
+                  <RecordRow
+                    record={item}
+                    isQuestion={isCurrentQuestion}
+                    onPress={() => isCurrentQuestion ? openQuestion(item.thought) : openRecord(item)}
+                    onLongPress={() => {
+                      if (scrollPressGuard.shouldIgnoreVerticalPress()) return;
+                      if (isCurrentQuestion) {
+                        requestRecordDeletion(item);
+                        return;
+                      }
+                      if (item.kind === "letter") setLetterActionTarget(item);
+                      else requestRecordDeletion(item);
+                    }}
+                  />
+                );
+                if (isCurrentQuestion) return row;
+                const recordKey = `${item.kind}-${item.id}`;
+                const deletePending = deletePendingIdsRef.current.has(item.id);
+                return (
+                  <SwipeableRow
+                    ref={(handle) => {
+                      if (handle) recordRowRefs.current.set(recordKey, handle);
+                      else recordRowRefs.current.delete(recordKey);
+                    }}
+                    actions={[{
+                      label: deletePending ? "삭제 중" : "삭제",
+                      color: Colors.primaryAction,
+                      disabled: deletePending,
+                      busy: deletePending,
+                      onPress: () => requestRecordDeletion(item),
+                    }]}
+                    onSwipeOpen={() => handleRecordSwipeOpen(recordKey)}
+                    onScrollLock={(locked) => setRecordListScrollEnabled(!locked)}
+                    actionRightInset={Spacing.screenPx}
+                    actionBottomInset={Spacing.cardGap}
+                  >
+                    {row}
+                  </SwipeableRow>
+                );
+              }}
+              refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
+              onScroll={handleRecordScroll}
+              onScrollBeginDrag={closeOpenRecordRow}
+              scrollEventThrottle={16}
+              scrollEnabled={recordListScrollEnabled}
+              contentContainerStyle={{ paddingTop: FILTER_BAR_HEIGHT + Spacing.cardGap, paddingBottom: navBottom + 16 }}
+            />
+          </View>
+        ) : (
+          <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingTop: FILTER_BAR_HEIGHT, paddingBottom: navBottom }]}>
+            <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
+            <RecordListText style={styles.emptyTitle}>{emptyTitle}</RecordListText>
+            {kind === "thought" && !questionLoadFailed ? (
+              <ScalePressable
+                style={styles.createButton}
+                contentStyle={styles.createButtonContent}
+                onPress={createDirectThought}
+                disabled={isCreatingThought}
+                accessibilityRole="button"
+                accessibilityLabel="단상 쓰기"
+                accessibilityState={{ disabled: isCreatingThought, busy: isCreatingThought }}
+              >
+                <RecordListText style={styles.createButtonText}>단상 쓰기</RecordListText>
+              </ScalePressable>
+            ) : null}
+          </RefreshableEmpty>
+        )}
+
+        <View style={styles.filtersOverlay} pointerEvents="box-none">
+          <Gradient
+            colors={["rgba(255,255,255,1)", "rgba(255,255,255,0.85)", "rgba(255,255,255,0)"]}
+            locations={[0, 0.55, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+          <View pointerEvents="box-none" style={styles.filters}>
+            <View
+              pointerEvents="box-none"
+              style={styles.filterControls}
+            >
+              <View style={styles.kindFilterGroup}>
+                <RecordKindButton label="단상" active={kind === "thought"} onPress={() => setKind("thought")} />
+                <RecordKindButton label="편집" active={kind === "editing"} onPress={() => setKind("editing")} />
+                <RecordKindButton label="편지" active={kind === "letter"} onPress={() => setKind("letter")} />
+              </View>
+              <View style={styles.viewFilterGroup}>
+                <RecordViewButton
+                  icon="list"
+                  label="목록형으로 보기"
+                  active={view === "content"}
+                  onPress={() => setView("content")}
+                />
+                <RecordViewButton
+                  icon="layers"
+                  label="하나씩 보기"
+                  active={view === "card"}
+                  onPress={() => setView("card")}
+                />
+              </View>
             </View>
           </View>
-        </Gradient>
+        </View>
       </View>
-
-      {isLoading ? (
-        <View style={styles.center}><RecordListText style={styles.muted}>불러오는 중...</RecordListText></View>
-      ) : isOfflineWithoutCache ? (
-        <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
-          <Feather name="wifi-off" size={22} color={Colors.zinc400} />
-          <RecordListText style={styles.emptyTitle}>오프라인 상태예요</RecordListText>
-          <RecordListText style={styles.muted}>네트워크에 연결하면 데이터를 불러올 수 있어요</RecordListText>
-        </RefreshableEmpty>
-      ) : view === "card" && cardGroups.length > 0 ? (
-        <View
-          style={styles.recordListViewport}
-          onLayout={verticalDateSnap.onLayout}
-          {...verticalDateSnap.panHandlers}
-          {...({ onWheel: verticalDateSnap.onWheel } as object)}
-        >
-          <FlatList
-            ref={recordListRef}
-            data={cardGroups}
-            extraData={`${recordResetVersion}:${selectedArticleId ?? ""}:${spaceLetterByArticleId.size}`}
-            nestedScrollEnabled
-            keyExtractor={(group) => group.dateKey}
-            renderItem={({ item, index }) => {
-              const cardHeight = getRecordGroupCardHeight(item.records, cardWidth);
-              return (
-                <View style={NON_SELECTABLE_WEB_STYLE}>
-                  <DateGroupCarousel
-                    dateLabel={item.label}
-                    countLabel={`${item.records.length}개`}
-                    items={item.records}
-                    itemKey={cardRecordKey}
-                    cardWidth={cardWidth}
-                    cardHeight={cardHeight}
-                    resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}${queuedQuestionRecords.length > 0 ? ":q" : ""}` : cardMixSeed}
-                    renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, context.measureOrigin, cardHeight)}
-                    shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
-                  />
-                </View>
-              );
-            }}
-            refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
-            onScroll={handleRecordScroll}
-            onScrollBeginDrag={verticalDateSnap.onScrollBeginDrag}
-            scrollEventThrottle={16}
-            snapToInterval={estimatedGroupHeight}
-            snapToAlignment="start"
-            decelerationRate="fast"
-            contentContainerStyle={[styles.recordGroupList, { paddingBottom: navBottom }]}
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={Platform.OS !== "web"}
-          />
-        </View>
-      ) : visibleRecords.length > 0 ? (
-        <View style={styles.recordListViewport}>
-          <FlatList
-            data={visibleRecords}
-            keyExtractor={(record) => `${record.kind}-${record.id}`}
-            renderItem={({ item }) => {
-              const isCurrentQuestion = item.kind === "thought" && item.isQuestion;
-              const row = (
-                <RecordRow
-                  record={item}
-                  isQuestion={isCurrentQuestion}
-                  onPress={() => isCurrentQuestion ? openQuestion(item.thought) : openRecord(item)}
-                  onLongPress={() => {
-                    if (scrollPressGuard.shouldIgnoreVerticalPress()) return;
-                    if (isCurrentQuestion) {
-                      requestRecordDeletion(item);
-                      return;
-                    }
-                    if (item.kind === "letter") setLetterActionTarget(item);
-                    else requestRecordDeletion(item);
-                  }}
-                />
-              );
-              if (isCurrentQuestion) return row;
-              const recordKey = `${item.kind}-${item.id}`;
-              const deletePending = deletePendingIdsRef.current.has(item.id);
-              return (
-                <SwipeableRow
-                  ref={(handle) => {
-                    if (handle) recordRowRefs.current.set(recordKey, handle);
-                    else recordRowRefs.current.delete(recordKey);
-                  }}
-                  actions={[{
-                    label: deletePending ? "삭제 중" : "삭제",
-                    color: Colors.primaryAction,
-                    disabled: deletePending,
-                    busy: deletePending,
-                    onPress: () => requestRecordDeletion(item),
-                  }]}
-                  onSwipeOpen={() => handleRecordSwipeOpen(recordKey)}
-                  onScrollLock={(locked) => setRecordListScrollEnabled(!locked)}
-                  actionRightInset={Spacing.screenPx}
-                  actionBottomInset={Spacing.cardGap}
-                >
-                  {row}
-                </SwipeableRow>
-              );
-            }}
-            refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
-            onScroll={handleRecordScroll}
-            onScrollBeginDrag={closeOpenRecordRow}
-            scrollEventThrottle={16}
-            scrollEnabled={recordListScrollEnabled}
-            contentContainerStyle={{ paddingTop: Spacing.cardGap, paddingBottom: navBottom + 16 }}
-          />
-        </View>
-      ) : (
-        <RefreshableEmpty refreshing={isManualRefreshing} onRefresh={handleRefresh} contentContainerStyle={[styles.center, { paddingBottom: navBottom }]}>
-          <Feather name={kind === "letter" ? "mail" : "edit-3"} size={40} color={Colors.zinc300} />
-          <RecordListText style={styles.emptyTitle}>{emptyTitle}</RecordListText>
-          {kind === "thought" && !questionLoadFailed ? (
-            <ScalePressable
-              style={styles.createButton}
-              contentStyle={styles.createButtonContent}
-              onPress={createDirectThought}
-              disabled={isCreatingThought}
-              accessibilityRole="button"
-              accessibilityLabel="단상 쓰기"
-              accessibilityState={{ disabled: isCreatingThought, busy: isCreatingThought }}
-            >
-              <RecordListText style={styles.createButtonText}>단상 쓰기</RecordListText>
-            </ScalePressable>
-          ) : null}
-        </RefreshableEmpty>
-      )}
 
       {renderLetterOverlay()}
       <ActionSheetModal
@@ -1249,10 +1251,17 @@ export default function OnScreen() {
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  filtersAnimated: {
-    height: FILTER_BAR_HEIGHT,
-    marginBottom: -FILTER_GRADIENT_OVERLAP,
-    overflow: "hidden",
+  contentArea: { flex: 1 },
+  filtersOverlay: {
+    position: "absolute",
+    // Extend 2px above the content area's top edge so this overlay's opaque
+    // white top always overlaps PageHeader's own white bottom edge — without
+    // this, sub-pixel layout rounding can leave a hairline gap between two
+    // separately-clipped adjacent views on some devices.
+    top: -2,
+    left: 0,
+    right: 0,
+    height: FILTER_BAR_HEIGHT + FILTER_GRADIENT_OVERLAP + 2,
     zIndex: 5,
   },
   filters: { height: FILTER_BAR_HEIGHT, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.screenPx, paddingTop: 4, paddingBottom: 28 },
