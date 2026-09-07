@@ -55,7 +55,11 @@ export function canTransitionForward(
         return { allowed: false, reason: "빈 페이지가 있습니다. 내용을 채우거나 페이지를 삭제해주세요." };
       }
       if (input.hasRedWarnings) {
-        return { allowed: false, reason: "분할 불가 문단이 있습니다. 문단을 나누거나 내용을 수정해주세요." };
+        return {
+          allowed: false,
+          reason:
+            "마감 단계로 넘어가기 위해서는 글을 가위 모양의 버튼을 눌러 구분선으로 분할해주세요!",
+        };
       }
       return { allowed: true, target };
 
