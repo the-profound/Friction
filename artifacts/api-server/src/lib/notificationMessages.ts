@@ -6,7 +6,6 @@
  */
 
 export const SEND_HOUR_KST = 6; // 06:00 KST
-export const WINDOW_HOURS = 24; // 집계 윈도우 (시간)
 
 /** 알림 문구 5종 (인덱스 0~4 = 1~5번 문구) */
 export const LETTER_ARRIVED_MESSAGES: string[] = [

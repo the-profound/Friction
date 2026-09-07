@@ -30,6 +30,15 @@ import {
 export interface ProcessDueScheduledSendsResult {
   sentCount: number;
   failedCount: number;
+  /**
+   * Distinct `scheduledAt` delivery slots that had inbox rows committed
+   * (newly sent or repaired) during this run. The scheduler re-checks the
+   * letter-arrived push job for each of these right after this function
+   * returns, so a slot's notifications are never gated purely on the
+   * independently-scheduled 06:00 timer racing this independently-scheduled
+   * poll.
+   */
+  affectedSlots: Date[];
 }
 
 const READABLE_ARTICLE_STATUSES = new Set(["DIVIDING", "CLOSING", "LETTER"]);
@@ -58,12 +67,19 @@ export function resolveSpaceDeliveryRecipientIds(input: {
   return [...recipients];
 }
 
-type ProcessOneResult = "sent" | "repaired" | "failed" | "skipped";
+type ProcessOneOutcome = "sent" | "repaired" | "failed" | "skipped";
+interface ProcessOneResult {
+  outcome: ProcessOneOutcome;
+  // Only set for "sent"/"repaired" — the slot whose inbox rows were just
+  // committed, so the caller can trigger a letter-arrived notification
+  // recheck for it.
+  scheduledAt?: Date;
+}
 
 function logReservationOutcome(input: {
   correlationId: string;
   scheduledSendId: string;
-  outcome: ProcessOneResult;
+  outcome: ProcessOneOutcome;
   delayMs: number;
   failureType?: string;
 }) {
@@ -115,7 +131,7 @@ async function processOneScheduledSend(
         outcome: "skipped",
         delayMs: 0,
       });
-      return "skipped";
+      return { outcome: "skipped" };
     }
     const delayMs = Math.max(0, now.getTime() - send.scheduledAt.getTime());
     observeDelay(delayMs);
@@ -196,7 +212,7 @@ async function processOneScheduledSend(
     if (failureReason) {
       // A SENT row is historical evidence.  Never overwrite it merely because
       // present-day slot data changed; it may only receive safe inbox repair.
-      if (send.status === "SENT") return "skipped";
+      if (send.status === "SENT") return { outcome: "skipped" };
       await tx
         .update(spaceScheduledSendsTable)
         .set({ status: "FAILED", failureReason, sentAt: null })
@@ -222,7 +238,7 @@ async function processOneScheduledSend(
         delayMs,
         failureType: "invalid_reservation_state",
       });
-      return "failed";
+      return { outcome: "failed" };
     }
 
     let recipientSnapshot = await tx
@@ -341,7 +357,7 @@ async function processOneScheduledSend(
         outcome: "sent",
         delayMs,
       });
-      return "sent";
+      return { outcome: "sent", scheduledAt: send.scheduledAt };
     }
     logReservationOutcome({
       correlationId,
@@ -349,7 +365,7 @@ async function processOneScheduledSend(
       outcome: "repaired",
       delayMs,
     });
-    return "repaired";
+    return { outcome: "repaired", scheduledAt: send.scheduledAt };
   });
 }
 
@@ -397,6 +413,9 @@ export async function processDueScheduledSends(opts?: {
   let repairedCount = 0;
   let delayedCount = 0;
   let maxDelayMs = 0;
+  // Dedupe by timestamp value: multiple reservations in this run commonly
+  // share the same 06:00 KST delivery slot.
+  const affectedSlotsByTime = new Map<number, Date>();
 
   for (const candidate of candidates) {
     try {
@@ -409,9 +428,15 @@ export async function processDueScheduledSends(opts?: {
           if (delayMs >= SCHEDULED_SEND_DELAY_ALERT_MS) delayedCount += 1;
         },
       );
-      if (result === "sent") sentCount += 1;
-      if (result === "repaired") repairedCount += 1;
-      if (result === "failed") failedCount += 1;
+      if (result.outcome === "sent") sentCount += 1;
+      if (result.outcome === "repaired") repairedCount += 1;
+      if (result.outcome === "failed") failedCount += 1;
+      if (
+        (result.outcome === "sent" || result.outcome === "repaired") &&
+        result.scheduledAt
+      ) {
+        affectedSlotsByTime.set(result.scheduledAt.getTime(), result.scheduledAt);
+      }
     } catch (err) {
       // The transaction rolls back both inbox rows and status changes. Leave a
       // PENDING reservation retryable rather than committing a false SENT.
@@ -457,5 +482,9 @@ export async function processDueScheduledSends(opts?: {
     maxDelayMs,
   });
 
-  return { sentCount, failedCount };
+  return {
+    sentCount,
+    failedCount,
+    affectedSlots: [...affectedSlotsByTime.values()],
+  };
 }

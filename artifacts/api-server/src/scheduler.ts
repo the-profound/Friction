@@ -7,16 +7,30 @@
  *   already passed and dispatches notifications at 1 / 3 / 7 / 14 day marks.
  *
  * Letter-arrived push:
- *   Runs daily at 06:00 KST.  For users who received ≥1 new letter in the
- *   past 24 hours (visible_at within window), sends a banner+sound Expo push.
- *   A random message from 5 templates is chosen per user.
+ *   Every recipient of a letter delivered at a given 06:00 KST slot gets a
+ *   push for that slot exactly once. Two things can trigger a recheck of a
+ *   given slot: the daily 06:00 KST timer, and — critically — the
+ *   reservation-processing sweep below, right after it commits inbox rows
+ *   for that slot. This closes the race where a slot's space-letter
+ *   deliveries are still being committed (5-minute poll, not synced to
+ *   06:00) at the moment the independent 06:00 timer fires: the push job no
+ *   longer trusts "now" to mean "the sweep is done" — it is re-triggered by
+ *   the sweep itself once the relevant rows actually land. `notifyLetterArrivalsForSlot`
+ *   aggregates strictly by exact `visibleAt = slot` match (every inbox
+ *   insert path pins visibleAt to a canonical 06:00 KST instant — see
+ *   ./lib/deliverySlot.ts) and atomically claims each recipient in
+ *   `letter_arrival_notifications` before pushing, so calling it more than
+ *   once for the same slot — from the timer, from the sweep, or both —
+ *   can never double-notify.
  *
  * Reservation processing:
  *   Polls every 5 minutes for PENDING `space_scheduled_sends` rows whose
  *   `scheduledAt` has passed, and transitions them to SENT/FAILED. Because
  *   the sweep re-scans the whole table (not just "since last run"), a missed
  *   poll (process restart/downtime) is caught up automatically on the next
- *   run — no reservation is permanently skipped.
+ *   run — no reservation is permanently skipped. Each run reports which
+ *   delivery slots it committed rows for, and the scheduler immediately
+ *   rechecks the letter-arrived push job for each of them.
  *
  * Deduplication: each (spaceId, dayMilestone) pair is tracked in an
  * in-memory Set so that repeated hourly polls never dispatch the same
@@ -26,8 +40,9 @@ import { db, spacesTable, spaceParticipationsTable } from "@workspace/db";
 import { eq, and, lt, isNotNull } from "drizzle-orm";
 import { logger } from "./lib/logger";
 import { dispatchNotification } from "./lib/notifications";
-import { getNewLetterRecipients } from "./lib/letterNotificationQuery";
-import { buildLetterArrivedMessage, SEND_HOUR_KST, WINDOW_HOURS } from "./lib/notificationMessages";
+import { claimNewLetterRecipientsForSlot } from "./lib/letterNotificationQuery";
+import { buildLetterArrivedMessage, SEND_HOUR_KST } from "./lib/notificationMessages";
+import { normalizeToKst6 } from "./lib/deliverySlot";
 import { sendPush } from "./lib/pushSender";
 import { processDueScheduledSends } from "./lib/scheduledSendProcessor";
 import { synchronizeSpaceRoundStatuses } from "./lib/spaceRoundStatus";
@@ -175,15 +190,21 @@ function msUntilNextKst6am(): number {
   return diff > 0 ? diff : diff + 24 * 60 * 60 * 1000;
 }
 
-async function sendLetterArrivedNotifications(): Promise<void> {
+export async function notifyLetterArrivalsForSlot(deliverySlot: Date): Promise<void> {
   const correlationId = createCorrelationId();
   const startedAt = performance.now();
   let successCount = 0;
   let failureCount = 0;
-  logger.info({ correlationId }, "scheduler: running letter-arrived push job");
+  logger.info(
+    { correlationId, deliverySlot: deliverySlot.toISOString() },
+    "scheduler: running letter-arrived push job",
+  );
   try {
-    const recipients = await getNewLetterRecipients(WINDOW_HOURS);
-    logger.info({ recipientCount: recipients.length }, "scheduler: letter-arrived recipients found");
+    const recipients = await claimNewLetterRecipientsForSlot(deliverySlot);
+    logger.info(
+      { correlationId, recipientCount: recipients.length, deliverySlot: deliverySlot.toISOString() },
+      "scheduler: letter-arrived recipients claimed",
+    );
 
     for (const recipient of recipients) {
       if (recipient.pushTokens.length === 0) {
@@ -237,7 +258,7 @@ async function sendLetterArrivedNotifications(): Promise<void> {
       failureCount,
     });
   } catch (err) {
-    logger.error({ err, correlationId }, "scheduler: sendLetterArrivedNotifications failed");
+    logger.error({ err, correlationId }, "scheduler: notifyLetterArrivalsForSlot failed");
     logOperationalMetric(logger, {
       operation: "scheduler.letter-push",
       outcome: "failure",
@@ -254,36 +275,60 @@ async function sendLetterArrivedNotifications(): Promise<void> {
 
 const SCHEDULED_SEND_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-async function runScheduledSendSweep() {
+export async function runScheduledSendSweep() {
   const correlationId = createCorrelationId();
-  try {
-    await Promise.all([
-      processDueScheduledSends({ correlationId }),
-      (async () => {
-        const startedAt = performance.now();
-        try {
-          await synchronizeSpaceRoundStatuses();
-          logOperationalMetric(logger, {
-            operation: "scheduler.round-status",
-            outcome: "success",
-            durationMs: performance.now() - startedAt,
-            correlationId,
-          });
-        } catch (error) {
-          logger.error({ err: error, correlationId }, "scheduler: round status sync failed");
-          logOperationalMetric(logger, {
-            operation: "scheduler.round-status",
-            outcome: "failure",
-            durationMs: performance.now() - startedAt,
-            correlationId,
-            failureType: "job_failed",
-          });
-          throw error;
-        }
-      })(),
-    ]);
-  } catch (err) {
-    logger.error({ err, correlationId }, "scheduler: processDueScheduledSends failed");
+
+  // Round-status sync failing must never block reservation delivery (or the
+  // notification recheck it triggers), and vice versa — these are
+  // independent failure domains, so allSettled rather than Promise.all.
+  const [scheduledSendResult] = await Promise.allSettled([
+    processDueScheduledSends({ correlationId }),
+    (async () => {
+      const startedAt = performance.now();
+      try {
+        await synchronizeSpaceRoundStatuses();
+        logOperationalMetric(logger, {
+          operation: "scheduler.round-status",
+          outcome: "success",
+          durationMs: performance.now() - startedAt,
+          correlationId,
+        });
+      } catch (error) {
+        logger.error({ err: error, correlationId }, "scheduler: round status sync failed");
+        logOperationalMetric(logger, {
+          operation: "scheduler.round-status",
+          outcome: "failure",
+          durationMs: performance.now() - startedAt,
+          correlationId,
+          failureType: "job_failed",
+        });
+        throw error;
+      }
+    })(),
+  ]);
+
+  if (scheduledSendResult.status === "rejected") {
+    logger.error(
+      { err: scheduledSendResult.reason, correlationId },
+      "scheduler: processDueScheduledSends failed",
+    );
+    return;
+  }
+
+  // Re-check the letter-arrived push job for every slot that just had inbox
+  // rows committed, right after this transaction is durable — closing the
+  // race between the 5-minute delivery poll and the independent 06:00
+  // timer. Each slot gets its own try/catch so one slot's failure never
+  // blocks notifying the others.
+  for (const slot of scheduledSendResult.value.affectedSlots) {
+    try {
+      await notifyLetterArrivalsForSlot(slot);
+    } catch (err) {
+      logger.error(
+        { err, correlationId, deliverySlot: slot.toISOString() },
+        "scheduler: post-sweep notification recheck failed for slot",
+      );
+    }
   }
 }
 
@@ -303,7 +348,11 @@ export function startScheduler() {
     setInterval(runScheduledSendSweep, SCHEDULED_SEND_POLL_INTERVAL_MS);
   }, 8000);
 
-  // Letter-arrived push: schedule for the next 06:00 KST, then every 24h
+  // Letter-arrived push: schedule for the next 06:00 KST, then every 24h.
+  // This timer is now just one of two triggers for a given slot (the sweep
+  // above is the other, and typically fires first) — claimNewLetterRecipientsForSlot's
+  // atomic per-recipient-per-slot claim means whichever trigger runs first
+  // for a slot does the notifying, and the other is a safe no-op.
   const msToFirst = msUntilNextKst6am();
   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
@@ -312,8 +361,10 @@ export function startScheduler() {
     "scheduler: letter-arrived push scheduled",
   );
 
+  const runForCurrentSlot = () => notifyLetterArrivalsForSlot(normalizeToKst6(new Date()));
+
   setTimeout(() => {
-    sendLetterArrivedNotifications();
-    setInterval(sendLetterArrivedNotifications, TWENTY_FOUR_HOURS);
+    runForCurrentSlot();
+    setInterval(runForCurrentSlot, TWENTY_FOUR_HOURS);
   }, msToFirst);
 }

@@ -316,6 +316,13 @@
       "when": 1788523200000,
       "tag": "0044_allow_multiple_reading_thoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788824400000,
+      "tag": "0046_add_letter_arrival_notifications",
+      "breakpoints": true
     }
   ]
 }

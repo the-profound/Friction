@@ -200,6 +200,7 @@ describe("space scheduled-send delivery", () => {
     await expect(processDueScheduledSends()).resolves.toEqual({
       sentCount: 1,
       failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T00:00:00.000Z")],
     });
 
     expect(state.inserts).toHaveLength(3);
@@ -242,6 +243,7 @@ describe("space scheduled-send delivery", () => {
     await expect(processDueScheduledSends()).resolves.toEqual({
       sentCount: 0,
       failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T00:00:00.000Z")],
     });
 
     expect(state.inserts).toHaveLength(2);
@@ -268,6 +270,7 @@ describe("space scheduled-send delivery", () => {
     await expect(processDueScheduledSends()).resolves.toEqual({
       sentCount: 0,
       failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T00:00:00.000Z")],
     });
 
     expect(state.inserts).toHaveLength(2);
@@ -286,6 +289,7 @@ describe("space scheduled-send delivery", () => {
     await expect(processDueScheduledSends()).resolves.toEqual({
       sentCount: 0,
       failedCount: 1,
+      affectedSlots: [],
     });
 
     expect(state.inserts).toHaveLength(0);
@@ -304,6 +308,7 @@ describe("space scheduled-send delivery", () => {
     await expect(processDueScheduledSends()).resolves.toEqual({
       sentCount: 0,
       failedCount: 1,
+      affectedSlots: [],
     });
 
     expect(state.updates).toHaveLength(0);
@@ -324,7 +329,11 @@ describe("space scheduled-send delivery", () => {
       [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2020-01-02" }],
       [readableArticle], [], [{ userId: "participant-1" }],
     );
-    await expect(processDueScheduledSends()).resolves.toEqual({ sentCount: 1, failedCount: 0 });
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 1,
+      failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T21:00:00.000Z")],
+    });
     expect(state.inserts.some((entry) => entry.table === state.tables.inbox)).toBe(true);
   });
 
@@ -338,7 +347,11 @@ describe("space scheduled-send delivery", () => {
       [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
       [space], [], // deleted slot
     );
-    await expect(processDueScheduledSends()).resolves.toEqual({ sentCount: 0, failedCount: 1 });
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 1,
+      affectedSlots: [],
+    });
     expect(state.inserts.some((entry) => entry.table === state.tables.inbox)).toBe(false);
   });
 });
