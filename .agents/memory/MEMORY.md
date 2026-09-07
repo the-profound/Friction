@@ -102,6 +102,7 @@
 - [Friction question-queue activation signal](friction-question-queue-activation-signal.md) — createdFrom:"question" + status:"PRELIMINARY" reliably means "still queued, unactivated" from one GET; no extra queue query needed.
 - [Friction large-screen test convention](friction-large-screen-test-convention.md) — on-01a.tsx/on.tsx-scale screens have no render harness; regression tests assert on raw source text instead.
 - [WebViewMarkdownEditor hideTitle flash](friction-editor-init-flash-hidetitle.md) — bake hideTitle into initial WebView HTML/CSS (frozen at mount), not a postMessage round-trip; every hideTitle-changing flow already fully remounts via router.replace.
+- [Friction Markdown emphasis boundaries](friction-markdown-emphasis-boundaries.md) — normalize only flanking escapes around emphasis markers before web/native editor or reader reinjection.
 - [Friction offline-first React Query persistence](friction-offline-query-persistence.md) — queryKey[0] exact-path allowlist for disk cache; NetInfo→onlineManager wiring; persist-client version pin; cold-start gate design.
 - [Fixed-width item cap inside a stretched flex row](friction-fixed-width-row-stretch-gap.md) — a hard per-item width cap on a full-width-stretched row leaves an asymmetric right gap once the cap binds, even at normal phone widths.
 - [CanonicalCardSlot radius and clip ownership](friction-canonical-card-slot-radius-clip.md) — scaled-down cover radius flattens to a fixed ratio and shadow leaks a rectangle sliver unless the outer wrapper owns radius+clip explicitly.

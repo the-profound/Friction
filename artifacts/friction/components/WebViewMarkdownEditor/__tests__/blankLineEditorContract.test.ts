@@ -42,4 +42,16 @@ describe("editor blank paragraph ownership", () => {
     expect(generated).toContain("data-friction-caret-paragraph");
     expect(generated).toContain("data-friction-preserved-blank");
   });
+
+  it("normalizes emphasis delimiters at the web/native editor boundary", () => {
+    const web = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
+    const native = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
+    const generated = read("components/WebViewMarkdownEditor/editorHtml.ts");
+
+    expect(web).toContain("normalizeMarkdownEmphasisDelimiters");
+    expect(web).toContain("td.turndown(root.innerHTML)");
+    expect(native).toContain("normalizeMarkdownEmphasisDelimiters");
+    expect(native).toContain('tag === "strong" || tag === "b"');
+    expect(generated).toContain("data-friction-caret-paragraph");
+  });
 });

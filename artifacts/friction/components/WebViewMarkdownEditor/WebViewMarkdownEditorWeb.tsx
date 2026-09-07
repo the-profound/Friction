@@ -31,6 +31,7 @@ import {
 } from "@/lib/bodyTypographyDiagnostics";
 import { splitLeadingH1Markdown } from "@/utils/leadingH1";
 import { normalizePageDividersForMarkdownParser } from "@/lib/pageDividerMarkdown";
+import { normalizeMarkdownEmphasisDelimiters } from "@/lib/markdownEmphasis";
 import { handleTitleEnter, insertTitleSoftBreak } from "./titleKeyboardContract";
 import { createHeadingWithParagraphShortcut } from "./headingKeyboardShortcuts";
 import { Colors } from "@/constants/tokens";
@@ -60,7 +61,9 @@ marked.setOptions({ breaks: true, gfm: true } as Parameters<typeof marked.setOpt
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
     const normalized = preserveMarkdownBlankLinesForEditor(
-      normalizePageDividersForMarkdownParser(md || ""),
+      normalizePageDividersForMarkdownParser(
+        normalizeMarkdownEmphasisDelimiters(md || ""),
+      ),
     );
     const leadingH1 = splitLeadingH1Markdown(normalized);
     const result = marked.parse(leadingH1?.body ?? normalized);
@@ -108,13 +111,14 @@ function htmlToMarkdown(html: string): string {
         paragraph.textContent = emptyParagraphMarker;
       }
     });
-    return restoreEmptyParagraphMarkers(
+    const markdown = restoreEmptyParagraphMarkers(
       td.turndown(root.innerHTML),
       emptyParagraphMarker,
     ).replace(
       /!\[[^\]]*]\(([^)\s]+)\)/g,
       (full, src: string) => isPersistableInlineImageUrl(src) ? full : "",
     );
+    return normalizeMarkdownEmphasisDelimiters(markdown);
   } catch (error) {
     throw new Error("Failed to convert editor HTML to Markdown", { cause: error });
   }

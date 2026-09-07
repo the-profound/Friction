@@ -21,6 +21,7 @@ import type { BodyTypographyMetrics } from "../../../lib/bodyLayout";
 import { shouldApplyBodyTypographyGeneration } from "../../../lib/bodyTypographyDiagnostics";
 import { BODY_FONT_FALLBACK_PROBE_TEXT } from "../../shared/bodyTypographyFonts";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
+import { normalizeMarkdownEmphasisDelimiters } from "../../../lib/markdownEmphasis";
 import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
 import {
   CARET_PARAGRAPH_ATTRIBUTE,
@@ -584,7 +585,9 @@ function splitByImages(text: string): MdSegment[] {
 function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
     const text = preserveMarkdownBlankLinesForEditor(
-      normalizePageDividersForMarkdownParser(md || ""),
+      normalizePageDividersForMarkdownParser(
+        normalizeMarkdownEmphasisDelimiters(md || ""),
+      ),
     );
     const leadingH1 = splitLeadingH1Markdown(text);
     const lines = (leadingH1?.body ?? text).split("\n");
@@ -874,9 +877,11 @@ function htmlToMarkdown(html: string, onError?: (error: unknown) => void): strin
     for (const child of Array.from(container.children)) {
       md += blockMd(child as HTMLElement, 0);
     }
-    return restoreEmptyParagraphMarkers(
-      md.replace(/\n\n$/, ""),
-      emptyParagraphMarker,
+    return normalizeMarkdownEmphasisDelimiters(
+      restoreEmptyParagraphMarkers(
+        md.replace(/\n\n$/, ""),
+        emptyParagraphMarker,
+      ),
     );
   } catch (error) {
     onError?.(error);

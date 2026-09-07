@@ -5,6 +5,7 @@ import {
   INLINE_IMAGE_DISPLAY_WIDTH,
 } from "./inlineImages";
 import { normalizePageDividersForMarkdownParser } from "./pageDividerMarkdown";
+import { normalizeMarkdownEmphasisDelimiters } from "./markdownEmphasis";
 
 function escapeHtml(s: string): string {
   return s
@@ -112,7 +113,9 @@ function renderImageLine(line: string, imagePixelRatio = 1): string | null {
 
 export function markdownToHtml(md: string, imagePixelRatio = 1): string {
   try {
-    const text = normalizePageDividersForMarkdownParser(md || "");
+    const text = normalizePageDividersForMarkdownParser(
+      normalizeMarkdownEmphasisDelimiters(md || ""),
+    );
     const lines = text.split("\n");
     const blocks: string[] = [];
     let i = 0;
