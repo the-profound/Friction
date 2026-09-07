@@ -13,7 +13,7 @@ export const LETTER_ARRIVED_MESSAGES: string[] = [
   "새로운 편지가 도착했어요!",
   "수신함에 새로운 편지가 도착했어요!",
   "{userName}님을 위한 편지가 도착했어요.",
-  "밤새 새로운 편지가 날라왔어요.",
+  "밤새 새로운 편지가 날아왔어요.",
   "새 편지 {newLetterCount}개",
 ];
 
