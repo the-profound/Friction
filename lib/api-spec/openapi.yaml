@@ -5348,6 +5348,19 @@ components:
             `everScheduled: true` means the letter's only reservation(s) were
             cancelled — distinct from a true legacy letter that was never
             reserved at all.
+        lastReservation:
+          allOf:
+            - $ref: "#/components/schemas/SpaceReservationMetadata"
+          nullable: true
+          description: >-
+            The most recently created reservation of any status (including
+            CANCELLED), only populated by GET /spaces/:id/letters. Unlike
+            `reservation` (which ignores CANCELLED rows and stays the
+            "currently active" reservation), this preserves which exact
+            slot/round/date a now-cancelled reservation named, so presentation
+            code can tell "wrote a letter, then withheld it" apart from "never
+            touched this slot" without resurrecting the cancelled send as
+            active. Null only when `everScheduled` is false.
       required:
         [
           id,

@@ -224,6 +224,29 @@ export const ListUserSpaceLettersResponseItem = zod.object({
     .describe(
       "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
     ),
+  lastReservation: zod
+    .object({
+      status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+      scheduledAt: zod.date(),
+      sentAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+        ),
+      roundId: zod.string().uuid().nullable(),
+      date: zod.date().nullable(),
+      slotId: zod.string().uuid().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      resolved: zod.boolean(),
+    })
+    .describe(
+      "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+    )
+    .nullish()
+    .describe(
+      'The most recently created reservation of any status (including CANCELLED), only populated by GET \/spaces\/:id\/letters. Unlike `reservation` (which ignores CANCELLED rows and stays the \"currently active\" reservation), this preserves which exact slot\/round\/date a now-cancelled reservation named, so presentation code can tell \"wrote a letter, then withheld it\" apart from \"never touched this slot\" without resurrecting the cancelled send as active. Null only when `everScheduled` is false.',
+    ),
 });
 export const ListUserSpaceLettersResponse = zod.array(
   ListUserSpaceLettersResponseItem,
@@ -3223,6 +3246,29 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
         .describe(
           "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
         ),
+      lastReservation: zod
+        .object({
+          status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+          scheduledAt: zod.date(),
+          sentAt: zod
+            .date()
+            .nullish()
+            .describe(
+              "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+            ),
+          roundId: zod.string().uuid().nullable(),
+          date: zod.date().nullable(),
+          slotId: zod.string().uuid().nullable(),
+          authorId: zod.string().uuid().nullable(),
+          resolved: zod.boolean(),
+        })
+        .describe(
+          "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+        )
+        .nullish()
+        .describe(
+          'The most recently created reservation of any status (including CANCELLED), only populated by GET \/spaces\/:id\/letters. Unlike `reservation` (which ignores CANCELLED rows and stays the \"currently active\" reservation), this preserves which exact slot\/round\/date a now-cancelled reservation named, so presentation code can tell \"wrote a letter, then withheld it\" apart from \"never touched this slot\" without resurrecting the cancelled send as active. Null only when `everScheduled` is false.',
+        ),
     })
     .nullish(),
   articleTitle: zod
@@ -3645,6 +3691,29 @@ export const ListSpaceLettersResponseItem = zod.object({
     .describe(
       "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
     ),
+  lastReservation: zod
+    .object({
+      status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+      scheduledAt: zod.date(),
+      sentAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+        ),
+      roundId: zod.string().uuid().nullable(),
+      date: zod.date().nullable(),
+      slotId: zod.string().uuid().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      resolved: zod.boolean(),
+    })
+    .describe(
+      "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+    )
+    .nullish()
+    .describe(
+      'The most recently created reservation of any status (including CANCELLED), only populated by GET \/spaces\/:id\/letters. Unlike `reservation` (which ignores CANCELLED rows and stays the \"currently active\" reservation), this preserves which exact slot\/round\/date a now-cancelled reservation named, so presentation code can tell \"wrote a letter, then withheld it\" apart from \"never touched this slot\" without resurrecting the cancelled send as active. Null only when `everScheduled` is false.',
+    ),
 });
 export const ListSpaceLettersResponse = zod.array(ListSpaceLettersResponseItem);
 
@@ -3774,6 +3843,29 @@ export const UpdateSpaceLetterVisibilityResponse = zod.object({
     .optional()
     .describe(
       "Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET \/spaces\/:id\/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all.",
+    ),
+  lastReservation: zod
+    .object({
+      status: zod.enum(["PENDING", "SENT", "CANCELLED", "FAILED"]),
+      scheduledAt: zod.date(),
+      sentAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "The actual send timestamp once status is SENT. Null while still PENDING or if never sent.",
+        ),
+      roundId: zod.string().uuid().nullable(),
+      date: zod.date().nullable(),
+      slotId: zod.string().uuid().nullable(),
+      authorId: zod.string().uuid().nullable(),
+      resolved: zod.boolean(),
+    })
+    .describe(
+      "Immutable reservation identity. Null identity fields explicitly indicate unresolved legacy data.",
+    )
+    .nullish()
+    .describe(
+      'The most recently created reservation of any status (including CANCELLED), only populated by GET \/spaces\/:id\/letters. Unlike `reservation` (which ignores CANCELLED rows and stays the \"currently active\" reservation), this preserves which exact slot\/round\/date a now-cancelled reservation named, so presentation code can tell \"wrote a letter, then withheld it\" apart from \"never touched this slot\" without resurrecting the cancelled send as active. Null only when `everScheduled` is false.',
     ),
 });
 

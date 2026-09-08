@@ -1332,6 +1332,8 @@ export interface SpaceLetter {
   reservation?: SpaceReservationMetadata | null;
   /** Whether this letter has ever had a scheduled-send reservation of any status, including ones since cancelled. Only populated by GET /spaces/:id/letters. A null `reservation` combined with `everScheduled: true` means the letter's only reservation(s) were cancelled — distinct from a true legacy letter that was never reserved at all. */
   everScheduled?: boolean;
+  /** The most recently created reservation of any status (including CANCELLED), only populated by GET /spaces/:id/letters. Unlike `reservation` (which ignores CANCELLED rows and stays the "currently active" reservation), this preserves which exact slot/round/date a now-cancelled reservation named, so presentation code can tell "wrote a letter, then withheld it" apart from "never touched this slot" without resurrecting the cancelled send as active. Null only when `everScheduled` is false. */
+  lastReservation?: SpaceReservationMetadata | null;
 }
 
 export type CreateSpaceLetterBodyLetterType =

@@ -14,6 +14,15 @@
  * when its reservation history has multiple rows (repeated
  * schedule→cancel→reschedule→cancel cycles on the same letter), not just a
  * single cancelled row.
+ *
+ * Task #2111 — a cancelled-only CENTER letter must not resurface as an
+ * untouched, "due now" slot in the space-round carousel. The `reservation`
+ * field stays null on cancel (unchanged, covered above), but `lastReservation`
+ * preserves the exact round/slot/date a now-cancelled reservation named, so
+ * client presentation code can tell "wrote it, then withheld it" apart from
+ * "never touched this slot" — repro'd with the real production timeline
+ * (finalized CENTER letter, two cancellations for the exact same slot, real
+ * slot deadline still days away).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +62,11 @@ const state = vi.hoisted(() => {
     { id: "letter-sent", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-sent", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-01-03T00:00:00.000Z"), updatedAt: new Date("2026-01-03T00:00:00.000Z") },
     { id: "letter-pending", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-pending", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-01-04T00:00:00.000Z"), updatedAt: new Date("2026-01-04T00:00:00.000Z") },
     { id: "letter-cancelled-multi", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-cancelled-multi", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-01-05T00:00:00.000Z"), updatedAt: new Date("2026-01-05T00:00:00.000Z") },
+    // Real-world repro (space 6a8ec70d-edf1-4cb8-837f-dd930cf8a080, round
+    // abf851d4-9e16-4a11-b253-182a6612258e, letter 0f7c10bd-fb1b-42b9-aaf5-246311a970b8):
+    // a fully written CENTER letter with two CANCELLED sends both naming the
+    // exact same slot/round/date, and that slot's deadline is still days away.
+    { id: "letter-withdrawn-same-slot", spaceId, spaceRoundId: null, authorId: "author-a", sourceArticleId: "article-withdrawn-same-slot", letterType: "CENTER" as const, visibility: "PUBLIC" as const, createdAt: new Date("2026-09-06T00:00:00.000Z"), updatedAt: new Date("2026-09-06T00:00:00.000Z") },
   ];
 
   const scheduledSends = [
@@ -113,6 +127,31 @@ const state = vi.hoisted(() => {
       reservedRoundId: "round-a",
       reservedDate: "2026-01-12",
       slotId: "slot-e",
+      reservationAuthorId: "author-a",
+    },
+    // Real-world repro: created and cancelled once, then reserved and
+    // cancelled again for the *exact same* slot/round/date (slot deadline
+    // 2026-09-13, "today" 2026-09-08 — five days out).
+    {
+      spaceLetterId: "letter-withdrawn-same-slot",
+      status: "CANCELLED" as const,
+      createdAt: new Date("2026-09-06T10:00:00.000Z"),
+      scheduledAt: new Date("2026-09-12T21:00:00.000Z"),
+      sentAt: null,
+      reservedRoundId: "round-real-repro",
+      reservedDate: "2026-09-13",
+      slotId: "slot-real-repro",
+      reservationAuthorId: "author-a",
+    },
+    {
+      spaceLetterId: "letter-withdrawn-same-slot",
+      status: "CANCELLED" as const,
+      createdAt: new Date("2026-09-06T11:00:00.000Z"),
+      scheduledAt: new Date("2026-09-12T21:00:00.000Z"),
+      sentAt: null,
+      reservedRoundId: "round-real-repro",
+      reservedDate: "2026-09-13",
+      slotId: "slot-real-repro",
       reservationAuthorId: "author-a",
     },
   ];
@@ -201,7 +240,21 @@ async function getLetters() {
     { headers: { "x-test-user-id": "author-a" } },
   );
   return res.json() as Promise<
-    Array<{ id: string; everScheduled?: boolean; reservation: { status: string; scheduledAt: string; sentAt: string | null } | null }>
+    Array<{
+      id: string;
+      everScheduled?: boolean;
+      reservation: { status: string; scheduledAt: string; sentAt: string | null } | null;
+      lastReservation: {
+        status: string;
+        scheduledAt: string;
+        sentAt: string | null;
+        roundId: string | null;
+        slotId: string | null;
+        date: string | null;
+        authorId: string | null;
+        resolved: boolean;
+      } | null;
+    }>
   >;
 }
 
@@ -226,6 +279,7 @@ describe("GET /spaces/:id/letters reservation metadata", () => {
     const letter = body.find((l) => l.id === "letter-no-history")!;
     expect(letter.reservation).toBeNull();
     expect(letter.everScheduled).toBe(false);
+    expect(letter.lastReservation).toBeNull();
   });
 
   it("a letter whose only reservation was CANCELLED reports reservation:null but everScheduled:true (distinct from true legacy)", async () => {
@@ -233,6 +287,12 @@ describe("GET /spaces/:id/letters reservation metadata", () => {
     const letter = body.find((l) => l.id === "letter-cancelled-only")!;
     expect(letter.reservation).toBeNull();
     expect(letter.everScheduled).toBe(true);
+    // lastReservation still names the exact slot/round/date it was withdrawn from.
+    expect(letter.lastReservation?.status).toBe("CANCELLED");
+    expect(letter.lastReservation?.roundId).toBe("round-a");
+    expect(letter.lastReservation?.slotId).toBe("slot-a");
+    expect(letter.lastReservation?.date).toBe("2026-01-09");
+    expect(letter.lastReservation?.resolved).toBe(true);
   });
 
   it("a SENT letter reports status SENT with the actual dispatch sentAt, separate from the originally planned scheduledAt", async () => {
@@ -256,5 +316,22 @@ describe("GET /spaces/:id/letters reservation metadata", () => {
     const letter = body.find((l) => l.id === "letter-cancelled-multi")!;
     expect(letter.reservation).toBeNull();
     expect(letter.everScheduled).toBe(true);
+    // lastReservation reflects the most recently created cancellation (slot-e / 2026-01-12),
+    // not the first one (slot-d / 2026-01-09).
+    expect(letter.lastReservation?.slotId).toBe("slot-e");
+    expect(letter.lastReservation?.date).toBe("2026-01-12");
+  });
+
+  it("real-world repro: a finalized letter with two cancellations for the exact same slot, deadline still days away, reports reservation:null/everScheduled:true and a lastReservation naming that exact slot", async () => {
+    const body = await getLetters();
+    const letter = body.find((l) => l.id === "letter-withdrawn-same-slot")!;
+    expect(letter.reservation).toBeNull();
+    expect(letter.everScheduled).toBe(true);
+    expect(letter.lastReservation?.status).toBe("CANCELLED");
+    expect(letter.lastReservation?.roundId).toBe("round-real-repro");
+    expect(letter.lastReservation?.slotId).toBe("slot-real-repro");
+    expect(letter.lastReservation?.date).toBe("2026-09-13");
+    expect(letter.lastReservation?.authorId).toBe("author-a");
+    expect(letter.lastReservation?.resolved).toBe(true);
   });
 });

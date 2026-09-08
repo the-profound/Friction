@@ -2635,8 +2635,19 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   // logic here continues to ignore CANCELLED rows, unchanged, so existing
   // round-presentation consumers of `reservation` keep their prior meaning.
   const everScheduledLetterIds = new Set<string>();
+  // The most recently created reservation of ANY status (including
+  // CANCELLED), separate from `currentReservationByLetter` above. Once a
+  // letter's only reservation is cancelled, `reservation` correctly goes
+  // null — but the round/slot/date it named is otherwise lost, and
+  // presentation code needs that identity to tell "wrote it, then withheld
+  // it" apart from "never touched this slot" (see `lastReservation` below).
+  const lastReservationByLetter = new Map<string, typeof reservationRows[number]>();
   for (const reservation of reservationRows) {
     everScheduledLetterIds.add(reservation.spaceLetterId);
+    const last = lastReservationByLetter.get(reservation.spaceLetterId);
+    if (!last || reservation.createdAt > last.createdAt) {
+      lastReservationByLetter.set(reservation.spaceLetterId, reservation);
+    }
     if (reservation.status === "CANCELLED") continue;
     const current = currentReservationByLetter.get(reservation.spaceLetterId);
     if (!current || reservation.createdAt > current.createdAt) {
@@ -2660,6 +2671,7 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
     const article = letter.sourceArticleId ? (articleMap.get(letter.sourceArticleId) ?? null) : null;
     const rawContent = article?.content ?? null;
     const reservation = currentReservationByLetter.get(letter.id);
+    const lastReservation = lastReservationByLetter.get(letter.id);
     const articleExcerpt = rawContent ? rawContent.replace(/[#*_`>\-~[\]()]/g, "").trim().slice(0, 100) : null;
     return {
       ...letter,
@@ -2686,6 +2698,20 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
           reservation.reservedRoundId &&
           reservation.reservedDate &&
           reservation.reservationAuthorId
+        ),
+      } : null,
+      lastReservation: lastReservation ? {
+        status: lastReservation.status,
+        scheduledAt: lastReservation.scheduledAt,
+        sentAt: lastReservation.sentAt ?? null,
+        roundId: lastReservation.reservedRoundId ?? null,
+        date: lastReservation.reservedDate ?? null,
+        slotId: lastReservation.slotId ?? null,
+        authorId: lastReservation.reservationAuthorId ?? null,
+        resolved: !!(
+          lastReservation.reservedRoundId &&
+          lastReservation.reservedDate &&
+          lastReservation.reservationAuthorId
         ),
       } : null,
     };

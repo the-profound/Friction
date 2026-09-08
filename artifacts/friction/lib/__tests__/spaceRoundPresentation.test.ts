@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  doesSpaceLetterOccupyRoundSlot,
+  findWithdrawnCenterLetterForSlot,
   getSpaceLetterAuthorName,
   getSpaceLetterPresentationRoundId,
   type SpaceReservationMetadataPresentation,
@@ -376,6 +378,146 @@ describe("space round presentation", () => {
       },
     }]);
     expect(result.map((item) => item.kind)).toEqual(["slot", "letter"]);
+  });
+
+  describe("withdrawn (cancelled-with-a-draft) CENTER slots", () => {
+    // Real production repro (space 6a8ec70d-edf1-4cb8-837f-dd930cf8a080, round
+    // abf851d4-9e16-4a11-b253-182a6612258e): 스티브's CENTER letter for slot
+    // 2930ddf7-8e00-4a73-8ff8-5ab0c73fca18 (scheduledDate 2026-09-13) was fully
+    // written, then had its only reservation created and cancelled twice — the
+    // slot's deadline is still days away. The API's `reservation` is (correctly,
+    // by design) null, but `everScheduled`/`lastReservation` still name the
+    // exact slot it was withdrawn from.
+    const authorId = "8a425f58-f036-49f8-a911-322035730c05";
+    const roundId = "abf851d4-9e16-4a11-b253-182a6612258e";
+    const slotId = "2930ddf7-8e00-4a73-8ff8-5ab0c73fca18";
+    const scheduledDate = "2026-09-13";
+    const slot = {
+      id: slotId,
+      spaceRoundId: roundId,
+      assignedUserId: authorId,
+      scheduledDate,
+    };
+    const withdrawnLastReservation: SpaceReservationMetadataPresentation = {
+      status: "CANCELLED",
+      resolved: true,
+      roundId,
+      slotId,
+      authorId,
+      date: scheduledDate,
+      scheduledAt: "2026-09-12T21:00:00.000Z", // KST 06:00 on 2026-09-13
+    };
+    const withdrawnLetter = {
+      id: "0f7c10bd-fb1b-42b9-aaf5-246311a970b8",
+      // Real CENTER letters are always created with the round they were
+      // written for (required to be reservable at all), and cancellation
+      // never clears it — so this must match `roundId`, not be null.
+      spaceRoundId: roundId,
+      authorId,
+      letterType: "CENTER",
+      reservation: null,
+      everScheduled: true,
+      lastReservation: withdrawnLastReservation,
+    };
+    const now = new Date("2026-09-08T00:00:00.000Z"); // "today" — five days before the deadline
+
+    it("finds the withdrawn letter for its exact slot, days before the real deadline", () => {
+      expect(findWithdrawnCenterLetterForSlot([withdrawnLetter], slot)).toBe(withdrawnLetter);
+      // Confirms this is genuinely reachable well ahead of the slot's deadline, not just "not past".
+      expect(isKstSlotReservable(scheduledDate, now)).toBe(true);
+    });
+
+    it("does not confuse a withdrawn letter with a true legacy (never-touched) letter", () => {
+      const trueLegacyLetter = {
+        ...withdrawnLetter,
+        id: "legacy",
+        everScheduled: false,
+        lastReservation: null,
+      };
+      expect(findWithdrawnCenterLetterForSlot([trueLegacyLetter], slot)).toBeNull();
+    });
+
+    it("does not match a letter with a live (non-null) reservation as withdrawn", () => {
+      const pendingLetter = {
+        ...withdrawnLetter,
+        id: "pending",
+        reservation: { ...withdrawnLastReservation, status: "PENDING" },
+      };
+      expect(findWithdrawnCenterLetterForSlot([pendingLetter], slot)).toBeNull();
+    });
+
+    it("does not match a withdrawn letter to a different author's slot or a different slot", () => {
+      const otherSlot = { ...slot, id: "other-slot", assignedUserId: "someone-else" };
+      expect(findWithdrawnCenterLetterForSlot([withdrawnLetter], otherSlot)).toBeNull();
+
+      const differentDateSlot = { ...slot, scheduledDate: "2026-09-20" };
+      expect(findWithdrawnCenterLetterForSlot([withdrawnLetter], differentDateSlot)).toBeNull();
+    });
+
+    it("excludes the withdrawn letter from normal round grouping despite its real spaceRoundId", () => {
+      // Even though this letter carries the same `spaceRoundId` any real CENTER
+      // letter would, it must not fall back to that field the way a true-legacy
+      // (never-scheduled) letter does — otherwise it renders as a normal,
+      // already-sent round letter, which is the exact stale state being fixed.
+      expect(getSpaceLetterPresentationRoundId(withdrawnLetter, "unrelated-first-round")).toBeNull();
+    });
+
+    it("end-to-end: the ACTIVE-round pipeline shows the slot as withdrawn, not as a normal letter or an empty 'write now' slot", () => {
+      // Mirrors exactly what of-space-detail.tsx's RoundSection does: letters
+      // are grouped into `lettersByRound` by `getSpaceLetterPresentationRoundId`,
+      // then `emptyRoundSlots` is derived by filtering out slots any grouped
+      // letter occupies, then any still-empty slot is decorated via
+      // `findWithdrawnCenterLetterForSlot`.
+      const otherAuthorId = "other-participant";
+      const otherLetter = {
+        id: "other-letter",
+        spaceRoundId: roundId,
+        authorId: otherAuthorId,
+        letterType: "CENTER",
+        reservation: {
+          status: "SENT",
+          resolved: true,
+          roundId,
+          slotId: "other-slot",
+          authorId: otherAuthorId,
+          date: scheduledDate,
+          scheduledAt: withdrawnLastReservation.scheduledAt,
+        },
+        everScheduled: true,
+        lastReservation: null,
+      };
+      const allLetters = [withdrawnLetter, otherLetter];
+      const allSlots = [
+        slot,
+        { id: "other-slot", spaceRoundId: roundId, assignedUserId: otherAuthorId, scheduledDate },
+      ];
+
+      const lettersByRound: Record<string, typeof allLetters> = {};
+      for (const letter of allLetters) {
+        const key = getSpaceLetterPresentationRoundId(letter, null) ?? "__none__";
+        (lettersByRound[key] ??= []).push(letter);
+      }
+      const roundLetters = lettersByRound[roundId] ?? [];
+
+      // The withdrawn letter must never appear as a normal round letter/count —
+      // only the other participant's genuinely sent letter does.
+      expect(roundLetters).toEqual([otherLetter]);
+
+      const emptyRoundSlots = allSlots.filter(
+        (s) => !roundLetters.some((letter) => doesSpaceLetterOccupyRoundSlot(letter, s)),
+      );
+      // The withdrawn author's slot must remain empty (not hidden by the
+      // legacy spaceRoundId fallback) so it can render the withdrawn card;
+      // the other participant's slot is correctly occupied and excluded.
+      expect(emptyRoundSlots.map((s) => s.id)).toEqual([slotId]);
+
+      const withdrawnCenterLetters = allLetters.filter(
+        (letter) =>
+          letter.letterType === "CENTER" && letter.reservation == null && letter.everScheduled,
+      );
+      const decoratedSlot = findWithdrawnCenterLetterForSlot(withdrawnCenterLetters, emptyRoundSlots[0]);
+      expect(decoratedSlot).toBe(withdrawnLetter);
+    });
   });
 
   it("uses the safe anonymous display name for every letter type", () => {

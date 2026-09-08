@@ -61,6 +61,8 @@ type SpaceRoundCenterLetterMatch = {
   authorId: string;
   letterType: string | null | undefined;
   reservation?: SpaceReservationMetadataPresentation | null;
+  everScheduled?: boolean;
+  lastReservation?: SpaceReservationMetadataPresentation | null;
 };
 
 type SpaceRoundSlotAssignment = {
@@ -116,8 +118,18 @@ export function getSpaceLetterPresentationRoundId(
   letter: SpaceRoundCenterLetterMatch,
   firstRoundId: string | null,
 ): string | null {
-  if (letter.letterType === "CENTER" && letter.reservation !== undefined && letter.reservation !== null) {
-    return letter.reservation.resolved ? letter.reservation.roundId : null;
+  if (letter.letterType === "CENTER") {
+    if (letter.reservation !== undefined && letter.reservation !== null) {
+      return letter.reservation.resolved ? letter.reservation.roundId : null;
+    }
+    // No current reservation, but a scheduling history: this letter was
+    // written and then had its only send cancelled. It must not fall back
+    // to `spaceRoundId` (that fallback exists for true-legacy letters with
+    // no scheduling history at all) or it would render as a normal,
+    // already-sent round letter — the exact stale state this distinction
+    // exists to prevent. Callers keep it out of round grouping/counts and
+    // present it separately via `findWithdrawnCenterLetterForSlot`.
+    if (letter.everScheduled) return null;
   }
   if (letter.spaceRoundId) return letter.spaceRoundId;
   return letter.letterType === "OPENING" && !letter.reservation ? firstRoundId : null;
@@ -198,6 +210,40 @@ export function doesSpaceLetterOccupyRoundSlot<
       (letter.reservation.status === "PENDING" || letter.reservation.status === "SENT");
   }
   return letter.spaceRoundId === slot.spaceRoundId;
+}
+
+/**
+ * Finds the CENTER letter (if any) that was written for this exact slot and
+ * then had its only reservation cancelled. `reservation` is deliberately
+ * null once cancelled (see `doesSpaceLetterOccupyRoundSlot`), so this slot
+ * would otherwise look identical to one nobody has ever touched. `everScheduled`
+ * + `lastReservation` (which keeps the cancelled send's slot/round/date
+ * identity even though it's no longer "current") let presentation code tell
+ * the two apart without resurrecting the cancelled send as active.
+ *
+ * Deliberately does NOT match a letter with a live (non-null) `reservation`:
+ * that letter is either occupying the slot already (via
+ * `doesSpaceLetterOccupyRoundSlot`) or reserved for a different slot/round.
+ */
+export function findWithdrawnCenterLetterForSlot<
+  TLetter extends SpaceRoundCenterLetterMatch,
+  TSlot extends SpaceRoundSlotAssignment,
+>(letters: readonly TLetter[], slot: TSlot): TLetter | null {
+  for (const letter of letters) {
+    if (
+      letter.letterType !== "CENTER" ||
+      letter.authorId !== slot.assignedUserId ||
+      letter.reservation != null ||
+      !letter.everScheduled ||
+      !letter.lastReservation
+    ) {
+      continue;
+    }
+    if (isExactReservationForSlot(letter.lastReservation, slot, letter.authorId)) {
+      return letter;
+    }
+  }
+  return null;
 }
 
 /** Keeps reservable cards ahead of expired empty slots without changing their internal order. */

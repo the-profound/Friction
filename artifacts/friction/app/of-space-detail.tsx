@@ -72,6 +72,7 @@ import {
   sortSpaceRoundsForDetail,
   resolveUpcomingRoundCenterCards,
   doesSpaceLetterOccupyRoundSlot,
+  findWithdrawnCenterLetterForSlot,
   getSpaceLetterPresentationRoundId,
   type SpaceReservationMetadataPresentation,
 } from "@/lib/spaceRoundPresentation";
@@ -437,15 +438,25 @@ function SpaceRoundSlotCard({
   userId,
   now,
   onSchedule,
+  withdrawnLetter,
 }: {
   slot: SpaceRoundSlotWithUser;
   userId: string;
   now: Date;
   onSchedule: (slot: SpaceRoundSlotWithUser) => void;
+  /**
+   * A CENTER letter that was written for this exact slot and then had its
+   * only reservation cancelled. When present, this slot must show "wrote it,
+   * withheld the send" instead of the plain "내 차례" empty-slot state — and
+   * must never look like a slot nobody has touched, regardless of how close
+   * or far the deadline is.
+   */
+  withdrawnLetter?: SpaceLetter | null;
 }) {
   const isMySlot = slot.assignedUserId === userId;
   const isPastEmptySlot =
     !!slot.scheduledDate && !isKstSlotReservable(slot.scheduledDate, now);
+  const isWithdrawn = isMySlot && !!withdrawnLetter;
 
   return (
     <View
@@ -455,7 +466,9 @@ function SpaceRoundSlotCard({
       ]}
     >
       <View style={styles.slotCardTop}>
-        {isPastEmptySlot ? (
+        {isWithdrawn ? (
+          <Feather name="rotate-ccw" size={18} color={Colors.zinc500} />
+        ) : isPastEmptySlot ? (
           <Feather name="clock" size={18} color={Colors.zinc300} />
         ) : isMySlot ? (
           <Feather name="edit-3" size={18} color={Colors.zinc500} />
@@ -465,8 +478,19 @@ function SpaceRoundSlotCard({
       </View>
       <View style={styles.slotCardMiddle}>
         <Text style={isMySlot ? styles.slotCardMyText : styles.slotCardOtherText}>
-          {isPastEmptySlot ? "글 없음" : isMySlot ? "내 차례" : "추후 공개"}
+          {isWithdrawn
+            ? "예약을 취소했어요"
+            : isPastEmptySlot
+              ? "글 없음"
+              : isMySlot
+                ? "내 차례"
+                : "추후 공개"}
         </Text>
+        {isWithdrawn && withdrawnLetter?.articleTitle ? (
+          <Text style={styles.slotCardWithdrawnTitle} numberOfLines={1}>
+            {withdrawnLetter.articleTitle}
+          </Text>
+        ) : null}
       </View>
       {isMySlot && !isPastEmptySlot && (
         <ScalePressable
@@ -474,7 +498,9 @@ function SpaceRoundSlotCard({
           contentStyle={styles.slotCta}
           onPress={() => onSchedule(slot)}
         >
-          <Text style={styles.slotCtaText}>글 예약하기</Text>
+          <Text style={styles.slotCtaText}>
+            {isWithdrawn ? "다시 예약하기" : "글 예약하기"}
+          </Text>
         </ScalePressable>
       )}
       <View style={styles.slotCardFooter}>
@@ -495,6 +521,7 @@ function UpcomingRoundSlots({
   slots,
   isLoading,
   letters,
+  withdrawnCenterLetters,
   pendingCenterReservations,
   isPendingCenterLettersFetching,
   isAnonymous,
@@ -510,6 +537,7 @@ function UpcomingRoundSlots({
   slots: SpaceRoundSlotWithUser[];
   isLoading: boolean;
   letters: SpaceLetter[];
+  withdrawnCenterLetters?: SpaceLetter[];
   pendingCenterReservations: {
     spaceLetterId: string;
     reservation?: SpaceReservationMetadataPresentation | null;
@@ -573,6 +601,10 @@ function UpcomingRoundSlots({
               userId={userId}
               now={now}
               onSchedule={onSchedule}
+              withdrawnLetter={findWithdrawnCenterLetterForSlot(
+                withdrawnCenterLetters ?? [],
+                item.slot,
+              )}
             />
           ),
         },
@@ -597,6 +629,7 @@ function UpcomingRoundSlots({
 function RoundSection({
   round,
   letters,
+  withdrawnCenterLetters,
   spaceStatus,
   isOperator,
   isAnonymous,
@@ -613,6 +646,7 @@ function RoundSection({
 }: {
   round: SpaceRound;
   letters: SpaceLetter[];
+  withdrawnCenterLetters?: SpaceLetter[];
   spaceStatus: string;
   isOperator: boolean;
   isAnonymous: boolean;
@@ -667,6 +701,10 @@ function RoundSection({
         userId={userId}
         now={now}
         onSchedule={onScheduleSlot}
+        withdrawnLetter={findWithdrawnCenterLetterForSlot(
+          withdrawnCenterLetters ?? [],
+          slot,
+        )}
       />
     ),
   }));
@@ -779,6 +817,7 @@ function RoundSection({
         slots={roundSlots}
         isLoading={slotsQuery.isLoading}
         letters={letters}
+        withdrawnCenterLetters={withdrawnCenterLetters}
         pendingCenterReservations={pendingCenterReservations}
         isPendingCenterLettersFetching={isPendingCenterLettersFetching}
         isAnonymous={isAnonymous}
@@ -1186,6 +1225,23 @@ export default function SpaceDetailScreen() {
     }
     return map;
   }, [letters, firstRoundId]);
+
+  // CENTER letters whose only reservation history is cancelled: kept out of
+  // `lettersByRound` (they were never actually sent, so they must not appear
+  // as a real card in the round carousel or its letter count), but grouped
+  // here by the round their cancelled send named so `RoundSection` can still
+  // show the matching slot as "written, then withheld" instead of empty.
+  const withdrawnCenterLettersByRound = useMemo<Record<string, SpaceLetter[]>>(() => {
+    const map: Record<string, SpaceLetter[]> = {};
+    for (const letter of letters) {
+      if (letter.letterType !== "CENTER") continue;
+      if (letter.reservation != null || !letter.everScheduled) continue;
+      const roundId = letter.lastReservation?.roundId;
+      if (!roundId) continue;
+      (map[roundId] ??= []).push(letter);
+    }
+    return map;
+  }, [letters]);
 
   const isLoading = joinContextQuery.isLoading;
   const isError = joinContextQuery.isError;
@@ -1631,6 +1687,7 @@ export default function SpaceDetailScreen() {
                       key={round.id}
                       round={round}
                       letters={lettersByRound[round.id] ?? []}
+                      withdrawnCenterLetters={withdrawnCenterLettersByRound[round.id] ?? []}
                       spaceStatus={space.status}
                       isOperator={isOperator}
                       isAnonymous={space.isAnonymous}
@@ -2175,6 +2232,12 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc500,
+  },
+  slotCardWithdrawnTitle: {
+    ...Typography.body,
+    fontSize: 12,
+    color: Colors.zinc400,
+    marginTop: 4,
   },
   slotCtaOuter: {
     marginBottom: 8,
