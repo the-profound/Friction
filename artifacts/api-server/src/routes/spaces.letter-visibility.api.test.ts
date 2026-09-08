@@ -55,6 +55,46 @@ const state = vi.hoisted(() => {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    // Mirrors the confirmed production case: a finalized CENTER letter whose
+    // only scheduled-send history is two CANCELLED rows (created and
+    // cancelled well before the slot's assigned date). It must be withheld
+    // from other participants like a not-yet-due PENDING reservation.
+    {
+      id: "letter-cancelled-only",
+      spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      spaceRoundId: "round-a",
+      authorId: "author-a",
+      sourceArticleId: "article-a",
+      letterType: "CENTER" as const,
+      visibility: "PUBLIC" as "PUBLIC" | "RECIPIENT_ONLY",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ];
+
+  /**
+   * space_scheduled_sends rows. Empty by default so existing "never
+   * scheduled" behavior is unaffected; tests populate this to exercise the
+   * cancelled-only-history gate.
+   */
+  const scheduledSends: Array<{
+    spaceLetterId: string;
+    status: "PENDING" | "SENT" | "CANCELLED";
+    scheduledAt: Date;
+    createdAt: Date;
+  }> = [
+    {
+      spaceLetterId: "letter-cancelled-only",
+      status: "CANCELLED",
+      scheduledAt: new Date("2026-09-13T06:00:00.000Z"),
+      createdAt: new Date("2026-09-06T01:00:00.000Z"),
+    },
+    {
+      spaceLetterId: "letter-cancelled-only",
+      status: "CANCELLED",
+      scheduledAt: new Date("2026-09-13T06:00:00.000Z"),
+      createdAt: new Date("2026-09-06T02:00:00.000Z"),
+    },
   ];
 
   const members: Record<string, { id: string; userId: string; role: string; status: string }> = {
@@ -78,7 +118,7 @@ const state = vi.hoisted(() => {
       return m ? [m] : [];
     }
     if (source === "space_letters") return letters;
-    if (source === "space_scheduled_sends") return [];        // no active reservations → all visible by time
+    if (source === "space_scheduled_sends") return scheduledSends;
     if (source === "letter_recipient_access") {
       return accessRows.has(activeUser) ? [{ letterId: "letter-author" }] : [];
     }
@@ -238,5 +278,39 @@ describe("letter visibility filtering — GET /spaces/:id/letters", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as Array<{ id: string }>;
     expect(body.map((l) => l.id)).not.toContain("letter-author");
+  });
+
+  it("a letter never scheduled (no reservation at all) stays visible to other participants", async () => {
+    // letter-author has zero space_scheduled_sends rows in this fixture.
+    const res = await getLetters("outsider-a");
+    expect(res.status).toBe(200);
+    const body = await res.json() as Array<{ id: string }>;
+    expect(body.map((l) => l.id)).toContain("letter-author");
+  });
+
+  it("a letter whose reservation history is only CANCELLED rows is hidden from other participants (production repro: 스티브's '마감해봅시다')", async () => {
+    for (const userId of ["recipient-a", "outsider-a"]) {
+      const res = await getLetters(userId);
+      expect(res.status, `${userId} should get 200`).toBe(200);
+      const body = await res.json() as Array<{ id: string }>;
+      expect(
+        body.map((l) => l.id),
+        `${userId} should not see the cancelled-only letter`,
+      ).not.toContain("letter-cancelled-only");
+    }
+  });
+
+  it("a letter whose reservation history is only CANCELLED rows remains visible to its own author", async () => {
+    const res = await getLetters("author-a");
+    expect(res.status).toBe(200);
+    const body = await res.json() as Array<{ id: string }>;
+    expect(body.map((l) => l.id)).toContain("letter-cancelled-only");
+  });
+
+  it("a letter whose reservation history is only CANCELLED rows remains visible to operators", async () => {
+    const res = await getLetters("operator-a");
+    expect(res.status).toBe(200);
+    const body = await res.json() as Array<{ id: string }>;
+    expect(body.map((l) => l.id)).toContain("letter-cancelled-only");
   });
 });

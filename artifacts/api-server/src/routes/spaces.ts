@@ -2524,6 +2524,10 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   // that letter — a letter that was already SENT once but has since been
   // re-reserved (e.g. re-sent to a later date) must go back to hidden until
   // the new date arrives; an old SENT record must not keep it visible.
+  // A letter whose scheduled-send history consists ONLY of CANCELLED rows
+  // (i.e. it was scheduled and then deliberately un-scheduled) is treated the
+  // same as a not-yet-due PENDING reservation: hidden from other participants
+  // until it is rescheduled and that new send fires or its time arrives.
   // Letters with no reservation at all (never scheduled) remain immediately
   // visible, matching prior behavior. Operators and the letter's own author
   // always see it regardless of reservation state.
@@ -2550,7 +2554,13 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
       }
       for (const [letterId, letterSends] of sendsByLetter) {
         const activeSends = letterSends.filter((s) => s.status !== "CANCELLED");
-        if (activeSends.length === 0) continue; // only cancelled reservations exist — treat as unscheduled
+        if (activeSends.length === 0) {
+          // Only cancelled reservations exist — the author deliberately
+          // withdrew this letter. Withhold it from other participants just
+          // like a future PENDING reservation, until it is rescheduled.
+          hiddenLetterIds.add(letterId);
+          continue;
+        }
         const current = activeSends.reduce((latest, s) =>
           new Date(s.createdAt) > new Date(latest.createdAt) ? s : latest,
         );
