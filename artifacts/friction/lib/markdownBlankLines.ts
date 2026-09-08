@@ -13,13 +13,15 @@ export const CARET_PARAGRAPH_HTML =
  * beyond that boundary so authored vertical whitespace survives a round trip.
  */
 export function preserveMarkdownBlankLinesForEditor(markdown: string): string {
-  const normalized = String(markdown ?? "")
-    .replace(/\r\n?/g, "\n")
-    .replace(/^\n+/, "");
+  const normalized = String(markdown ?? "").replace(/\r\n?/g, "\n");
+  if (!normalized.trim()) return "";
+  const leadingNewlineCount = normalized.match(/^\n+/)?.[0].length ?? 0;
   const trailingNewlineCount = normalized.match(/\n+$/)?.[0].length ?? 0;
-  const body = trailingNewlineCount > 0
-    ? normalized.slice(0, -trailingNewlineCount)
-    : normalized;
+  const bodyStart = leadingNewlineCount;
+  const bodyEnd = trailingNewlineCount > 0
+    ? normalized.length - trailingNewlineCount
+    : normalized.length;
+  const body = normalized.slice(bodyStart, Math.max(bodyStart, bodyEnd));
   const preservedBody = body.replace(/\n{3,}/g, (run) => {
       const emptyParagraphCount = run.length - 2;
       return `\n\n${Array.from(
@@ -28,14 +30,20 @@ export function preserveMarkdownBlankLinesForEditor(markdown: string): string {
       ).join("\n\n")}\n\n`;
     });
 
-  if (!preservedBody || trailingNewlineCount < 3) {
-    return preservedBody;
-  }
+  const leading = leadingNewlineCount >= 3
+    ? `${Array.from(
+      { length: leadingNewlineCount - 2 },
+      () => PRESERVED_BLANK_PARAGRAPH,
+    ).join("\n\n")}\n\n`
+    : "";
+  const trailing = trailingNewlineCount >= 3
+    ? `\n\n${Array.from(
+      { length: trailingNewlineCount - 2 },
+      () => PRESERVED_BLANK_PARAGRAPH,
+    ).join("\n\n")}`
+    : "";
 
-  return `${preservedBody}\n\n${Array.from(
-    { length: trailingNewlineCount - 2 },
-    () => PRESERVED_BLANK_PARAGRAPH,
-  ).join("\n\n")}`;
+  return `${leading}${preservedBody}${trailing}`;
 }
 
 export function isPreservedBlankParagraphLine(line: string): boolean {
@@ -47,6 +55,8 @@ export function isPreservedBlankParagraphLine(line: string): boolean {
  * this marker inside them, then restore the marker runs after conversion.
  */
 const EMPTY_PARAGRAPH_MARKER_BASE = "FRICTIONEMPTYBLANKPARAGRAPH";
+const LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN =
+  `${EMPTY_PARAGRAPH_MARKER_BASE}X*`;
 
 export function createEmptyParagraphMarker(existingText: string): string {
   let marker = EMPTY_PARAGRAPH_MARKER_BASE;
@@ -61,15 +71,48 @@ export function restoreEmptyParagraphMarkers(markdown: string, marker: string): 
     return "\n".repeat(count + 2);
   };
 
-  // Turndown and the native serializer both trim their final block separator.
-  // Restore a terminal authored-empty run before handling body-internal runs.
-  const withTerminalRunRestored = markdown.replace(
+  // Restore boundary runs first because serializers trim the block separator
+  // on one side of the document. Then restore body-internal runs.
+  const withLeadingRunRestored = markdown.replace(
+    new RegExp(`^(?:${escaped}\\n\\n)*${escaped}\\n\\n`),
+    restoreRun,
+  );
+  const withTerminalRunRestored = withLeadingRunRestored.replace(
     new RegExp(`\\n\\n${escaped}(?:\\n\\n${escaped})*$`),
     restoreRun,
   );
 
   return withTerminalRunRestored.replace(
     new RegExp(`\\n\\n((?:${escaped}\\n\\n)+)`, "g"),
+    restoreRun,
+  );
+}
+
+/**
+ * Repairs documents saved by the former serializer bug. Only standalone
+ * marker-family lines are treated as internal data; the same text embedded in
+ * an authored sentence remains untouched.
+ */
+export function restoreLeakedEmptyParagraphMarkers(markdown: string): string {
+  const countMarkers = (match: string) =>
+    match.match(new RegExp(LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN, "g"))?.length ?? 0;
+  const restoreRun = (match: string) => "\n".repeat(countMarkers(match) + 2);
+  const leading = markdown.replace(
+    new RegExp(`^(?:${LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN}\\n\\n)+`),
+    restoreRun,
+  );
+  const terminal = leading.replace(
+    new RegExp(
+      `\\n\\n${LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN}`
+      + `(?:\\n\\n${LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN})*$`,
+    ),
+    restoreRun,
+  );
+  return terminal.replace(
+    new RegExp(
+      `\\n\\n((?:${LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN}\\n\\n)+)`,
+      "g",
+    ),
     restoreRun,
   );
 }

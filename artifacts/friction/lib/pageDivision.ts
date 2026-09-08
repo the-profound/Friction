@@ -1,5 +1,6 @@
 import { MarkdownPolicy } from "./policies";
 import { isPageDividerLine } from "./pageDividerMarkdown";
+import { balanceMarkdownEmphasisAcrossChunks } from "./markdownEmphasis";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 const HEADING_REGEX = /^#{1,6}\s+/;
@@ -460,10 +461,14 @@ export function runGreedy(
       return;
     }
 
+    const rawChunks = results.map(({ wordOffset, wordCount }) =>
+      allWords.slice(wordOffset, wordOffset + wordCount).join(" ")
+    );
+    const balancedChunks = balanceMarkdownEmphasisAcrossChunks(rawChunks);
     let offset = 0;
     for (let ri = 0; ri < results.length; ri++) {
       const { wordOffset, wordCount } = results[ri];
-      const rawChunk = allWords.slice(wordOffset, wordOffset + wordCount).join(" ");
+      const rawChunk = balancedChunks[ri];
       let chunk: string;
       if (isBlockquote && rawChunk) {
         chunk = "> " + rawChunk;

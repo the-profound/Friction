@@ -13,6 +13,7 @@ import {
   createEmptyParagraphMarker,
   preserveMarkdownBlankLinesForEditor,
   restoreEmptyParagraphMarkers,
+  restoreLeakedEmptyParagraphMarkers,
 } from "../markdownBlankLines";
 import { normalizePageDividersForMarkdownParser } from "../pageDividerMarkdown";
 import { markdownToHtml } from "../markdownRenderer";
@@ -148,8 +149,10 @@ describe("editor blank-line round trips", () => {
     ).toHaveLength(2);
   });
 
-  it("keeps the existing document-boundary cleanup contract", () => {
-    expect(preserveMarkdownBlankLinesForEditor("\n\n\n본문\n\n")).toBe("본문");
+  it("preserves authored blank paragraphs at the document boundaries", () => {
+    expect(preserveMarkdownBlankLinesForEditor("\n\n\n본문\n\n")).toBe(
+      '<p data-friction-preserved-blank="true"></p>\n\n본문',
+    );
   });
 
   it("preserves three-or-more terminal newlines as authored empty paragraphs", () => {
@@ -183,6 +186,12 @@ describe("editor blank-line round trips", () => {
     expect(
       restoreEmptyParagraphMarkers(`끝\n\n${marker}\n\n${marker}`, marker),
     ).toBe("끝\n\n\n\n");
+    expect(restoreEmptyParagraphMarkers(`${marker}\n\n시작`, marker)).toBe(
+      "\n\n\n시작",
+    );
+    expect(
+      restoreEmptyParagraphMarkers(`${marker}\n\n${marker}\n\n시작`, marker),
+    ).toBe("\n\n\n\n시작");
   });
 
   it("never mistakes authored marker-like text for an empty paragraph", () => {
@@ -191,6 +200,21 @@ describe("editor blank-line round trips", () => {
 
     expect(marker).not.toBe("FRICTIONEMPTYBLANKPARAGRAPH");
     expect(restoreEmptyParagraphMarkers(authored, marker)).toBe(authored);
+  });
+
+  it("repairs leaked standalone marker-family lines at every boundary", () => {
+    expect(
+      restoreLeakedEmptyParagraphMarkers(
+        "FRICTIONEMPTYBLANKPARAGRAPH\n\n시작"
+        + "\n\nFRICTIONEMPTYBLANKPARAGRAPHX\n\n중간"
+        + "\n\nFRICTIONEMPTYBLANKPARAGRAPHXX",
+      ),
+    ).toBe("\n\n\n시작\n\n\n중간\n\n\n");
+    expect(
+      restoreLeakedEmptyParagraphMarkers(
+        "문장 속 FRICTIONEMPTYBLANKPARAGRAPH 표식은 그대로",
+      ),
+    ).toBe("문장 속 FRICTIONEMPTYBLANKPARAGRAPH 표식은 그대로");
   });
 });
 
@@ -222,6 +246,167 @@ describe("division preserves authored blank lines", () => {
       "사진 설명\n\n\n![](https://example.com/a.jpg)\n---\n다음 사진\n\n\n\n![둘](https://example.com/b.jpg)";
 
     expect(mergePagesToContent(splitContentToPages(content))).toBe(content);
+  });
+
+  it("closes and reopens emphasis split across automatic page boundaries", () => {
+    const paragraph = "**첫째 둘째 셋째 넷째**";
+    const pages = runGreedy(
+      [paragraph],
+      { 0: 200 },
+      { 0: [
+        { wordOffset: 0, wordCount: 2 },
+        { wordOffset: 2, wordCount: 2 },
+      ] },
+      100,
+    );
+
+    expect(pages).toEqual(["**첫째 둘째**", "**셋째 넷째**"]);
+    expect(pages.every((page) => {
+      const html = markdownToHtml(page);
+      return html.includes("<strong>") && !html.includes("**");
+    })).toBe(true);
+  });
+
+  it.each([
+    ["_첫째 둘째 셋째 넷째 다섯째 여섯째_", "<em>"],
+    ["***첫째 둘째 셋째 넷째 다섯째 여섯째***", "<strong><em>"],
+  ])("keeps %s valid across three automatic pages", (paragraph, expectedTag) => {
+    const pages = runGreedy(
+      [paragraph],
+      { 0: 300 },
+      { 0: [
+        { wordOffset: 0, wordCount: 2 },
+        { wordOffset: 2, wordCount: 2 },
+        { wordOffset: 4, wordCount: 2 },
+      ] },
+      100,
+    );
+
+    expect(pages).toHaveLength(3);
+    expect(pages.every((page) => {
+      const html = markdownToHtml(page);
+      return html.includes(expectedTag);
+    })).toBe(true);
+  });
+
+  it.each([
+    "foo_bar baz_qux",
+    "version_1 continues_here",
+    "escaped\\_underscore next",
+    "https://example.com/path_with_name next_page",
+  ])("does not mutate literal underscores when splitting %s", (paragraph) => {
+    const pages = runGreedy(
+      [paragraph],
+      { 0: 200 },
+      { 0: [
+        { wordOffset: 0, wordCount: 1 },
+        { wordOffset: 1, wordCount: 1 },
+      ] },
+      100,
+    );
+
+    expect(pages).toEqual(paragraph.split(" "));
+  });
+
+  it.each([
+    ["2 * 2 more", 2],
+    ["escaped\\*asterisk next", 1],
+    ["stars *** separator", 2],
+  ] as const)("does not mutate literal asterisks when splitting %s", (paragraph, firstCount) => {
+    const words = paragraph.split(" ");
+    const pages = runGreedy(
+      [paragraph],
+      { 0: 200 },
+      { 0: [
+        { wordOffset: 0, wordCount: firstCount },
+        { wordOffset: firstCount, wordCount: words.length - firstCount },
+      ] },
+      100,
+    );
+
+    expect(pages).toEqual([
+      words.slice(0, firstCount).join(" "),
+      words.slice(firstCount).join(" "),
+    ]);
+  });
+
+  it("preserves nested emphasis across an automatic page boundary", () => {
+    const paragraph = "**굵게 _기울임 둘째_ 다시굵게**";
+    const pages = runGreedy(
+      [paragraph],
+      { 0: 200 },
+      { 0: [
+        { wordOffset: 0, wordCount: 2 },
+        { wordOffset: 2, wordCount: 2 },
+      ] },
+      100,
+    );
+
+    expect(pages).toEqual([
+      "**굵게 _기울임_**",
+      "**_둘째_ 다시굵게**",
+    ]);
+    expect(pages.every((page) => {
+      const html = markdownToHtml(page);
+      return html.includes("<strong>") && html.includes("<em>");
+    })).toBe(true);
+  });
+
+  it("does not add formatting to an unmatched opening delimiter", () => {
+    const paragraph = "*미완성 일반 문장";
+    const pages = runGreedy(
+      [paragraph],
+      { 0: 200 },
+      { 0: [
+        { wordOffset: 0, wordCount: 1 },
+        { wordOffset: 1, wordCount: 2 },
+      ] },
+      100,
+    );
+
+    expect(pages).toEqual(["*미완성", "일반 문장"]);
+  });
+
+  it.each([
+    ["**굵게 *함께 둘째***", true],
+    ["***함께 둘째* 굵게**", false],
+  ] as const)("preserves combined asterisk closers across a page boundary: %s", (paragraph, secondPageItalic) => {
+    const pages = runGreedy(
+      [paragraph],
+      { 0: 200 },
+      { 0: [
+        { wordOffset: 0, wordCount: 2 },
+        { wordOffset: 2, wordCount: 1 },
+      ] },
+      100,
+    );
+
+    expect(pages).toHaveLength(2);
+    const htmlPages = pages.map((page) => markdownToHtml(page));
+    expect(htmlPages[0]).toContain("<strong>");
+    expect(htmlPages[0]).toContain("<em>");
+    expect(htmlPages[1]).toContain("<strong>");
+    expect(htmlPages[1].includes("<em>")).toBe(secondPageItalic);
+    expect(htmlPages.every((html) => !html.includes("***"))).toBe(true);
+  });
+
+  it("preserves bold nested inside italic when a combined opener crosses pages", () => {
+    const pages = runGreedy(
+      ["***함께 둘째** 기울임*"],
+      { 0: 200 },
+      { 0: [
+        { wordOffset: 0, wordCount: 2 },
+        { wordOffset: 2, wordCount: 1 },
+      ] },
+      100,
+    );
+    const htmlPages = pages.map((page) => markdownToHtml(page));
+
+    expect(htmlPages[0]).toContain("<strong>");
+    expect(htmlPages[0]).toContain("<em>");
+    expect(htmlPages[1]).not.toContain("<strong>");
+    expect(htmlPages[1]).toContain("<em>");
+    expect(htmlPages.every((html) => !html.includes("*"))).toBe(true);
   });
 });
 

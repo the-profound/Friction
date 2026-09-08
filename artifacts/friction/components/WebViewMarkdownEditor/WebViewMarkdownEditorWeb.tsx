@@ -41,6 +41,7 @@ import {
   createEmptyParagraphMarker,
   preserveMarkdownBlankLinesForEditor,
   restoreEmptyParagraphMarkers,
+  restoreLeakedEmptyParagraphMarkers,
 } from "@/lib/markdownBlankLines";
 import { BlankAwareParagraph } from "./blankAwareParagraph";
 import {
@@ -62,7 +63,9 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
     const normalized = preserveMarkdownBlankLinesForEditor(
       normalizePageDividersForMarkdownParser(
-        normalizeMarkdownEmphasisDelimiters(md || ""),
+        normalizeMarkdownEmphasisDelimiters(
+          restoreLeakedEmptyParagraphMarkers(md || ""),
+        ),
       ),
     );
     const leadingH1 = splitLeadingH1Markdown(normalized);

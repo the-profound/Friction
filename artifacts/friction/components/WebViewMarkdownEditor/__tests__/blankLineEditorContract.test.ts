@@ -54,4 +54,17 @@ describe("editor blank paragraph ownership", () => {
     expect(native).toContain('tag === "strong" || tag === "b"');
     expect(generated).toContain("data-friction-caret-paragraph");
   });
+
+  it("parses multiline emphasis in the native editor before replacing line breaks", () => {
+    const native = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
+
+    expect(native).toContain(
+      'out.replace(/\\*\\*\\*([^*]+?)\\*\\*\\*/g, "<strong><em>$1</em></strong>")',
+    );
+    expect(native).toContain(
+      'renderInline(paraLines.join("\\n")).replace(/\\n/g, "<br>")',
+    );
+    expect(native).not.toContain("[^*\\n]+?");
+    expect(native).not.toContain("[^_\\n]+?");
+  });
 });

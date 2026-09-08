@@ -31,6 +31,7 @@ import {
   preserveMarkdownBlankLinesForEditor,
   PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE,
   restoreEmptyParagraphMarkers,
+  restoreLeakedEmptyParagraphMarkers,
 } from "../../../lib/markdownBlankLines";
 import { BlankAwareParagraph } from "../blankAwareParagraph";
 import { handleTitleEnter, insertTitleSoftBreak } from "../titleKeyboardContract";
@@ -551,9 +552,13 @@ function escapeHtml(s: string): string {
 
 function renderInline(text: string): string {
   let out = escapeHtml(text);
-  out = out.replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>");
-  out = out.replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, "$1<em>$2</em>");
+  out = out.replace(/\*\*\*([^*]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+  out = out.replace(
+    /\*\*((?:(?!\*\*)[\s\S])+?)\*\*/g,
+    "<strong>$1</strong>",
+  );
+  out = out.replace(/(^|[^*])\*([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
+  out = out.replace(/(^|[^_])_([^_]+?)_(?!_)/g, "$1<em>$2</em>");
   out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, "<u>$1</u>");
   return out;
 }
@@ -586,7 +591,9 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
   try {
     const text = preserveMarkdownBlankLinesForEditor(
       normalizePageDividersForMarkdownParser(
-        normalizeMarkdownEmphasisDelimiters(md || ""),
+        normalizeMarkdownEmphasisDelimiters(
+          restoreLeakedEmptyParagraphMarkers(md || ""),
+        ),
       ),
     );
     const leadingH1 = splitLeadingH1Markdown(text);
@@ -725,9 +732,7 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
       const segments = splitByImages(paraContent);
       const hasImages = segments.some((s) => s.type === "image");
       if (!hasImages) {
-        const inner = paraLines
-          .map((l, idx) => (idx === 0 ? renderInline(l) : "<br>" + renderInline(l)))
-          .join("");
+        const inner = renderInline(paraLines.join("\n")).replace(/\n/g, "<br>");
         blocks.push(`<p>${inner}</p>`);
       } else {
         for (const seg of segments) {

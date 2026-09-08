@@ -6,6 +6,7 @@ import {
 } from "./inlineImages";
 import { normalizePageDividersForMarkdownParser } from "./pageDividerMarkdown";
 import { normalizeMarkdownEmphasisDelimiters } from "./markdownEmphasis";
+import { restoreLeakedEmptyParagraphMarkers } from "./markdownBlankLines";
 
 function escapeHtml(s: string): string {
   return s
@@ -92,9 +93,13 @@ export function blocksToHtml(blocks: MarkdownBlockType[]): string {
 
 function renderInline(text: string): string {
   let out = escapeHtml(text);
-  out = out.replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>");
-  out = out.replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, "$1<em>$2</em>");
+  out = out.replace(/\*\*\*([^*]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+  out = out.replace(
+    /\*\*((?:(?!\*\*)[\s\S])+?)\*\*/g,
+    "<strong>$1</strong>",
+  );
+  out = out.replace(/(^|[^*])\*([^*]+?)\*(?!\*)/g, "$1<em>$2</em>");
+  out = out.replace(/(^|[^_])_([^_]+?)_(?!_)/g, "$1<em>$2</em>");
   out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, "<u>$1</u>");
   return out;
 }
@@ -114,7 +119,9 @@ function renderImageLine(line: string, imagePixelRatio = 1): string | null {
 export function markdownToHtml(md: string, imagePixelRatio = 1): string {
   try {
     const text = normalizePageDividersForMarkdownParser(
-      normalizeMarkdownEmphasisDelimiters(md || ""),
+      normalizeMarkdownEmphasisDelimiters(
+        restoreLeakedEmptyParagraphMarkers(md || ""),
+      ),
     );
     const lines = text.split("\n");
     const blocks: string[] = [];
@@ -179,7 +186,7 @@ export function markdownToHtml(md: string, imagePixelRatio = 1): string {
         !/^(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i]) &&
         !renderImageLine(lines[i], imagePixelRatio)
       ) { paraLines.push(lines[i]); i++; }
-      const pInner = paraLines.map((l, idx) => idx === 0 ? renderInline(l) : "<br>" + renderInline(l)).join("");
+      const pInner = renderInline(paraLines.join("\n")).replace(/\n/g, "<br>");
       blocks.push(`<p>${pInner}</p>`);
     }
 
