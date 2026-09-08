@@ -2529,50 +2529,51 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   // same as a not-yet-due PENDING reservation: hidden from other participants
   // until it is rescheduled and that new send fires or its time arrives.
   // Letters with no reservation at all (never scheduled) remain immediately
-  // visible, matching prior behavior. Operators and the letter's own author
-  // always see it regardless of reservation state.
-  if (!isOperator) {
-    const otherLetterIds = letters.filter((l) => l.authorId !== callerId).map((l) => l.id);
-    if (otherLetterIds.length > 0) {
-      const sends = await db
-        .select({
-          spaceLetterId: spaceScheduledSendsTable.spaceLetterId,
-          status: spaceScheduledSendsTable.status,
-          scheduledAt: spaceScheduledSendsTable.scheduledAt,
-          createdAt: spaceScheduledSendsTable.createdAt,
-        })
-        .from(spaceScheduledSendsTable)
-        .where(inArray(spaceScheduledSendsTable.spaceLetterId, otherLetterIds));
+  // visible, matching prior behavior. Only the letter's own author bypasses
+  // this release gate; operator and recipient privileges must not disclose a
+  // future reservation.
+  const otherLetterIds = letters.filter((l) => l.authorId !== callerId).map((l) => l.id);
+  if (otherLetterIds.length > 0) {
+    const sends = await db
+      .select({
+        spaceLetterId: spaceScheduledSendsTable.spaceLetterId,
+        status: spaceScheduledSendsTable.status,
+        scheduledAt: spaceScheduledSendsTable.scheduledAt,
+        createdAt: spaceScheduledSendsTable.createdAt,
+      })
+      .from(spaceScheduledSendsTable)
+      .where(inArray(spaceScheduledSendsTable.spaceLetterId, otherLetterIds));
 
-      const now = new Date();
-      const hiddenLetterIds = new Set<string>();
-      const sendsByLetter = new Map<string, typeof sends>();
-      for (const s of sends) {
-        const bucket = sendsByLetter.get(s.spaceLetterId) ?? [];
-        bucket.push(s);
-        sendsByLetter.set(s.spaceLetterId, bucket);
-      }
-      for (const [letterId, letterSends] of sendsByLetter) {
-        const activeSends = letterSends.filter((s) => s.status !== "CANCELLED");
-        if (activeSends.length === 0) {
-          // Only cancelled reservations exist — the author deliberately
-          // withdrew this letter. Withhold it from other participants just
-          // like a future PENDING reservation, until it is rescheduled.
-          hiddenLetterIds.add(letterId);
-          continue;
-        }
-        const current = activeSends.reduce((latest, s) =>
-          new Date(s.createdAt) > new Date(latest.createdAt) ? s : latest,
-        );
-        const isVisible =
-          current.status === "SENT" || (current.status === "PENDING" && new Date(current.scheduledAt) <= now);
-        if (!isVisible) hiddenLetterIds.add(letterId);
-      }
-      if (hiddenLetterIds.size > 0) {
-        letters = letters.filter((l) => l.authorId === callerId || !hiddenLetterIds.has(l.id));
-      }
+    const now = new Date();
+    const hiddenLetterIds = new Set<string>();
+    const sendsByLetter = new Map<string, typeof sends>();
+    for (const s of sends) {
+      const bucket = sendsByLetter.get(s.spaceLetterId) ?? [];
+      bucket.push(s);
+      sendsByLetter.set(s.spaceLetterId, bucket);
     }
+    for (const [letterId, letterSends] of sendsByLetter) {
+      const activeSends = letterSends.filter((s) => s.status !== "CANCELLED");
+      if (activeSends.length === 0) {
+        // Only cancelled reservations exist — the author deliberately
+        // withdrew this letter. Withhold it from other participants just
+        // like a future PENDING reservation, until it is rescheduled.
+        hiddenLetterIds.add(letterId);
+        continue;
+      }
+      const current = activeSends.reduce((latest, s) =>
+        new Date(s.createdAt) > new Date(latest.createdAt) ? s : latest,
+      );
+      const isVisible =
+        current.status === "SENT" || (current.status === "PENDING" && new Date(current.scheduledAt) <= now);
+      if (!isVisible) hiddenLetterIds.add(letterId);
+    }
+    if (hiddenLetterIds.size > 0) {
+      letters = letters.filter((l) => l.authorId === callerId || !hiddenLetterIds.has(l.id));
+    }
+  }
 
+  if (!isOperator) {
     // Visibility filter: RECIPIENT_ONLY letters authored by others are only visible
     // to users listed in letter_recipient_access for that letter.
     const recipientOnlyOtherLetterIds = letters

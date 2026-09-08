@@ -70,6 +70,17 @@ const state = vi.hoisted(() => {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    {
+      id: "letter-future",
+      spaceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      spaceRoundId: "round-a",
+      authorId: "author-a",
+      sourceArticleId: "article-a",
+      letterType: "CENTER" as const,
+      visibility: "RECIPIENT_ONLY" as "PUBLIC" | "RECIPIENT_ONLY",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ];
 
   /**
@@ -94,6 +105,12 @@ const state = vi.hoisted(() => {
       status: "CANCELLED",
       scheduledAt: new Date("2026-09-13T06:00:00.000Z"),
       createdAt: new Date("2026-09-06T02:00:00.000Z"),
+    },
+    {
+      spaceLetterId: "letter-future",
+      status: "PENDING",
+      scheduledAt: new Date("2099-09-13T06:00:00.000Z"),
+      createdAt: new Date("2026-09-07T02:00:00.000Z"),
     },
   ];
 
@@ -120,7 +137,9 @@ const state = vi.hoisted(() => {
     if (source === "space_letters") return letters;
     if (source === "space_scheduled_sends") return scheduledSends;
     if (source === "letter_recipient_access") {
-      return accessRows.has(activeUser) ? [{ letterId: "letter-author" }] : [];
+      return accessRows.has(activeUser)
+        ? [{ letterId: "letter-author" }, { letterId: "letter-future" }]
+        : [];
     }
     if (source === "users") {
       return [
@@ -157,6 +176,43 @@ const state = vi.hoisted(() => {
     accessRows,
     setActiveUser: (userId: string) => { activeUser = userId; },
     setLetterVisibility: (v: "PUBLIC" | "RECIPIENT_ONLY") => { letters[0].visibility = v; },
+    resetScheduledSends: () => {
+      scheduledSends.splice(
+        0,
+        scheduledSends.length,
+        {
+          spaceLetterId: "letter-cancelled-only",
+          status: "CANCELLED",
+          scheduledAt: new Date("2026-09-13T06:00:00.000Z"),
+          createdAt: new Date("2026-09-06T01:00:00.000Z"),
+        },
+        {
+          spaceLetterId: "letter-cancelled-only",
+          status: "CANCELLED",
+          scheduledAt: new Date("2026-09-13T06:00:00.000Z"),
+          createdAt: new Date("2026-09-06T02:00:00.000Z"),
+        },
+        {
+          spaceLetterId: "letter-future",
+          status: "PENDING",
+          scheduledAt: new Date("2099-09-13T06:00:00.000Z"),
+          createdAt: new Date("2026-09-07T02:00:00.000Z"),
+        },
+      );
+    },
+    setFutureLetterSends: (rows: Array<{
+      status: "PENDING" | "SENT" | "CANCELLED";
+      scheduledAt: Date;
+      createdAt: Date;
+    }>) => {
+      const retained = scheduledSends.filter((send) => send.spaceLetterId !== "letter-future");
+      scheduledSends.splice(
+        0,
+        scheduledSends.length,
+        ...retained,
+        ...rows.map((row) => ({ ...row, spaceLetterId: "letter-future" })),
+      );
+    },
     setSpaceAnonymous: (anon: boolean) => { /* handled via db mock below */ },
   };
 });
@@ -223,6 +279,7 @@ async function getLetters(userId: string) {
 describe("letter visibility filtering — GET /spaces/:id/letters", () => {
   beforeEach(async () => {
     state.setLetterVisibility("PUBLIC");    // reset to PUBLIC before each test
+    state.resetScheduledSends();
     const app = express();
     app.use(express.json());
     app.use(router);
@@ -307,10 +364,72 @@ describe("letter visibility filtering — GET /spaces/:id/letters", () => {
     expect(body.map((l) => l.id)).toContain("letter-cancelled-only");
   });
 
-  it("a letter whose reservation history is only CANCELLED rows remains visible to operators", async () => {
+  it("a letter whose reservation history is only CANCELLED rows is hidden from operators too", async () => {
     const res = await getLetters("operator-a");
     expect(res.status).toBe(200);
     const body = await res.json() as Array<{ id: string }>;
-    expect(body.map((l) => l.id)).toContain("letter-cancelled-only");
+    expect(body.map((l) => l.id)).not.toContain("letter-cancelled-only");
+  });
+
+  it("a future PENDING letter is hidden from operators, ordinary participants, and recipients", async () => {
+    for (const userId of ["operator-a", "outsider-a", "recipient-a"]) {
+      const res = await getLetters(userId);
+      expect(res.status, `${userId} should get 200`).toBe(200);
+      const body = await res.json() as Array<{ id: string }>;
+      expect(body.map((l) => l.id), `${userId} must not see future content`)
+        .not.toContain("letter-future");
+    }
+  });
+
+  it("a future PENDING letter remains visible to its author", async () => {
+    const res = await getLetters("author-a");
+    expect(res.status).toBe(200);
+    const body = await res.json() as Array<{ id: string }>;
+    expect(body.map((l) => l.id)).toContain("letter-future");
+  });
+
+  it("a PENDING letter becomes visible to its recipient once scheduledAt is due", async () => {
+    state.setFutureLetterSends([{
+      status: "PENDING",
+      scheduledAt: new Date("2000-01-01T00:00:00.000Z"),
+      createdAt: new Date("2026-09-07T02:00:00.000Z"),
+    }]);
+    const res = await getLetters("recipient-a");
+    expect(res.status).toBe(200);
+    const body = await res.json() as Array<{ id: string }>;
+    expect(body.map((l) => l.id)).toContain("letter-future");
+  });
+
+  it("a SENT letter is visible even when its scheduledAt is in the future", async () => {
+    state.setFutureLetterSends([{
+      status: "SENT",
+      scheduledAt: new Date("2099-09-13T06:00:00.000Z"),
+      createdAt: new Date("2026-09-07T02:00:00.000Z"),
+    }]);
+    const res = await getLetters("recipient-a");
+    expect(res.status).toBe(200);
+    const body = await res.json() as Array<{ id: string }>;
+    expect(body.map((l) => l.id)).toContain("letter-future");
+  });
+
+  it("an old SENT row does not reveal a newer future PENDING re-reservation", async () => {
+    state.setFutureLetterSends([
+      {
+        status: "SENT",
+        scheduledAt: new Date("2000-01-01T00:00:00.000Z"),
+        createdAt: new Date("2026-09-06T02:00:00.000Z"),
+      },
+      {
+        status: "PENDING",
+        scheduledAt: new Date("2099-09-13T06:00:00.000Z"),
+        createdAt: new Date("2026-09-07T02:00:00.000Z"),
+      },
+    ]);
+    for (const userId of ["operator-a", "recipient-a", "outsider-a"]) {
+      const res = await getLetters(userId);
+      expect(res.status).toBe(200);
+      const body = await res.json() as Array<{ id: string }>;
+      expect(body.map((l) => l.id)).not.toContain("letter-future");
+    }
   });
 });
