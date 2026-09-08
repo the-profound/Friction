@@ -30,7 +30,16 @@
  *   poll (process restart/downtime) is caught up automatically on the next
  *   run — no reservation is permanently skipped. Each run reports which
  *   delivery slots it committed rows for, and the scheduler immediately
- *   rechecks the letter-arrived push job for each of them.
+ *   rechecks the letter-arrived push job for each of them. The sweep is also
+ *   fired once exactly at the next 06:00 KST (same timer as the
+ *   letter-arrived push below), in addition to the 5-minute interval — so a
+ *   reservation due right at 06:00 lands in the recipient's inbox at that
+ *   moment instead of waiting up to ~5 minutes for the next periodic poll.
+ *   Running the sweep from both triggers at nearly the same time is safe:
+ *   `processOneScheduledSend` locks each reservation row (`FOR UPDATE`)
+ *   inside its transaction and only transitions PENDING -> SENT once, so a
+ *   trigger that loses the race always sees the already-committed state and
+ *   performs idempotent repair instead of a duplicate send.
  *
  * Deduplication: each (spaceId, dayMilestone) pair is tracked in an
  * in-memory Set so that repeated hourly polls never dispatch the same
@@ -348,23 +357,37 @@ export function startScheduler() {
     setInterval(runScheduledSendSweep, SCHEDULED_SEND_POLL_INTERVAL_MS);
   }, 8000);
 
-  // Letter-arrived push: schedule for the next 06:00 KST, then every 24h.
-  // This timer is now just one of two triggers for a given slot (the sweep
-  // above is the other, and typically fires first) — claimNewLetterRecipientsForSlot's
-  // atomic per-recipient-per-slot claim means whichever trigger runs first
-  // for a slot does the notifying, and the other is a safe no-op.
+  // Exact-06:00 delivery sweep + letter-arrived push: schedule for the next
+  // 06:00 KST, then every 24h. Two things fire at this exact moment:
+  //   1. The scheduled-send sweep itself (the same function driven by the
+  //      5-minute interval above) — so a reservation due exactly at 06:00
+  //      KST is committed to the recipient's inbox right away instead of
+  //      waiting up to ~5 minutes for the next periodic poll. See the
+  //      "Reservation processing" note atop this file for why running it
+  //      from both triggers close together is safe.
+  //   2. The letter-arrived push recheck for the current slot — one of two
+  //      triggers for a given slot (the sweep's own post-commit recheck is
+  //      the other, and typically fires first since it runs synchronously
+  //      right after this same sweep call) — claimNewLetterRecipientsForSlot's
+  //      atomic per-recipient-per-slot claim means whichever trigger runs
+  //      first for a slot does the notifying, and the other is a safe no-op.
   const msToFirst = msUntilNextKst6am();
   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 
   logger.info(
     { msToFirst, nextRunInMinutes: Math.round(msToFirst / 60_000) },
-    "scheduler: letter-arrived push scheduled",
+    "scheduler: exact-06:00 delivery sweep + letter-arrived push scheduled",
   );
 
   const runForCurrentSlot = () => notifyLetterArrivalsForSlot(normalizeToKst6(new Date()));
 
-  setTimeout(() => {
+  const runExact6amTriggers = () => {
+    runScheduledSendSweep();
     runForCurrentSlot();
-    setInterval(runForCurrentSlot, TWENTY_FOUR_HOURS);
+  };
+
+  setTimeout(() => {
+    runExact6amTriggers();
+    setInterval(runExact6amTriggers, TWENTY_FOUR_HOURS);
   }, msToFirst);
 }

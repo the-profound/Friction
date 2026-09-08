@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Regression coverage for the missed 06:00 letter-arrived push scenario:
@@ -45,7 +45,9 @@ const { claimNewLetterRecipientsForSlot } = await import("./lib/letterNotificati
 const { sendPush } = await import("./lib/pushSender");
 const { processDueScheduledSends } = await import("./lib/scheduledSendProcessor");
 const { synchronizeSpaceRoundStatuses } = await import("./lib/spaceRoundStatus");
-const { runScheduledSendSweep, notifyLetterArrivalsForSlot } = await import("./scheduler");
+const { runScheduledSendSweep, notifyLetterArrivalsForSlot, startScheduler } = await import(
+  "./scheduler"
+);
 
 // The exact production slot from the incident: 2026-09-08 06:00:00 KST.
 const SLOT = new Date("2026-09-08T06:00:00.000+09:00");
@@ -150,5 +152,59 @@ describe("runScheduledSendSweep — post-delivery notification recheck", () => {
     expect(claimNewLetterRecipientsForSlot).toHaveBeenNthCalledWith(1, SLOT);
     expect(claimNewLetterRecipientsForSlot).toHaveBeenNthCalledWith(2, otherSlot);
     expect(sendPush).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * Regression coverage for the exact-06:00 delivery sweep trigger (closing the
+ * remaining gap from the incident above at the source): a reservation due
+ * right at 06:00 KST must not have to wait for the next 5-minute periodic
+ * poll. `startScheduler` now fires `runScheduledSendSweep` once exactly at
+ * the next 06:00 KST — the same timer that already drives the letter-arrived
+ * push recheck — in addition to the pre-existing 5-minute interval.
+ */
+describe("startScheduler — exact-06:00 KST trigger for the delivery sweep", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(processDueScheduledSends).mockReset().mockResolvedValue({
+      sentCount: 0,
+      failedCount: 0,
+      affectedSlots: [],
+    });
+    vi.mocked(claimNewLetterRecipientsForSlot).mockReset().mockResolvedValue([]);
+    vi.mocked(synchronizeSpaceRoundStatuses).mockReset().mockResolvedValue(undefined as any);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("runs the scheduled-send sweep exactly at the next 06:00 KST — ahead of both the 5-minute periodic poll and without waiting for it", async () => {
+    // Exactly 1 hour before the next 06:00 KST slot.
+    vi.setSystemTime(new Date("2026-09-08T05:00:00.000+09:00"));
+
+    startScheduler();
+
+    // Startup catch-up sweep fires at +8s, per the pre-existing 5-minute
+    // interval wiring (unchanged by this task).
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(processDueScheduledSends).toHaveBeenCalledTimes(1);
+    vi.mocked(processDueScheduledSends).mockClear();
+
+    // Advance to 05:59:00. The periodic 5-minute interval (anchored at the
+    // +8s startup run) ticks repeatedly in this window — that's expected
+    // and irrelevant to this test, so clear it out.
+    await vi.advanceTimersByTimeAsync(59 * 60 * 1000 - 8_000);
+    vi.mocked(processDueScheduledSends).mockClear();
+
+    // One second before 06:00 KST: neither the exact-06:00 trigger nor the
+    // next periodic tick (which lands at 06:00:08) has fired yet.
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(processDueScheduledSends).not.toHaveBeenCalled();
+
+    // Crossing 06:00:00 KST — the new exact-time trigger fires here, still
+    // ~8 seconds ahead of the next periodic 5-minute tick.
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(processDueScheduledSends).toHaveBeenCalled();
   });
 });

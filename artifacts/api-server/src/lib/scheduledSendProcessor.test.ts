@@ -337,6 +337,54 @@ describe("space scheduled-send delivery", () => {
     expect(state.inserts.some((entry) => entry.table === state.tables.inbox)).toBe(true);
   });
 
+  it("processing the same due reservation twice in quick succession is a safe no-op the second time — e.g. the exact-06:00 trigger and the periodic sweep racing", async () => {
+    // First run: PENDING -> SENT, inbox rows committed. Simulates the
+    // exact-06:00 trigger (or whichever of the two triggers wins the race)
+    // delivering the reservation.
+    queueSuccessfulDelivery();
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 1,
+      failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T00:00:00.000Z")],
+    });
+    // One update snapshots recipients (recipientsSnapshottedAt), the other
+    // transitions PENDING -> SENT.
+    expect(state.updates).toHaveLength(2);
+    expect(state.updates).toContainEqual(
+      expect.objectContaining({ status: "SENT", failureReason: null }),
+    );
+    state.updates.length = 0;
+    state.inserts.length = 0;
+
+    // Second run moments later (e.g. the periodic 5-minute poll firing right
+    // after the exact-06:00 trigger already delivered it): the row is now
+    // SENT with a recorded recipient snapshot, so this must only repair
+    // (idempotent onConflictDoNothing inserts) and never re-transition the
+    // status or double up the delivery.
+    state.responses.push(
+      [{ id: "send-1" }],
+      [
+        dueSend({
+          status: "SENT",
+          sentAt: new Date("2020-01-01T00:00:05.000Z"),
+          recipientsSnapshottedAt: new Date("2020-01-01T00:00:05.000Z"),
+        }),
+      ],
+      [letter],
+      [space],
+      [readableArticle],
+      [{ recipientId: "participant-1" }, { recipientId: "operator-1" }],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T00:00:00.000Z")],
+    });
+    expect(state.updates).toHaveLength(0);
+  });
+
   it("fails a CENTER send whose slot was deleted or reassigned without inbox delivery", async () => {
     const centerSend = dueSend({
       slotId: "slot-1", reservedRoundId: "round-1", reservedDate: "2020-01-02",
