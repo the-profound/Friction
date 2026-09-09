@@ -131,3 +131,4 @@
 - [Friction letter-arrival notification idempotency](friction-letter-arrival-notification-idempotency.md) — exact-slot match + durable per-recipient-per-slot claim, triggered from both the 06:00 timer and the delivery sweep, closes the 5-min-poll-vs-06:00-timer race.
 - [reservation vs lastReservation](friction-reservation-vs-last-reservation.md) — `lastReservation` (any status) preserves a cancelled send's exact slot identity so UI can show "withdrawn" instead of "never touched", without resurrecting it as active.
 - [Friction article close atomicity](friction-article-close-atomicity.md) — closing must persist the complete title/content/pages snapshot with DIVIDING→CLOSING in one transaction; same-snapshot retries are successful.
+- [Active-reading restore authority](friction-active-reading-restore-authority.md) — auth landing must wait for persisted reading hydration; foreground reads and local writes share one revisioned queue.

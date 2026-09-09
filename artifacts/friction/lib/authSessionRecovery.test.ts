@@ -14,7 +14,13 @@ import {
 import {
   getActiveReadingForUser,
   getAuthNavigationDecision,
+  getProtectedNavigationDecision,
 } from "./authNavigation";
+import {
+  createAsyncOperationQueue,
+  createRevisionGuard,
+  isActiveReadingState,
+} from "@/contexts/ActiveReadingContext";
 
 type TestSession = SessionLike & { id: string };
 
@@ -511,4 +517,190 @@ describe("auth navigation boundary", () => {
       ),
     ).toBeNull();
   });
+
+  it("waits for delayed active-reading storage before choosing the native landing route", () => {
+    expect(
+      getProtectedNavigationDecision({
+        isActiveReadingHydrated: false,
+        activeSession: null,
+        userId: "user-a",
+        pathname: "/",
+        shouldOpenRecords: true,
+      }),
+    ).toEqual({ kind: "wait" });
+  });
+
+  it.each(["ios", "android"])("restores the same basic reading on %s cold start", () => {
+    const activeSession = {
+      userId: "user-a",
+      articleId: "article-1",
+      inboxId: "inbox-1",
+      mode: "basic",
+    };
+    expect(
+      getProtectedNavigationDecision({
+        isActiveReadingHydrated: true,
+        activeSession,
+        userId: "user-a",
+        pathname: "/",
+        shouldOpenRecords: true,
+      }),
+    ).toEqual({ kind: "restore-reading", activeSession });
+  });
+
+  it.each(["ios", "android"])("restores reading after returning to the foreground on %s", () => {
+    const activeSession = {
+      userId: "user-a",
+      articleId: "article-1",
+      mode: "basic",
+    };
+    expect(
+      getProtectedNavigationDecision({
+        isActiveReadingHydrated: true,
+        activeSession,
+        userId: "user-a",
+        pathname: "/on",
+        shouldOpenRecords: false,
+      }),
+    ).toEqual({ kind: "restore-reading", activeSession });
+  });
+
+  it("opens records instead of restoring another account or cleared completion", () => {
+    const otherAccountSession = {
+      userId: "user-a",
+      articleId: "article-1",
+      mode: "basic",
+    };
+    expect(
+      getProtectedNavigationDecision({
+        isActiveReadingHydrated: true,
+        activeSession: otherAccountSession,
+        userId: "user-b",
+        pathname: "/",
+        shouldOpenRecords: true,
+      }),
+    ).toEqual({ kind: "open-records" });
+    expect(
+      getProtectedNavigationDecision({
+        isActiveReadingHydrated: true,
+        activeSession: null,
+        userId: "user-a",
+        pathname: "/",
+        shouldOpenRecords: true,
+      }),
+    ).toEqual({ kind: "open-records" });
+  });
+
+  it("does not replace an already-open reading route or force a re-read session", () => {
+    const basicSession = {
+      userId: "user-a",
+      articleId: "article-1",
+      mode: "basic",
+    };
+    expect(
+      getProtectedNavigationDecision({
+        isActiveReadingHydrated: true,
+        activeSession: basicSession,
+        userId: "user-a",
+        pathname: "/read",
+        shouldOpenRecords: false,
+      }),
+    ).toEqual({ kind: "stay" });
+    expect(
+      getProtectedNavigationDecision({
+        isActiveReadingHydrated: true,
+        activeSession: null,
+        userId: "user-a",
+        pathname: "/read",
+        shouldOpenRecords: false,
+      }),
+    ).toEqual({ kind: "stay" });
+    expect(
+      isActiveReadingState({
+        userId: "user-a",
+        articleId: "article-1",
+        mode: "re_read",
+      }),
+    ).toBe(false);
+    expect(isActiveReadingState({ broken: true })).toBe(false);
+    expect(
+      isActiveReadingState({
+        userId: "user-a",
+        articleId: "article-1",
+        inboxId: 123,
+        mode: "basic",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("active reading storage ordering", () => {
+  it("finishes an older save before a newer completion clear", async () => {
+    const queue = createAsyncOperationQueue();
+    const events: string[] = [];
+    let releaseSave: (() => void) | undefined;
+    let markSaveStarted: (() => void) | undefined;
+    const saveBlocked = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const saveStarted = new Promise<void>((resolve) => {
+      markSaveStarted = resolve;
+    });
+
+    const save = queue.enqueue(async () => {
+      events.push("save-start");
+      markSaveStarted?.();
+      await saveBlocked;
+      events.push("save-end");
+    });
+    const clear = queue.enqueue(async () => {
+      events.push("clear");
+    });
+
+    await saveStarted;
+    expect(events).toEqual(["save-start"]);
+    releaseSave?.();
+    await Promise.all([save, clear]);
+    expect(events).toEqual(["save-start", "save-end", "clear"]);
+  });
+
+  it("continues processing clears after an earlier storage failure", async () => {
+    const queue = createAsyncOperationQueue();
+    const clear = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      queue.enqueue(async () => {
+        throw new Error("save failed");
+      }),
+    ).rejects.toThrow("save failed");
+    await expect(queue.enqueue(clear)).resolves.toBeUndefined();
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["set", "clear"])(
+    "keeps a concurrent %s authoritative over an older restore read",
+    async (operation) => {
+      const queue = createAsyncOperationQueue();
+      const revisions = createRevisionGuard();
+      const restoreRevision = revisions.begin();
+      let releaseRead: (() => void) | undefined;
+      const readBlocked = new Promise<void>((resolve) => {
+        releaseRead = resolve;
+      });
+      const restoreRead = queue.enqueue(async () => {
+        await readBlocked;
+      });
+
+      revisions.invalidate();
+      const laterWrite = queue.enqueue(async () => {
+        // The concrete write differs for set/clear, but both must run after
+        // the in-flight read and invalidate its captured revision.
+        expect(operation === "set" || operation === "clear").toBe(true);
+      });
+
+      releaseRead?.();
+      await Promise.all([restoreRead, laterWrite]);
+      expect(revisions.isCurrent(restoreRevision)).toBe(false);
+    },
+  );
 });

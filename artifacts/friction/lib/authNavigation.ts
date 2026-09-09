@@ -39,3 +39,32 @@ export function getActiveReadingForUser<T extends ActiveReadingOwner>(
   if (!activeSession || !userId || activeSession.userId !== userId) return null;
   return activeSession;
 }
+
+export type ProtectedNavigationDecision<T> =
+  | { kind: "wait" }
+  | { kind: "stay" }
+  | { kind: "restore-reading"; activeSession: T }
+  | { kind: "open-records" };
+
+export function getProtectedNavigationDecision<T extends ActiveReadingOwner>({
+  isActiveReadingHydrated,
+  activeSession,
+  userId,
+  pathname,
+  shouldOpenRecords,
+}: {
+  isActiveReadingHydrated: boolean;
+  activeSession: T | null;
+  userId: string;
+  pathname: string;
+  shouldOpenRecords: boolean;
+}): ProtectedNavigationDecision<T> {
+  if (!isActiveReadingHydrated) return { kind: "wait" };
+
+  const ownedActiveSession = getActiveReadingForUser(activeSession, userId);
+  if (ownedActiveSession && pathname !== "/read") {
+    return { kind: "restore-reading", activeSession: ownedActiveSession };
+  }
+  if (shouldOpenRecords) return { kind: "open-records" };
+  return { kind: "stay" };
+}

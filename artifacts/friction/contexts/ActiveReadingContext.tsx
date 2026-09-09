@@ -12,17 +12,21 @@ export interface ActiveReadingState extends ActiveReadingOwner {
 
 interface ActiveReadingContextValue {
   activeSession: ActiveReadingState | null;
+  isHydrated: boolean;
   setActiveSession: (session: ActiveReadingState | null) => void;
   clearActiveSession: () => void;
+  refreshActiveSession: () => Promise<void>;
 }
 
 const ActiveReadingContext = createContext<ActiveReadingContextValue>({
   activeSession: null,
+  isHydrated: false,
   setActiveSession: () => {},
   clearActiveSession: () => {},
+  refreshActiveSession: async () => {},
 });
 
-function isActiveReadingState(value: unknown): value is ActiveReadingState {
+export function isActiveReadingState(value: unknown): value is ActiveReadingState {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<ActiveReadingState>;
   return (
@@ -30,59 +34,139 @@ function isActiveReadingState(value: unknown): value is ActiveReadingState {
     candidate.userId.length > 0 &&
     typeof candidate.articleId === "string" &&
     candidate.articleId.length > 0 &&
-    typeof candidate.mode === "string"
+    (candidate.inboxId === undefined || typeof candidate.inboxId === "string") &&
+    candidate.mode === "basic"
   );
+}
+
+export interface AsyncOperationQueue {
+  enqueue: (operation: () => Promise<void>) => Promise<void>;
+  wait: () => Promise<void>;
+}
+
+export function createAsyncOperationQueue(): AsyncOperationQueue {
+  let pending: Promise<void> = Promise.resolve();
+  return {
+    enqueue(operation) {
+      const next = pending.catch(() => undefined).then(operation);
+      pending = next;
+      return next;
+    },
+    wait() {
+      return pending.catch(() => undefined);
+    },
+  };
+}
+
+export interface RevisionGuard {
+  begin: () => number;
+  invalidate: () => void;
+  isCurrent: (revision: number) => boolean;
+}
+
+export function createRevisionGuard(): RevisionGuard {
+  let currentRevision = 0;
+  return {
+    begin() {
+      currentRevision += 1;
+      return currentRevision;
+    },
+    invalidate() {
+      currentRevision += 1;
+    },
+    isCurrent(revision) {
+      return currentRevision === revision;
+    },
+  };
 }
 
 export function ActiveReadingProvider({ children }: { children: React.ReactNode }) {
   const [activeSession, setActiveSessionState] = useState<ActiveReadingState | null>(null);
-  const storageRevisionRef = useRef(0);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const revisionGuardRef = useRef<RevisionGuard>(createRevisionGuard());
+  const storageQueueRef = useRef<AsyncOperationQueue>(createAsyncOperationQueue());
+  const mountedRef = useRef(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadRevision = storageRevisionRef.current;
-    AsyncStorage.getItem(STORAGE_KEY).then((val) => {
-      if (
-        cancelled ||
-        storageRevisionRef.current !== loadRevision ||
-        !val
-      ) {
+  const refreshActiveSession = useCallback(async () => {
+    const loadRevision = revisionGuardRef.current.begin();
+    setIsHydrated(false);
+    try {
+      let val: string | null = null;
+      await storageQueueRef.current.enqueue(async () => {
+        val = await AsyncStorage.getItem(STORAGE_KEY);
+      });
+      if (!mountedRef.current || !revisionGuardRef.current.isCurrent(loadRevision)) return;
+
+      if (!val) {
+        setActiveSessionState(null);
         return;
       }
+
       try {
         const parsed: unknown = JSON.parse(val);
         if (isActiveReadingState(parsed)) {
           setActiveSessionState(parsed);
         } else {
-          void AsyncStorage.removeItem(STORAGE_KEY);
+          await storageQueueRef.current.enqueue(() => AsyncStorage.removeItem(STORAGE_KEY));
+          if (mountedRef.current && revisionGuardRef.current.isCurrent(loadRevision)) {
+            setActiveSessionState(null);
+          }
         }
       } catch {
-        void AsyncStorage.removeItem(STORAGE_KEY);
+        await storageQueueRef.current.enqueue(() => AsyncStorage.removeItem(STORAGE_KEY));
+        if (mountedRef.current && revisionGuardRef.current.isCurrent(loadRevision)) {
+          setActiveSessionState(null);
+        }
       }
-    });
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      if (mountedRef.current && revisionGuardRef.current.isCurrent(loadRevision)) {
+        setActiveSessionState(null);
+      }
+    } finally {
+      if (mountedRef.current && revisionGuardRef.current.isCurrent(loadRevision)) {
+        setIsHydrated(true);
+      }
+    }
   }, []);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    void refreshActiveSession();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [refreshActiveSession]);
+
   const setActiveSession = useCallback((session: ActiveReadingState | null) => {
-    storageRevisionRef.current += 1;
+    revisionGuardRef.current.invalidate();
     setActiveSessionState(session);
+    setIsHydrated(true);
     if (session) {
-      void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      void storageQueueRef.current.enqueue(() =>
+        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(session)),
+      );
     } else {
-      void AsyncStorage.removeItem(STORAGE_KEY);
+      void storageQueueRef.current.enqueue(() => AsyncStorage.removeItem(STORAGE_KEY));
     }
   }, []);
 
   const clearActiveSession = useCallback(() => {
-    storageRevisionRef.current += 1;
+    revisionGuardRef.current.invalidate();
     setActiveSessionState(null);
-    void AsyncStorage.removeItem(STORAGE_KEY);
+    setIsHydrated(true);
+    void storageQueueRef.current.enqueue(() => AsyncStorage.removeItem(STORAGE_KEY));
   }, []);
 
   return (
-    <ActiveReadingContext.Provider value={{ activeSession, setActiveSession, clearActiveSession }}>
+    <ActiveReadingContext.Provider
+      value={{
+        activeSession,
+        isHydrated,
+        setActiveSession,
+        clearActiveSession,
+        refreshActiveSession,
+      }}
+    >
       {children}
     </ActiveReadingContext.Provider>
   );

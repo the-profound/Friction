@@ -14,7 +14,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { getNotificationsModule } from "@/lib/safeNotifications";
 import { subscribeToNetInfo } from "@/lib/safeNetInfo";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
@@ -55,6 +55,7 @@ import {
 import {
   getActiveReadingForUser,
   getAuthNavigationDecision,
+  getProtectedNavigationDecision,
 } from "@/lib/authNavigation";
 
 setBaseUrl(runtimeConfig.apiBaseUrl);
@@ -94,23 +95,58 @@ function ActiveReadingGuard({
   children: React.ReactNode;
   userId: string;
 }) {
-  const { activeSession } = useActiveReading();
+  const { activeSession, isHydrated, refreshActiveSession } = useActiveReading();
   const router = useRouter();
   const pathname = usePathname();
-  const ownedActiveSession = getActiveReadingForUser(activeSession, userId);
+  const segments = useSegments();
+  const navigationDecision = getProtectedNavigationDecision({
+    isActiveReadingHydrated: isHydrated,
+    activeSession,
+    userId,
+    pathname,
+    shouldOpenRecords:
+      segments[0] === "login" ||
+      segments[0] === "login-callback" ||
+      (Platform.OS !== "web" &&
+        segments[0] === "(tabs)" &&
+        (segments[1] == null || (segments[1] as string) === "index")),
+  });
+  const protectedNavigationKind = navigationDecision.kind;
+  const readingToRestore =
+    navigationDecision.kind === "restore-reading"
+      ? navigationDecision.activeSession
+      : null;
 
   useEffect(() => {
-    if (ownedActiveSession && pathname !== "/read") {
-      router.push({
+    if (protectedNavigationKind === "restore-reading" && readingToRestore) {
+      router.replace({
         pathname: "/read",
         params: {
-          articleId: ownedActiveSession.articleId,
-          inboxId: ownedActiveSession.inboxId,
-          mode: ownedActiveSession.mode,
+          articleId: readingToRestore.articleId,
+          inboxId: readingToRestore.inboxId,
+          mode: readingToRestore.mode,
         },
       });
+    } else if (protectedNavigationKind === "open-records") {
+      router.replace("/(tabs)/on");
     }
-  }, [ownedActiveSession, router, pathname]);
+  }, [
+    protectedNavigationKind,
+    readingToRestore?.articleId,
+    readingToRestore?.inboxId,
+    readingToRestore?.mode,
+    router,
+  ]);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshActiveSession();
+      }
+    });
+    return () => subscription.remove();
+  }, [refreshActiveSession]);
 
   return <>{children}</>;
 }
@@ -204,10 +240,9 @@ function AuthGuard() {
   usePushNotifications(sessionUserId);
   // Navigate to inbox when a LETTER_ARRIVED notification is tapped
   useNotificationDeepLink(sessionUserId);
-  const { activeSession, clearActiveSession } = useActiveReading();
+  const { activeSession, clearActiveSession, isHydrated: isActiveReadingHydrated } = useActiveReading();
   const router = useRouter();
   const segments = useSegments();
-  const hasRedirectedRef = useRef(false);
   const previousUserIdRef = useRef<string | null>(null);
 
   const firstSegment = segments[0] as string | undefined;
@@ -224,26 +259,11 @@ function AuthGuard() {
     if (navigationKind === "redirect-login") {
       clearActiveSession();
       router.replace("/login");
-    } else if (
-      navigationKind === "protected" &&
-      (firstSegment === "login" || firstSegment === "login-callback")
-    ) {
-      hasRedirectedRef.current = true;
-      router.replace("/(tabs)/on");
-    } else if (
-      navigationKind === "protected" &&
-      Platform.OS !== "web" &&
-      firstSegment === "(tabs)" &&
-      (segments[1] == null || (segments[1] as string) === "index") &&
-      !hasRedirectedRef.current
-    ) {
-      hasRedirectedRef.current = true;
-      router.replace("/(tabs)/on");
     }
-  }, [clearActiveSession, configurationError, firstSegment, isLoading, navigationKind, router, segments]);
+  }, [clearActiveSession, configurationError, isLoading, navigationKind, router]);
 
   useEffect(() => {
-    if (configurationError) return;
+    if (configurationError || !isActiveReadingHydrated) return;
     if (!sessionUserId) {
       previousUserIdRef.current = null;
       if (activeSession) clearActiveSession();
@@ -260,13 +280,16 @@ function AuthGuard() {
       clearActiveSession();
     }
     previousUserIdRef.current = sessionUserId;
-  }, [activeSession, clearActiveSession, configurationError, sessionUserId]);
+  }, [activeSession, clearActiveSession, configurationError, isActiveReadingHydrated, sessionUserId]);
 
   if (configurationError) {
     return <AuthConfigurationErrorView message={configurationError} />;
   }
 
-  if (decision.kind === "loading") {
+  if (
+    decision.kind === "loading" ||
+    (decision.kind === "protected" && !isActiveReadingHydrated)
+  ) {
     return <AuthLoadingView message="로그인 상태를 확인하고 있어요" />;
   }
 
