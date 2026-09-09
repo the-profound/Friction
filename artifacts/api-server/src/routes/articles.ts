@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import {
   UpdateArticleBody,
+  CloseArticleBody,
   TransitionArticleStatusBody,
   FinalizeArticleBody,
   RequestArticleCoverUploadUrlBody,
@@ -841,6 +842,97 @@ router.post("/articles/:id/transition", requireAuth, async (req, res) => {
     return;
   }
   res.json(updated);
+});
+
+router.post("/articles/:id/close", requireAuth, async (req, res) => {
+  const parsed = CloseArticleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: parsed.error.issues[0]?.message ?? "Validation error" });
+    return;
+  }
+
+  const articleId = req.params.id as string;
+  const { title, content, pages } = parsed.data;
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Serialize close retries and make competing article transitions observe
+      // a completed close. The row lock makes the snapshot comparison and write
+      // one atomic decision, so a response-loss retry cannot partially close.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`article-close:${articleId}`}))`,
+      );
+
+      const [article] = await tx
+        .select()
+        .from(articlesTable)
+        .where(eq(articlesTable.id, articleId))
+        .limit(1)
+        .for("update");
+
+      if (!article || article.deletedAt) {
+        return { status: 404, body: { error: "Article not found" } } as const;
+      }
+      if (article.authorId !== req.user!.id) {
+        return { status: 403, body: { error: "Forbidden" } } as const;
+      }
+
+      const isSameSnapshot =
+        article.title === title &&
+        article.content === content &&
+        Array.isArray(article.pages) &&
+        JSON.stringify(article.pages) === JSON.stringify(pages);
+
+      // A retry that arrives after the original response was lost is already
+      // complete. Only the exact snapshot is idempotent; never hide a newer
+      // conflicting close behind a successful response.
+      if (article.status === "CLOSING") {
+        if (isSameSnapshot) return { status: 200, body: article } as const;
+        return {
+          status: 409,
+          body: {
+            error: "Article is already CLOSING with a different snapshot",
+          },
+        } as const;
+      }
+
+      if (article.status !== "DIVIDING") {
+        return {
+          status: 400,
+          body: {
+            error: `Invalid close transition from ${article.status}. Only DIVIDING articles can be closed.`,
+          },
+        } as const;
+      }
+
+      const [closed] = await tx
+        .update(articlesTable)
+        .set({ title, content, pages, status: "CLOSING" })
+        .where(
+          and(
+            eq(articlesTable.id, articleId),
+            eq(articlesTable.status, "DIVIDING"),
+            isNull(articlesTable.deletedAt),
+          ),
+        )
+        .returning();
+
+      if (!closed) throw new ArticleMutationConflictError();
+      return { status: 200, body: closed } as const;
+    });
+
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    if (error instanceof ArticleMutationConflictError) {
+      res.status(409).json({
+        error: "Article changed before the close completed. Please retry.",
+      });
+      return;
+    }
+    throw error;
+  }
 });
 
 router.post("/articles/:id/finalize", requireAuth, async (req, res) => {

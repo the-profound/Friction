@@ -301,7 +301,7 @@ describe("non-blocking editor transitions", () => {
     expect(screen).toContain("if (isActionInProgressRef.current || exportPromptOpenRef.current) return;");
   });
 
-  it("confirms the complete transition body and pages before immediate export", () => {
+  it("saves the complete snapshot and closes before immediate export", () => {
     const screen = readScreen("app/on-01c.tsx");
     const exportHandler = screen.slice(
       screen.indexOf("const handleConfirmExport"),
@@ -311,16 +311,16 @@ describe("non-blocking editor transitions", () => {
     expect(exportHandler).toContain("pages.length === 0 || !article?.content?.trim()");
     expect(exportHandler).toContain("content: article.content");
     expect(exportHandler).toContain("pages,");
-    expect(exportHandler.indexOf("await updateArticle.mutateAsync")).toBeLessThan(
-      exportHandler.indexOf("await transitionStatus.mutateAsync"),
+    expect(exportHandler).toContain("await closeArticle.mutateAsync");
+    expect(exportHandler).toContain(
+      "Save the complete snapshot and enter CLOSING in one server transaction.",
     );
-    expect(exportHandler.indexOf("await transitionStatus.mutateAsync")).toBeLessThan(
+    expect(exportHandler.indexOf("await closeArticle.mutateAsync")).toBeLessThan(
       exportHandler.indexOf("await finalizeExport()"),
     );
-    expect(exportHandler).toContain("status !== 400 && status !== 409");
-    expect(exportHandler).toContain("const confirmed = await getArticle(id!)");
-    expect(exportHandler).not.toContain("queryClient.fetchQuery");
-    expect(exportHandler).toContain('confirmed.status !== "CLOSING"');
+    expect(exportHandler).not.toContain("await updateArticle.mutateAsync");
+    expect(exportHandler).not.toContain("await transitionStatus.mutateAsync");
+    expect(exportHandler).not.toContain("const confirmed = await getArticle(id!)");
     expect(exportHandler).not.toContain("pagesChanged");
     expect(exportHandler).not.toContain("initialPagesRef");
   });

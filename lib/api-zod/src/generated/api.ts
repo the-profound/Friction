@@ -593,6 +593,13 @@ export const RequestArticleCoverUploadUrlResponse = zod.object({
 });
 
 /**
+ * Atomically saves the latest title, content, and pages while transitioning a DIVIDING article to CLOSING. Retrying with the same snapshot after a successful response returns the already-closed article.
+ * @summary Save the latest article snapshot and transition it to CLOSING
+ */
+export const CloseArticleParams = zod.object({
+  id: zod.coerce.string().uuid(),
+});
+/**
  * Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and returns the final image URL.
  * @summary Verify and publish an uploaded article cover image
  */
@@ -5277,3 +5284,77 @@ export const RegisterPushTokenBody = zod.object({
     .nullish()
     .describe("Optional device identifier for de-duplication"),
 });
+
+export const CloseArticleResponse = zod.object({
+  id: zod.string().uuid(),
+  authorId: zod.string().uuid(),
+  authorNickname: zod
+    .string()
+    .nullish()
+    .describe(
+      "Author's nickname. Populated by listArticles when joining users; may be null on other endpoints.",
+    ),
+  collectionName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints.",
+    ),
+  collectionId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  title: zod.string(),
+  content: zod.string(),
+  status: zod.enum(["DIVIDING", "CLOSING", "LETTER"]),
+  pages: zod.array(zod.string()).nullish(),
+  layoutWidth: zod
+    .number()
+    .nullish()
+    .describe(
+      "Container width used when splitting pages (px). Used to ensure consistent line-break rendering across preview and reader screens.",
+    ),
+  style: zod.object({}).passthrough().nullish(),
+  cover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .url()
+        .optional()
+        .describe("Cover image URL (used when type=image)"),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(closeArticleResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
+      align: zod.enum(["left", "center"]),
+    })
+    .nullish()
+    .describe("Article cover display settings. null means default cover."),
+  letterAt: zod.date().nullish(),
+  sourceArticleId: zod.string().uuid().nullish(),
+  createdAt: zod.date(),
+  updatedAt: zod.date(),
+});
+
+export const CloseArticleBody = zod
+  .object({
+    title: zod.string().min(1),
+    content: zod.string(),
+    pages: zod.array(zod.string()).min(1),
+  })
+  .describe(
+    "Latest complete editor snapshot to persist before entering the CLOSING stage.",
+  );
+
+export const closeArticleResponseCoverFontFamilyDefault = `sans`;

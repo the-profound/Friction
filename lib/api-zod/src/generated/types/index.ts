@@ -26,6 +26,7 @@ export * from "./checkArticleRead200";
 export * from "./checkArticleReadParams";
 export * from "./clientLogBody";
 export * from "./clientLogBodySource";
+export * from "./closeArticleBody";
 export * from "./createMyCollectionBody";
 export * from "./createNeighborRequestBody";
 export * from "./createSpaceBody";

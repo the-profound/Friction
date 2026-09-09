@@ -30,6 +30,7 @@ import type {
   CheckArticleRead200,
   CheckArticleReadParams,
   ClientLogBody,
+  CloseArticleBody,
   CreateMyCollectionBody,
   CreateNeighborRequestBody,
   CreateSpaceBody,
@@ -1507,6 +1508,94 @@ export const useRequestArticleCoverUploadUrl = <
   TContext
 > => {
   return useMutation(getRequestArticleCoverUploadUrlMutationOptions(options));
+};
+
+/**
+ * Atomically saves the latest title, content, and pages while transitioning a DIVIDING article to CLOSING. Retrying with the same snapshot after a successful response returns the already-closed article.
+ * @summary Save the latest article snapshot and transition it to CLOSING
+ */
+export const getCloseArticleUrl = (id: string) => {
+  return `/api/articles/${id}/close`;
+};
+
+export const closeArticle = async (
+  id: string,
+  closeArticleBody: CloseArticleBody,
+  options?: RequestInit,
+): Promise<Article> => {
+  return customFetch<Article>(getCloseArticleUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(closeArticleBody),
+  });
+};
+
+export const getCloseArticleMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof closeArticle>>,
+    TError,
+    { id: string; data: BodyType<CloseArticleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof closeArticle>>,
+  TError,
+  { id: string; data: BodyType<CloseArticleBody> },
+  TContext
+> => {
+  const mutationKey = ["closeArticle"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof closeArticle>>,
+    { id: string; data: BodyType<CloseArticleBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return closeArticle(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CloseArticleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof closeArticle>>
+>;
+export type CloseArticleMutationBody = BodyType<CloseArticleBody>;
+export type CloseArticleMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Save the latest article snapshot and transition it to CLOSING
+ */
+export const useCloseArticle = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof closeArticle>>,
+    TError,
+    { id: string; data: BodyType<CloseArticleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof closeArticle>>,
+  TError,
+  { id: string; data: BodyType<CloseArticleBody> },
+  TContext
+> => {
+  return useMutation(getCloseArticleMutationOptions(options));
 };
 
 /**

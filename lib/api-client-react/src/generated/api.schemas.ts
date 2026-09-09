@@ -172,6 +172,16 @@ export interface UpdateArticleBody {
   sourceArticleId?: string | null;
 }
 
+/**
+ * Latest complete editor snapshot to persist before entering the CLOSING stage.
+ */
+export interface CloseArticleBody {
+  /** @minLength 1 */
+  title: string;
+  content: string;
+  /** @minItems 1 */
+  pages: string[];
+}
 export interface ArticleCoverUploadInput {
   /** @minLength 1 */
   name: string;

@@ -30,12 +30,11 @@ import { trackArticlePublished } from "@/lib/analytics";
 import {
   useGetArticle,
   useGetUser,
-  useUpdateArticle,
+  useCloseArticle,
   useTransitionArticleStatus,
   useFinalizeArticle,
   TransitionArticleBodyTargetStatus,
   getGetArticleQueryKey,
-  getArticle,
   useGetSpace,
   getGetSpaceQueryKey,
   SpaceLetterVisibility,
@@ -155,7 +154,7 @@ export default function ClosingScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateArticle = useUpdateArticle();
+  const closeArticle = useCloseArticle();
   const transitionStatus = useTransitionArticleStatus();
   const finalizeArticle = useFinalizeArticle();
   const createSpaceLetterMutation = useCreateSpaceLetter();
@@ -360,44 +359,19 @@ export default function ClosingScreen() {
     isActionInProgressRef.current = true;
     setIsExporting(true);
     try {
-      // The closing screen may have opened from a durable local transition
-      // snapshot while the review save is still in flight. Always confirm the
-      // complete body/pages atomically before finalizing so an immediate export
-      // cannot promote an older one-page server snapshot.
-      const patchData: { title: string; content: string; pages: string[] } = {
-        title,
-        content: article.content,
-        pages,
-      };
-      const savedSnapshot = await updateArticle.mutateAsync({
+      // Save the complete snapshot and enter CLOSING in one server transaction.
+      // This also makes a response-loss retry safe when the first request
+      // already committed the same snapshot.
+      const savedSnapshot = await closeArticle.mutateAsync({
         id: id!,
-        data: patchData,
+        data: {
+          title,
+          content: article.content,
+          pages,
+        },
       });
       queryClient.setQueryData(getGetArticleQueryKey(id!), savedSnapshot);
 
-      // The review screen's detached save may lose its expected-content race
-      // against the snapshot above and therefore never perform its own status
-      // transition. Closing owns this boundary too: establish CLOSING before
-      // finalize, and treat a concurrent transition as success only after a
-      // fresh detail read confirms the server reached CLOSING.
-      if (savedSnapshot.status !== "CLOSING") {
-        try {
-          const transitioned = await transitionStatus.mutateAsync({
-            id: id!,
-            data: { targetStatus: TransitionArticleBodyTargetStatus.CLOSING },
-          });
-          queryClient.setQueryData(getGetArticleQueryKey(id!), transitioned);
-        } catch (transitionError: unknown) {
-          const status = (transitionError as { status?: unknown } | null)?.status;
-          if (status !== 400 && status !== 409) throw transitionError;
-          // Bypass React Query's 30-second staleTime. The just-written PATCH
-          // response can still say DIVIDING even when another request has
-          // already moved the server row to CLOSING.
-          const confirmed = await getArticle(id!);
-          queryClient.setQueryData(getGetArticleQueryKey(id!), confirmed);
-          if (confirmed.status !== "CLOSING") throw transitionError;
-        }
-      }
       exportedArticleIdRef.current = id!;
       await finalizeExport();
     } catch (e: unknown) {
@@ -416,8 +390,7 @@ export default function ClosingScreen() {
     title,
     pages,
     article?.content,
-    updateArticle,
-    transitionStatus,
+    closeArticle,
     queryClient,
     finalizeExport,
     showToast,
