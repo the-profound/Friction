@@ -65,6 +65,37 @@ type SpaceRoundCenterLetterMatch = {
   lastReservation?: SpaceReservationMetadataPresentation | null;
 };
 
+export function isReadableSpaceDetailLetter(
+  letter: SpaceRoundCenterLetterMatch,
+): boolean {
+  if (letter.reservation) return letter.reservation.status === "SENT";
+  return !letter.everScheduled;
+}
+
+export function isPendingSpaceDetailLetter(
+  letter: SpaceRoundCenterLetterMatch,
+): boolean {
+  return letter.reservation?.status === "PENDING";
+}
+
+export function getSpaceRoundSlotAvailabilityLabel({
+  isMySlot,
+  isPastEmptySlot,
+  isWithdrawn,
+  isScheduled,
+}: {
+  isMySlot: boolean;
+  isPastEmptySlot: boolean;
+  isWithdrawn: boolean;
+  isScheduled: boolean;
+}): string {
+  if (isScheduled) return "발신 예정";
+  if (isWithdrawn) return "예약을 취소했어요";
+  if (isPastEmptySlot && isMySlot) return "글 없음";
+  if (isMySlot) return "내 차례";
+  return isPastEmptySlot ? "아직 공개된 글 없음" : "추후 공개";
+}
+
 type SpaceRoundSlotAssignment = {
   id: string;
   spaceRoundId: string;
@@ -140,12 +171,13 @@ export type UpcomingRoundCenterCardItem<
   TSlot extends SpaceRoundSlotAssignment,
 > =
   | { kind: "letter"; letter: TLetter; slotId: string }
+  | { kind: "scheduled"; slot: TSlot; spaceLetterId: string }
   | { kind: "slot"; slot: TSlot };
 
 /**
- * Resolves only the current user's pending CENTER reservations to their exact
- * round assignments. Other participants' upcoming reservations deliberately
- * remain slots, so their articles are never exposed before their send time.
+ * Resolves only the current user's pending CENTER reservations to non-readable
+ * scheduled slot states. Other participants' upcoming reservations remain
+ * ordinary locked slots because their private reservation metadata is absent.
  */
 export function resolveUpcomingRoundCenterCards<
   TLetter extends SpaceRoundCenterLetterMatch,
@@ -164,16 +196,28 @@ export function resolveUpcomingRoundCenterCards<
     ]),
   );
   const lettersBySlotId = new Map<string, TLetter>();
+  const reservationsBySlotId = new Map<string, string>();
 
   for (const letter of letters) {
-    if (
-      letter.letterType !== "CENTER" ||
-      letter.authorId !== userId ||
-      !letter.spaceRoundId
-    ) {
+    if (letter.letterType !== "CENTER" || !letter.spaceRoundId) {
       continue;
     }
 
+    if (letter.reservation?.status === "SENT") {
+      const sentSlot = letter.reservation.slotId
+        ? slotsById.get(letter.reservation.slotId)
+        : undefined;
+      if (
+        sentSlot &&
+        isExactReservationForSlot(letter.reservation, sentSlot, letter.authorId, "SENT") &&
+        !lettersBySlotId.has(sentSlot.id)
+      ) {
+        lettersBySlotId.set(sentSlot.id, letter);
+      }
+      continue;
+    }
+
+    if (letter.authorId !== userId) continue;
     const reservation = reservationsByLetterId.get(letter.id);
     if (!reservation) continue;
 
@@ -183,18 +227,20 @@ export function resolveUpcomingRoundCenterCards<
     if (
       !slot ||
       !isExactReservationForSlot(reservation.reservation, slot, letter.authorId, "PENDING") ||
-      lettersBySlotId.has(slot.id)
+      reservationsBySlotId.has(slot.id)
     ) {
       continue;
     }
 
-    lettersBySlotId.set(slot.id, letter);
+    reservationsBySlotId.set(slot.id, letter.id);
   }
 
   return slots.map((slot) => {
     const letter = lettersBySlotId.get(slot.id);
-    return letter
-      ? { kind: "letter", letter, slotId: slot.id }
+    if (letter) return { kind: "letter", letter, slotId: slot.id };
+    const spaceLetterId = reservationsBySlotId.get(slot.id);
+    return spaceLetterId
+      ? { kind: "scheduled", slot, spaceLetterId }
       : { kind: "slot", slot };
   });
 }

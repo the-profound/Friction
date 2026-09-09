@@ -73,7 +73,10 @@ import {
   resolveUpcomingRoundCenterCards,
   doesSpaceLetterOccupyRoundSlot,
   findWithdrawnCenterLetterForSlot,
+  getSpaceRoundSlotAvailabilityLabel,
   getSpaceLetterPresentationRoundId,
+  isPendingSpaceDetailLetter,
+  isReadableSpaceDetailLetter,
   type SpaceReservationMetadataPresentation,
 } from "@/lib/spaceRoundPresentation";
 import { toKstCalendarDate } from "@/lib/kstDate";
@@ -439,6 +442,7 @@ function SpaceRoundSlotCard({
   now,
   onSchedule,
   withdrawnLetter,
+  isScheduled = false,
 }: {
   slot: SpaceRoundSlotWithUser;
   userId: string;
@@ -452,11 +456,18 @@ function SpaceRoundSlotCard({
    * or far the deadline is.
    */
   withdrawnLetter?: SpaceLetter | null;
+  isScheduled?: boolean;
 }) {
   const isMySlot = slot.assignedUserId === userId;
   const isPastEmptySlot =
     !!slot.scheduledDate && !isKstSlotReservable(slot.scheduledDate, now);
   const isWithdrawn = isMySlot && !!withdrawnLetter;
+  const availabilityLabel = getSpaceRoundSlotAvailabilityLabel({
+    isMySlot,
+    isPastEmptySlot,
+    isWithdrawn,
+    isScheduled,
+  });
 
   return (
     <View
@@ -466,9 +477,11 @@ function SpaceRoundSlotCard({
       ]}
     >
       <View style={styles.slotCardTop}>
-        {isWithdrawn ? (
+        {isScheduled ? (
+          <Feather name="clock" size={18} color={Colors.zinc500} />
+        ) : isWithdrawn ? (
           <Feather name="rotate-ccw" size={18} color={Colors.zinc500} />
-        ) : isPastEmptySlot ? (
+        ) : isPastEmptySlot && isMySlot ? (
           <Feather name="clock" size={18} color={Colors.zinc300} />
         ) : isMySlot ? (
           <Feather name="edit-3" size={18} color={Colors.zinc500} />
@@ -478,13 +491,7 @@ function SpaceRoundSlotCard({
       </View>
       <View style={styles.slotCardMiddle}>
         <Text style={isMySlot ? styles.slotCardMyText : styles.slotCardOtherText}>
-          {isWithdrawn
-            ? "예약을 취소했어요"
-            : isPastEmptySlot
-              ? "글 없음"
-              : isMySlot
-                ? "내 차례"
-                : "추후 공개"}
+          {availabilityLabel}
         </Text>
         {isWithdrawn && withdrawnLetter?.articleTitle ? (
           <Text style={styles.slotCardWithdrawnTitle} numberOfLines={1}>
@@ -492,7 +499,7 @@ function SpaceRoundSlotCard({
           </Text>
         ) : null}
       </View>
-      {isMySlot && !isPastEmptySlot && (
+      {isMySlot && !isPastEmptySlot && !isScheduled && (
         <ScalePressable
           style={styles.slotCtaOuter}
           contentStyle={styles.slotCta}
@@ -593,6 +600,19 @@ function UpcomingRoundSlots({
   const orderedItems: SpaceCarouselItem[] = upcomingCards.map((item) =>
     item.kind === "letter"
       ? { id: `letter:${item.letter.id}`, letter: item.letter }
+      : item.kind === "scheduled"
+      ? {
+          id: `scheduled:${item.spaceLetterId}`,
+          node: (
+            <SpaceRoundSlotCard
+              slot={item.slot}
+              userId={userId}
+              now={now}
+              onSchedule={onSchedule}
+              isScheduled
+            />
+          ),
+        }
       : {
           id: `slot:${item.slot.id}`,
           node: (
@@ -677,9 +697,12 @@ function RoundSection({
   });
   const roundSlots = (slotsQuery.data ?? []) as SpaceRoundSlotWithUser[];
   const upcomingOpeningSlotRef = useRef<View | null>(null);
+  const readableLetters = letters.filter(isReadableSpaceDetailLetter);
 
   const openingLetter = letters.find((l) => l.letterType === "OPENING") ?? null;
-  const hasOpeningLetter = openingLetter !== null;
+  const readableOpeningLetter =
+    readableLetters.find((l) => l.letterType === "OPENING") ?? null;
+  const hasOpeningLetter = readableOpeningLetter !== null;
   const openingReservationAvailable =
     roundStatus !== "COMPLETED" &&
     !isSpaceArchived &&
@@ -687,27 +710,42 @@ function RoundSection({
   const emptyRoundSlots = sortSpaceRoundSlotsForPresentation(
     roundSlots.filter(
       (slot) =>
-        !letters.some(
+        !readableLetters.some(
           (letter) => doesSpaceLetterOccupyRoundSlot(letter, slot),
         ),
     ),
     now,
   );
-  const trailingSlotCards = emptyRoundSlots.map((slot) => ({
-    id: `slot:${slot.id}`,
-    node: (
-      <SpaceRoundSlotCard
-        slot={slot}
-        userId={userId}
-        now={now}
-        onSchedule={onScheduleSlot}
-        withdrawnLetter={findWithdrawnCenterLetterForSlot(
-          withdrawnCenterLetters ?? [],
-          slot,
-        )}
-      />
-    ),
-  }));
+  const trailingSlotCards = resolveUpcomingRoundCenterCards(
+    letters,
+    emptyRoundSlots,
+    userId,
+    pendingCenterReservations,
+  ).flatMap((item) => {
+    if (item.kind === "letter") return [];
+    return [{
+      id: item.kind === "scheduled"
+        ? `scheduled:${item.spaceLetterId}`
+        : `slot:${item.slot.id}`,
+      node: (
+        <SpaceRoundSlotCard
+          slot={item.slot}
+          userId={userId}
+          now={now}
+          onSchedule={onScheduleSlot}
+          isScheduled={item.kind === "scheduled"}
+          withdrawnLetter={
+            item.kind === "scheduled"
+              ? null
+              : findWithdrawnCenterLetterForSlot(
+                  withdrawnCenterLetters ?? [],
+                  item.slot,
+                )
+          }
+        />
+      ),
+    }];
+  });
 
   // Placeholder card shown when no opening letter exists yet. The write
   // button is offered only while the opening letter's KST 06:00 deadline is
@@ -742,18 +780,31 @@ function RoundSection({
         )
       : null;
 
+  const pendingOpeningSlotNode: React.ReactNode =
+    !isSpaceRecruiting && openingLetter && isPendingSpaceDetailLetter(openingLetter)
+      ? (
+          <View style={[spaceCarouselStyles.openingSlotCard, spaceCarouselStyles.openingSlotCardInner]}>
+            <Feather name="clock" size={18} color={Colors.zinc400} />
+            <Text style={spaceCarouselStyles.openingSlotEmptyText}>발신 예정</Text>
+          </View>
+        )
+      : null;
+
   // For SpaceCarousel (ACTIVE/COMPLETED): the opening letter is already the first
   // item in the letters array, so only pass the placeholder when it's missing.
   const openingSlotNode: React.ReactNode =
-    !isSpaceRecruiting && !hasOpeningLetter ? openingPlaceholderNode : null;
+    pendingOpeningSlotNode ??
+    (!isSpaceRecruiting && !hasOpeningLetter ? openingPlaceholderNode : null);
 
   // For UpcomingRoundSlots: letters are never shown there, so we must explicitly
   // render the opening letter card (if it exists) OR the placeholder.
   const upcomingOpeningSlotNode: React.ReactNode = isSpaceRecruiting
     ? null
-    : hasOpeningLetter && openingLetter
+    : pendingOpeningSlotNode
+      ? pendingOpeningSlotNode
+      : hasOpeningLetter && readableOpeningLetter
       ? (() => {
-          const letter = openingLetter;
+          const letter = readableOpeningLetter;
           const authorNickname = (letter as any).authorNickname as string | null;
           const displayName = (letter as any).displayName as string | null;
           const title = (letter as any).articleTitle as string | null;
@@ -844,10 +895,10 @@ function RoundSection({
         <ActivityIndicator size="small" color={Colors.zinc300} />
       </View>
     );
-  } else if (letters.length > 0 || openingSlotNode || trailingSlotCards.length > 0) {
+  } else if (readableLetters.length > 0 || openingSlotNode || trailingSlotCards.length > 0) {
     letterArea = (
       <SpaceCarousel
-        letters={letters}
+        letters={readableLetters}
         isAnonymous={isAnonymous}
         spaceName={spaceName}
         onCardPress={onPressLetter}
@@ -890,8 +941,8 @@ function RoundSection({
             </Text>
           ) : null}
         </View>
-        {!isUpcoming && !isSpaceRecruiting && letters.length > 0 && (
-          <Text style={styles.roundLetterCount}>{letters.length}편</Text>
+        {!isUpcoming && !isSpaceRecruiting && readableLetters.length > 0 && (
+          <Text style={styles.roundLetterCount}>{readableLetters.length}편</Text>
         )}
       </View>
       {roundDateRange ? (
@@ -1190,6 +1241,10 @@ export default function SpaceDetailScreen() {
 
   const rounds = (roundsQuery.data ?? []) as SpaceRound[];
   const letters = (lettersQuery.data ?? []) as SpaceLetter[];
+  const readableLetters = useMemo(
+    () => letters.filter(isReadableSpaceDetailLetter),
+    [letters],
+  );
   const scheduledSends = (scheduledSendsQuery.data ?? []) as SpaceScheduledSendWithLetter[];
   const pendingCenterReservations = useMemo(
     () =>
@@ -1571,7 +1626,7 @@ export default function SpaceDetailScreen() {
               <Text style={styles.metaIconRowText}>
                 참여자 {space.participantCount}
                 {recruitmentCapacity != null ? `/${recruitmentCapacity}` : ""}명
-                {" · "}편지 {letters.length}개
+                {" · "}편지 {readableLetters.length}개
               </Text>
             </View>
 

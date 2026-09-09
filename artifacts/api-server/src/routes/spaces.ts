@@ -2519,7 +2519,7 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   }
 
   // Gate visibility: a letter authored by someone else is hidden from other
-  // participants until its CURRENT reservation's time has actually arrived.
+  // participants until its CURRENT reservation has actually been SENT.
   // "Current" means the most recently created non-cancelled reservation for
   // that letter — a letter that was already SENT once but has since been
   // re-reserved (e.g. re-sent to a later date) must go back to hidden until
@@ -2531,7 +2531,9 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
   // Letters with no reservation at all (never scheduled) remain immediately
   // visible, matching prior behavior. Only the letter's own author bypasses
   // this release gate; operator and recipient privileges must not disclose a
-  // future reservation.
+  // unsent reservation. The author still receives their own row because the
+  // reservation-management screens depend on it; read surfaces must apply the
+  // same SENT-or-true-legacy rule before rendering article content.
   const otherLetterIds = letters.filter((l) => l.authorId !== callerId).map((l) => l.id);
   if (otherLetterIds.length > 0) {
     const sends = await db
@@ -2544,7 +2546,6 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
       .from(spaceScheduledSendsTable)
       .where(inArray(spaceScheduledSendsTable.spaceLetterId, otherLetterIds));
 
-    const now = new Date();
     const hiddenLetterIds = new Set<string>();
     const sendsByLetter = new Map<string, typeof sends>();
     for (const s of sends) {
@@ -2564,8 +2565,7 @@ router.get("/spaces/:id/letters", requireAuth, async (req, res) => {
       const current = activeSends.reduce((latest, s) =>
         new Date(s.createdAt) > new Date(latest.createdAt) ? s : latest,
       );
-      const isVisible =
-        current.status === "SENT" || (current.status === "PENDING" && new Date(current.scheduledAt) <= now);
+      const isVisible = current.status === "SENT";
       if (!isVisible) hiddenLetterIds.add(letterId);
     }
     if (hiddenLetterIds.size > 0) {

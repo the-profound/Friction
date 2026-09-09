@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   doesSpaceLetterOccupyRoundSlot,
   findWithdrawnCenterLetterForSlot,
+  getSpaceRoundSlotAvailabilityLabel,
   getSpaceLetterAuthorName,
   getSpaceLetterPresentationRoundId,
   type SpaceReservationMetadataPresentation,
   getSpaceRoundPresentationStatus,
   isKstSlotReservable,
   isOpeningSlotReservable,
+  isPendingSpaceDetailLetter,
+  isReadableSpaceDetailLetter,
   resolveUpcomingRoundCenterCards,
   roundStatusLabel,
   sortSpaceRoundSlotsForPresentation,
@@ -221,7 +224,7 @@ describe("space round presentation", () => {
     ).toEqual(["future", "past"]);
   });
 
-  it("shows pending center letters only in their own upcoming round slots", () => {
+  it("shows pending center letters only as non-readable scheduled states in their own upcoming slots", () => {
     const slots = [
       { id: "round-one-other", spaceRoundId: "round-one", assignedUserId: "other", scheduledDate: "2026-08-20" },
       { id: "round-one-mine", spaceRoundId: "round-one", assignedUserId: "me", scheduledDate: "2026-08-20" },
@@ -249,7 +252,7 @@ describe("space round presentation", () => {
       "round-one-mine",
       "round-two-mine",
     ]);
-    expect(result.map((item) => item.kind)).toEqual(["slot", "letter", "letter"]);
+    expect(result.map((item) => item.kind)).toEqual(["slot", "scheduled", "scheduled"]);
   });
 
   it("leaves a slot reservable again when its center reservation was cancelled", () => {
@@ -350,7 +353,7 @@ describe("space round presentation", () => {
     });
     expect(resolveUpcomingRoundCenterCards([letter], [slot], "me", [
       { spaceLetterId: "letter", reservation: metadata() },
-    ])[0].kind).toBe("letter");
+    ])[0].kind).toBe("scheduled");
     for (const badMetadata of [
       metadata({ date: "2026-08-21" }),
       metadata({ scheduledAt: "2026-08-19T21:01:00.000Z" }),
@@ -377,7 +380,146 @@ describe("space round presentation", () => {
         authorId: "me", date: "2026-08-20", scheduledAt: "2026-08-19T21:00:00.000Z",
       },
     }]);
-    expect(result.map((item) => item.kind)).toEqual(["slot", "letter"]);
+    expect(result.map((item) => item.kind)).toEqual(["slot", "scheduled"]);
+  });
+
+  it("makes only SENT reservations and true unscheduled legacy letters readable", () => {
+    const base = {
+      id: "letter",
+      spaceRoundId: "round",
+      authorId: "me",
+      letterType: "OPENING",
+    };
+    expect(isReadableSpaceDetailLetter(base)).toBe(true);
+    expect(isReadableSpaceDetailLetter({ ...base, everScheduled: false, reservation: null })).toBe(true);
+    expect(isReadableSpaceDetailLetter({
+      ...base,
+      everScheduled: true,
+      reservation: {
+        status: "SENT", resolved: true, slotId: "slot", roundId: "round",
+        authorId: "me", date: "2026-08-20", scheduledAt: "2026-08-19T21:00:00.000Z",
+      },
+    })).toBe(true);
+    for (const status of ["PENDING", "CANCELLED", "FAILED"]) {
+      expect(isReadableSpaceDetailLetter({
+        ...base,
+        everScheduled: true,
+        reservation: {
+          status, resolved: true, slotId: "slot", roundId: "round",
+          authorId: "me", date: "2026-08-20", scheduledAt: "2000-01-01T00:00:00.000Z",
+        },
+      })).toBe(false);
+    }
+    expect(isReadableSpaceDetailLetter({ ...base, everScheduled: true, reservation: null })).toBe(false);
+  });
+
+  it("excludes every unsent own letter status from aggregate detail counts", () => {
+    const reservation = {
+      status: "PENDING",
+      resolved: true,
+      slotId: "slot",
+      roundId: "round",
+      authorId: "me",
+      date: "2026-08-20",
+      scheduledAt: "2000-01-01T00:00:00.000Z",
+    };
+    const letters = [
+      { id: "legacy", spaceRoundId: "round", authorId: "me", letterType: "OPENING" },
+      {
+        id: "sent", spaceRoundId: "round", authorId: "me", letterType: "CENTER",
+        everScheduled: true, reservation: { ...reservation, status: "SENT" },
+      },
+      ...(["PENDING", "FAILED"] as const).map((status) => ({
+        id: status.toLowerCase(), spaceRoundId: "round", authorId: "me",
+        letterType: "CENTER", everScheduled: true,
+        reservation: { ...reservation, status },
+      })),
+      {
+        id: "cancelled", spaceRoundId: "round", authorId: "me",
+        letterType: "CENTER", everScheduled: true, reservation: null,
+      },
+    ];
+
+    expect(letters.filter(isReadableSpaceDetailLetter).map((letter) => letter.id))
+      .toEqual(["legacy", "sent"]);
+  });
+
+  it("uses the non-interactive scheduled presentation only for current PENDING letters", () => {
+    const base = {
+      id: "opening",
+      spaceRoundId: "round",
+      authorId: "operator",
+      letterType: "OPENING",
+      everScheduled: true,
+    };
+    const reservation = {
+      status: "PENDING",
+      resolved: true,
+      slotId: null,
+      roundId: "round",
+      authorId: "operator",
+      date: "2026-08-20",
+      scheduledAt: "2026-08-19T21:00:00.000Z",
+    };
+    expect(isPendingSpaceDetailLetter({ ...base, reservation })).toBe(true);
+    expect(isPendingSpaceDetailLetter({
+      ...base,
+      reservation: { ...reservation, status: "FAILED" },
+    })).toBe(false);
+    expect(isPendingSpaceDetailLetter({
+      ...base,
+      reservation: { ...reservation, status: "CANCELLED" },
+    })).toBe(false);
+    expect(isPendingSpaceDetailLetter({ ...base, reservation: null })).toBe(false);
+  });
+
+  it("does not claim another participant wrote nothing when a past slot has no public letter", () => {
+    expect(getSpaceRoundSlotAvailabilityLabel({
+      isMySlot: false,
+      isPastEmptySlot: true,
+      isWithdrawn: false,
+      isScheduled: false,
+    })).toBe("아직 공개된 글 없음");
+    expect(getSpaceRoundSlotAvailabilityLabel({
+      isMySlot: true,
+      isPastEmptySlot: true,
+      isWithdrawn: false,
+      isScheduled: false,
+    })).toBe("글 없음");
+    expect(getSpaceRoundSlotAvailabilityLabel({
+      isMySlot: true,
+      isPastEmptySlot: true,
+      isWithdrawn: false,
+      isScheduled: true,
+    })).toBe("발신 예정");
+  });
+
+  it("replaces an upcoming scheduled slot with a readable card only after SENT", () => {
+    const slot = {
+      id: "slot",
+      spaceRoundId: "round",
+      assignedUserId: "me",
+      scheduledDate: "2026-08-20",
+    };
+    const reservation = {
+      status: "SENT",
+      resolved: true,
+      slotId: "slot",
+      roundId: "round",
+      authorId: "me",
+      date: "2026-08-20",
+      scheduledAt: "2026-08-19T21:00:00.000Z",
+    };
+    const letter = {
+      id: "letter",
+      spaceRoundId: "round",
+      authorId: "me",
+      letterType: "CENTER",
+      reservation,
+      everScheduled: true,
+    };
+    const result = resolveUpcomingRoundCenterCards([letter], [slot], "me", []);
+    expect(result).toEqual([{ kind: "letter", letter, slotId: "slot" }]);
   });
 
   describe("withdrawn (cancelled-with-a-draft) CENTER slots", () => {

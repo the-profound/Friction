@@ -135,3 +135,4 @@
 - [Active-reading restore authority](friction-active-reading-restore-authority.md) — auth landing must wait for persisted reading hydration; foreground reads and local writes share one revisioned queue.
 - [Metro public asset readiness](friction-metro-public-asset-readiness.md) — validate native assets by downloading bundle-derived URLs from every device-facing origin; tunnels must open before this gate.
 - [Generated API Zod default initialization](api-zod-generated-default-tdz.md) — a generated default constant can throw during web module load and blank the Expo preview before routing renders.
+- [Space-detail unsent letter boundary](space-detail-unsent-letter-boundary.md) — author APIs may retain management rows, but detail cards require SENT or true legacy; hidden past slots need privacy-neutral copy.

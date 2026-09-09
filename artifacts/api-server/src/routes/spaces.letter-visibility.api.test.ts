@@ -90,7 +90,7 @@ const state = vi.hoisted(() => {
    */
   const scheduledSends: Array<{
     spaceLetterId: string;
-    status: "PENDING" | "SENT" | "CANCELLED";
+    status: "PENDING" | "SENT" | "CANCELLED" | "FAILED";
     scheduledAt: Date;
     createdAt: Date;
   }> = [
@@ -201,7 +201,7 @@ const state = vi.hoisted(() => {
       );
     },
     setFutureLetterSends: (rows: Array<{
-      status: "PENDING" | "SENT" | "CANCELLED";
+      status: "PENDING" | "SENT" | "CANCELLED" | "FAILED";
       scheduledAt: Date;
       createdAt: Date;
     }>) => {
@@ -388,7 +388,7 @@ describe("letter visibility filtering — GET /spaces/:id/letters", () => {
     expect(body.map((l) => l.id)).toContain("letter-future");
   });
 
-  it("a PENDING letter becomes visible to its recipient once scheduledAt is due", async () => {
+  it("a PENDING letter stays hidden after scheduledAt until its status becomes SENT", async () => {
     state.setFutureLetterSends([{
       status: "PENDING",
       scheduledAt: new Date("2000-01-01T00:00:00.000Z"),
@@ -397,8 +397,37 @@ describe("letter visibility filtering — GET /spaces/:id/letters", () => {
     const res = await getLetters("recipient-a");
     expect(res.status).toBe(200);
     const body = await res.json() as Array<{ id: string }>;
+    expect(body.map((l) => l.id)).not.toContain("letter-future");
+  });
+
+  it("a due PENDING letter remains available only to its author for reservation management", async () => {
+    state.setFutureLetterSends([{
+      status: "PENDING",
+      scheduledAt: new Date("2000-01-01T00:00:00.000Z"),
+      createdAt: new Date("2026-09-07T02:00:00.000Z"),
+    }]);
+    const res = await getLetters("author-a");
+    expect(res.status).toBe(200);
+    const body = await res.json() as Array<{ id: string }>;
     expect(body.map((l) => l.id)).toContain("letter-future");
   });
+
+  it.each(["FAILED", "CANCELLED"] as const)(
+    "a current %s letter is hidden from every non-author role",
+    async (status) => {
+      state.setFutureLetterSends([{
+        status,
+        scheduledAt: new Date("2000-01-01T00:00:00.000Z"),
+        createdAt: new Date("2026-09-07T02:00:00.000Z"),
+      }]);
+      for (const userId of ["operator-a", "recipient-a", "outsider-a"]) {
+        const res = await getLetters(userId);
+        expect(res.status).toBe(200);
+        const body = await res.json() as Array<{ id: string }>;
+        expect(body.map((l) => l.id)).not.toContain("letter-future");
+      }
+    },
+  );
 
   it("a SENT letter is visible even when its scheduledAt is in the future", async () => {
     state.setFutureLetterSends([{
