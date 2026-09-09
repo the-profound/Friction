@@ -40,6 +40,15 @@ describe("reader virtual-page bounds", () => {
     expect(advancePage(tooFarBackward).position.currentPage).toBe(1);
   });
 
+  it("starts rereads at the cover even when a saved position is supplied", () => {
+    const reread = createInitialSession("article", "re_read", 3, {
+      currentPage: 2,
+      scrollPosition: 180,
+    });
+    expect(reread.position.currentPage).toBe(0);
+    expect(reread.position.scrollPosition).toBe(0);
+  });
+
   it("does not treat an empty article as complete or report negative progress", () => {
     expect(isLastPage(0, 0)).toBe(false);
     expect(getProgress(-10, 4)).toBe(0.25);

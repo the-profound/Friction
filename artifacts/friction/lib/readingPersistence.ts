@@ -155,13 +155,16 @@ export function createInitialSession(
   totalPages: number,
   savedPosition?: { currentPage: number; scrollPosition: number },
 ): ReadingSession {
+  const startsFromBeginning = mode === "re_read";
   return {
     articleId,
     mode,
     state: "IDLE",
     position: {
-      currentPage: clampReadingPage(savedPosition?.currentPage ?? 0, totalPages),
-      scrollPosition: savedPosition?.scrollPosition ?? 0,
+      currentPage: startsFromBeginning
+        ? 0
+        : clampReadingPage(savedPosition?.currentPage ?? 0, totalPages),
+      scrollPosition: startsFromBeginning ? 0 : savedPosition?.scrollPosition ?? 0,
       totalPages,
     },
   };

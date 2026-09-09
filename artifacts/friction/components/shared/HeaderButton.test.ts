@@ -130,7 +130,13 @@ describe("shared writing header buttons", () => {
     }
 
     const reader = read("app/read.tsx");
-    expect(reader).toContain('{mode === "re_read" ? (');
+    expect(reader).toContain(
+      'pointerEvents={isOnLastLetterPage || mode === "re_read" ? "auto" : "none"}',
+    );
+    expect(reader).toContain('<HeaderButton\n          variant="back"');
     expect(reader).toContain('accessibilityLabel="읽기 화면에서 돌아가기"');
+    expect(reader).not.toContain(
+      '<Pressable onPress={handleFloatingBackBtn} hitSlop={16}>',
+    );
   });
 });

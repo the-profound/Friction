@@ -70,6 +70,16 @@ export function useReadingSession({
   const [isSessionHydrated, setIsSessionHydrated] = useState(false);
 
   const restoredRef = useRef(false);
+  const sessionIdentity = `${userId}\u0000${articleId}\u0000${mode}\u0000${inboxId ?? ""}`;
+  const sessionIdentityRef = useRef(sessionIdentity);
+  useEffect(() => {
+    if (sessionIdentityRef.current === sessionIdentity) return;
+    sessionIdentityRef.current = sessionIdentity;
+    restoredRef.current = false;
+    setIsSessionHydrated(false);
+    setSession(createInitialSession(articleId, mode, totalPages));
+  }, [articleId, mode, sessionIdentity, totalPages]);
+
   useEffect(() => {
     if (restoredRef.current || isRestoring) return;
     restoredRef.current = true;
@@ -117,6 +127,9 @@ export function useReadingSession({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inboxIdRef = useRef(inboxId);
   const teamCollectionIdRef = useRef(teamCollectionId);
+  useEffect(() => {
+    inboxIdRef.current = inboxId;
+  }, [inboxId]);
   useEffect(() => { teamCollectionIdRef.current = teamCollectionId; }, [teamCollectionId]);
 
   // A protected navigation tree is replaced when the account changes. Do not
@@ -294,6 +307,10 @@ export function useReadingSession({
   const progress = getProgress(session.position.currentPage, session.position.totalPages);
   const canExit = !shouldBlockExit(mode, session.state);
   const showExitUI = shouldShowExitUI(mode);
+  const isCurrentSession =
+    sessionIdentityRef.current === sessionIdentity &&
+    session.articleId === articleId &&
+    session.mode === mode;
 
   return {
     session,
@@ -301,7 +318,7 @@ export function useReadingSession({
     canExit,
     showExitUI,
     isRestoring,
-    isSessionHydrated,
+    isSessionHydrated: isSessionHydrated && isCurrentSession,
     nextPage,
     prevPage,
     jumpToPage,

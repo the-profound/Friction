@@ -26,12 +26,21 @@ describe("selection-mode read entry", () => {
 
   it("keeps the explicit read CTA connected to the read callback", () => {
     const overlay = read("components/CardSelectOverlay/CardSelectOverlay.tsx");
+    const inbox = read("app/(tabs)/index.tsx");
 
     expect(overlay).toContain("const handleRead = useCallback(() =>");
     expect(overlay).toContain("runReadTransition(onRead);");
-    expect(overlay).toContain(
-      '<ScalePressable style={styles.ctaButton} contentStyle={styles.ctaButtonContent} onPress={handleRead}>',
-    );
+    expect(overlay).toContain("contentStyle={[");
+    expect(overlay).toContain("readAction.mode === \"re_read\"");
+    expect(overlay).toContain("accessibilityLabel={readAction.label}");
+    expect(overlay).toContain("ctaButtonRereadContent");
+    expect(overlay).toContain("backgroundColor: Colors.noticeAccentSoft");
+    expect(overlay).toContain("borderColor: Colors.primaryAction");
+    expect(overlay).toContain("ctaButton: { width: \"100%\", height: 56");
+    expect(overlay).toContain("ctaButtonFlex: { flex: 1, height: 56");
+    expect(overlay).toContain("onPress={handleRead}");
+    expect(inbox).toContain("hasReadBefore: item.hasReadBefore");
+    expect(inbox).toContain("mode: selectionMode");
   });
 
   it("does not add a separate same-sized shadow card behind selection covers", () => {

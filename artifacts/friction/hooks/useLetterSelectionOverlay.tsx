@@ -30,6 +30,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { invalidateArticleLists } from "@/lib/queryInvalidation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Colors, Typography } from "@/constants/tokens";
+import { getLetterSelectionReadAction, type ReadingMode } from "@/lib/policies";
 
 export interface LetterOverlayMeta {
   collectionName?: string | null;
@@ -43,6 +44,8 @@ export interface LetterOverlayMeta {
   authorId?: string | null;
   /** Override the isRead dimming of the card. */
   isRead?: boolean;
+  /** Article-level completion history, independent of the current delivery. */
+  hasReadBefore?: boolean;
 }
 
 export interface OpenLetterOverlayOptions {
@@ -131,7 +134,7 @@ interface HookOptions {
    * `isNonPrimary` is true when the user tapped a chain slot that is NOT the
    * initially-opened article (i.e. an ancestor or descendant slot).
    */
-  onRead?: (article: Article, isNonPrimary: boolean) => void;
+  onRead?: (article: Article, isNonPrimary: boolean, mode: ReadingMode) => void;
   /**
    * Called just after the overlay is closed (user pressed ✕ or backdrop).
    * Use to clean up per-screen state that mirrors the overlay lifecycle.
@@ -427,6 +430,7 @@ export function useLetterSelectionOverlay(
       spaceId: selectedMeta.spaceId ?? null,
       date: selectedMeta.date ?? null,
       isRead: selectedMeta.isRead,
+      hasReadBefore: selectedMeta.hasReadBefore,
     });
 
     return { chainArticles: artList, chainMetas: metaList, chainInitialIndex: initIdx };
@@ -460,6 +464,8 @@ export function useLetterSelectionOverlay(
       const article = articles[chainIdx];
       if (!article) return;
       const isNonPrimary = chainIdx !== initialIndex;
+      const meta = effectiveChainRef.current.metas[chainIdx] ?? {};
+      const { mode } = getLetterSelectionReadAction(meta.isRead, meta.hasReadBefore);
       onBeforeReadRef.current?.();
       setSelectedArticle(null);
       setSelectedOrigin(null);
@@ -468,7 +474,7 @@ export function useLetterSelectionOverlay(
       setSelectedEnvelopeInfo(null);
       setSelectedCarouselShadow(false);
       if (onReadRef.current) {
-        onReadRef.current(article, isNonPrimary);
+        onReadRef.current(article, isNonPrimary, mode);
       } else {
         router.push({
           pathname: "/read" as never,

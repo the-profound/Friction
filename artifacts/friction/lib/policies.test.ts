@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getInboxReaderEntry,
   getInboxReadingMode,
+  getLetterSelectionReadAction,
   shouldCommitCompletionForEntry,
 } from "./policies";
 
@@ -60,6 +61,21 @@ describe("reading completion entry policy", () => {
 
   it("keeps already-read deliveries in reread mode", () => {
     expect(getInboxReadingMode(true, false)).toBe("re_read");
+  });
+
+  it("uses article history for the selection CTA even when the delivery is unread", () => {
+    expect(getLetterSelectionReadAction(false, true)).toEqual({
+      mode: "re_read",
+      label: "다시 읽기",
+    });
+    expect(getLetterSelectionReadAction(false, false)).toEqual({
+      mode: "basic",
+      label: "읽기",
+    });
+    expect(getLetterSelectionReadAction(true, false)).toEqual({
+      mode: "re_read",
+      label: "다시 읽기",
+    });
   });
 
   it("commits a reread opened from an inbox delivery", () => {

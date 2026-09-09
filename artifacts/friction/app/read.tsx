@@ -184,6 +184,7 @@ export default function ReadScreen() {
   const articleId = params.articleId ?? "";
   const inboxId = params.inboxId;
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
+  const readerIdentity = `${articleId}\u0000${mode}\u0000${inboxId ?? ""}`;
   const entrySource = params.entrySource as "list" | "inbox" | undefined;
   const teamCollectionId = params.teamCollectionId;
   // True when the user opens an article via a collection article list rather
@@ -707,9 +708,15 @@ export default function ReadScreen() {
   const hasStartedEntryFadeRef = useRef(false);
   const entryTimelineDoneRef = useRef(false);
   const contentReadyRef = useRef(false);
+  const entryIdentityRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (hasStartedEntryFadeRef.current) return;
+    if (entryIdentityRef.current === readerIdentity) return;
+    entryIdentityRef.current = readerIdentity;
+    hasStartedEntryFadeRef.current = false;
+    entryTimelineDoneRef.current = false;
+    contentReadyRef.current = false;
+    overlayOpacity.value = 1;
     hasStartedEntryFadeRef.current = true;
     overlayOpacity.value = withDelay(300, withTiming(HOLD_OPACITY, { duration: 700, easing: Easing.out(Easing.ease) }));
     const timer = setTimeout(() => {
@@ -720,8 +727,7 @@ export default function ReadScreen() {
       }
     }, ENTRY_TIMELINE_MS);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [readerIdentity, overlayOpacity]);
 
   // Snap overlay to 0 when content is ready — but only after the entry
   // timeline has run to completion, so the fixed fade is never cut short.
@@ -1082,6 +1088,26 @@ export default function ReadScreen() {
   const isCommittingRef = useRef(false);
   const pageTurnGenerationRef = useRef(0);
   const committedTotalPagesRef = useRef(totalPages);
+  useEffect(() => {
+    // A router.replace can keep this screen mounted while changing the
+    // article or mode. Do not carry completion, memo, analytics, or pager
+    // guards from the previous reading identity into the new session.
+    setCompleteScreenVisible(false);
+    setReadingCompleteCaseType("read");
+    setIsThoughtsOpen(false);
+    setIsThoughtsVisible(false);
+    setThoughtsQuote(undefined);
+    isThoughtsOpenRef.current = false;
+    thoughtsCloseHandleRef.current = null;
+    hasTrackedReadingStartRef.current = false;
+    readingStartTimeRef.current = 0;
+    completionTimeRef.current = 0;
+    answeredQuestionBatchClaimedRef.current = false;
+    isCommittingRef.current = false;
+    activeSwipeRef.current = null;
+    pageTurnGenerationRef.current += 1;
+  }, [readerIdentity]);
+
   useLayoutEffect(() => {
     if (committedTotalPagesRef.current === totalPages) return;
 
@@ -2015,17 +2041,11 @@ export default function ReadScreen() {
         style={[styles.floatingBackBtn, { top: insets.top + 12 }, lastPageBtnAnimStyle]}
         pointerEvents={isOnLastLetterPage || mode === "re_read" ? "auto" : "none"}
       >
-        {mode === "re_read" ? (
-          <HeaderButton
-            variant="back"
-            onPress={handleFloatingBackBtn}
-            accessibilityLabel="읽기 화면에서 돌아가기"
-          />
-        ) : (
-          <Pressable onPress={handleFloatingBackBtn} hitSlop={16}>
-            <Feather name="chevron-left" size={28} color={Colors.zinc700} />
-          </Pressable>
-        )}
+        <HeaderButton
+          variant="back"
+          onPress={handleFloatingBackBtn}
+          accessibilityLabel="읽기 화면에서 돌아가기"
+        />
       </Animated.View>
 
       {/* ── Memo FAB — bottom right (편지 페이지에서만 표시, Q-card/완독화면에서는 숨김) */}

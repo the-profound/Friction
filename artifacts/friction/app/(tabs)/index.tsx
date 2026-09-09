@@ -163,7 +163,7 @@ function InboxScreenContent() {
         initialIndex: chainInitialIndexRef.current,
       };
     },
-    onRead: (article) => {
+    onRead: (article, _isNonPrimary, selectionMode) => {
       // prepareInboxItem is declared later in this component but this function
       // is only called after the component has fully rendered, so TDZ is safe.
       const inboxItem = inboxItemByArticleIdRef.current.get(article.id);
@@ -172,11 +172,18 @@ function InboxScreenContent() {
         const entry = getInboxReaderEntry(inboxItem);
         cancelScrollRestorationRef.current?.();
         setTapItem(null);
-        router.push({ pathname: "/read", params: entry });
+        router.push({
+          pathname: "/read",
+          params: {
+            articleId: entry.articleId,
+            inboxId: entry.inboxId,
+            mode: entry.mode,
+          },
+        });
       } else {
         cancelScrollRestorationRef.current?.();
         setTapItem(null);
-        router.push({ pathname: "/read", params: { articleId: article.id, mode: "re_read" } });
+        router.push({ pathname: "/read", params: { articleId: article.id, mode: selectionMode } });
       }
     },
     onClose: () => {
@@ -281,6 +288,7 @@ function InboxScreenContent() {
           authorName: vm.authorName ?? null,
           authorId: vm.authorId ?? null,
           isRead: vm.isRead ?? undefined,
+          hasReadBefore: item.hasReadBefore,
         };
       })(),
     });
@@ -460,6 +468,7 @@ function InboxScreenContent() {
                   : null,
               date: inboxItem?.visibleAt ?? slot.article.createdAt ?? null,
               isRead: inboxItem?.isRead ?? false,
+              hasReadBefore: inboxItem?.hasReadBefore ?? false,
             }
           : {},
       );
@@ -479,6 +488,7 @@ function InboxScreenContent() {
       spaceId: tapItem.sourceSpaceId ?? null,
       date: tapItem.visibleAt ?? null,
       isRead: tapItem.isRead,
+      hasReadBefore: tapItem.hasReadBefore,
     });
 
     // Descendants — recursively collected from all inbox data
@@ -497,6 +507,7 @@ function InboxScreenContent() {
         spaceId: desc.sourceSpaceId ?? null,
         date: desc.visibleAt ?? desc.article.createdAt ?? null,
         isRead: desc.isRead,
+        hasReadBefore: desc.hasReadBefore,
       });
     }
 

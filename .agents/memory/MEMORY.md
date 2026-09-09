@@ -1,3 +1,4 @@
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
 - [Expo notifications foreground handler](friction-expo-notifications-foreground-handler.md) — no `setNotificationHandler` means foreground pushes are silently suppressed; a plausible-looking plugin option (`iosDisplayInForeground`) may not even exist in the installed version.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
@@ -133,3 +134,4 @@
 - [Friction article close atomicity](friction-article-close-atomicity.md) — closing must persist the complete title/content/pages snapshot with DIVIDING→CLOSING in one transaction; same-snapshot retries are successful.
 - [Active-reading restore authority](friction-active-reading-restore-authority.md) — auth landing must wait for persisted reading hydration; foreground reads and local writes share one revisioned queue.
 - [Metro public asset readiness](friction-metro-public-asset-readiness.md) — validate native assets by downloading bundle-derived URLs from every device-facing origin; tunnels must open before this gate.
+- [Generated API Zod default initialization](api-zod-generated-default-tdz.md) — a generated default constant can throw during web module load and blank the Expo preview before routing renders.

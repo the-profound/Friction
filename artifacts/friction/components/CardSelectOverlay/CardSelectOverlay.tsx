@@ -28,6 +28,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Typography, Spacing, Sizing } from "@/constants/tokens";
+import { getLetterSelectionReadAction } from "@/lib/policies";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import EnvelopeFrontCard from "@/components/EnvelopeCard/EnvelopeFrontCard";
 import {
@@ -114,6 +115,8 @@ export interface ChainArticleMeta {
   date?: string | Date | null;
   /** Mirrors the dimmed state of the card that opened the overlay. */
   isRead?: boolean;
+  /** Article-level completion history, independent of the current delivery. */
+  hasReadBefore?: boolean;
 }
 
 /** @deprecated Use ChainArticleMeta */
@@ -926,6 +929,10 @@ export default function CardSelectOverlay({
   // ── Active card info ──────────────────────────────────────────────────────
   const activeMeta = displayMetas[activeIndex] ?? {};
   const { authorName, authorId, collectionName, collectionId, spaceId, date } = activeMeta;
+  const readAction = getLetterSelectionReadAction(
+    activeMeta.isRead,
+    activeMeta.hasReadBefore,
+  );
   const dateLabel = date ? formatDate(date) : "";
   const canTapCollection = !!(
     collectionId &&
@@ -1469,13 +1476,47 @@ export default function CardSelectOverlay({
             >
               <Feather name={visibilityButton.icon} size={22} color={Colors.zinc700} />
             </ScalePressable>
-            <ScalePressable style={styles.ctaButtonFlex} contentStyle={styles.ctaButtonContent} onPress={handleRead}>
-              <Text style={styles.ctaLabel} numberOfLines={1}>읽기</Text>
+            <ScalePressable
+              style={styles.ctaButtonFlex}
+              contentStyle={[
+                styles.ctaButtonContent,
+                readAction.mode === "re_read" && styles.ctaButtonRereadContent,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={readAction.label}
+              onPress={handleRead}
+            >
+              <Text
+                style={[
+                  styles.ctaLabel,
+                  readAction.mode === "re_read" && styles.ctaLabelReread,
+                ]}
+                numberOfLines={1}
+              >
+                {readAction.label}
+              </Text>
             </ScalePressable>
           </View>
         ) : (
-          <ScalePressable style={styles.ctaButton} contentStyle={styles.ctaButtonContent} onPress={handleRead}>
-            <Text style={styles.ctaLabel} numberOfLines={1}>읽기</Text>
+          <ScalePressable
+            style={styles.ctaButton}
+            contentStyle={[
+              styles.ctaButtonContent,
+              readAction.mode === "re_read" && styles.ctaButtonRereadContent,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={readAction.label}
+            onPress={handleRead}
+          >
+            <Text
+              style={[
+                styles.ctaLabel,
+                readAction.mode === "re_read" && styles.ctaLabelReread,
+              ]}
+              numberOfLines={1}
+            >
+              {readAction.label}
+            </Text>
           </ScalePressable>
         )}
       </RAnimated.View>
@@ -1551,13 +1592,15 @@ const styles = StyleSheet.create({
   dotInactive: { backgroundColor: Colors.zinc300 },
   ctaWrapper: { position: "absolute" },
   ctaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  ctaButton: { width: "100%", height: 56 },
-  ctaButtonFlex: { flex: 1, height: 56 },
+  ctaButton: { width: "100%", height: 56, flexGrow: 0, flexShrink: 0 },
+  ctaButtonFlex: { flex: 1, height: 56, flexGrow: 1, flexShrink: 1 },
   ctaButtonEnvelope: { backgroundColor: "#3a342d" },
   ctaButtonDisabled: { opacity: 0.6 },
-  ctaButtonContent: { flexDirection: "row", justifyContent: "center", alignItems: "center", flex: 1, height: 56, borderRadius: 18, backgroundColor: Colors.noticeAccent },
-  ctaVisibilityBtn: { width: 56, height: 56 },
-  ctaVisibilityContent: { flex: 1, height: 56, borderRadius: 18, backgroundColor: Colors.zinc100, alignItems: "center", justifyContent: "center" },
+  ctaButtonContent: { width: "100%", flexDirection: "row", justifyContent: "center", alignItems: "center", height: 56, flexGrow: 0, flexShrink: 0, borderRadius: 18, backgroundColor: Colors.noticeAccent },
+  ctaButtonRereadContent: { backgroundColor: Colors.noticeAccentSoft, borderWidth: 1.5, borderColor: Colors.primaryAction },
+  ctaVisibilityBtn: { width: 56, height: 56, flexGrow: 0, flexShrink: 0 },
+  ctaVisibilityContent: { width: "100%", height: 56, flexGrow: 0, flexShrink: 0, borderRadius: 18, backgroundColor: Colors.zinc100, alignItems: "center", justifyContent: "center" },
   ctaVisibilityDisabled: { opacity: 0.45 },
   ctaLabel: { ...Typography.bodySemiBold, fontSize: 17, letterSpacing: 0.5, color: Colors.white, textAlign: "center" },
+  ctaLabelReread: { color: Colors.primaryAction },
 });

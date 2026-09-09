@@ -1,6 +1,11 @@
 export type ArticleStatus = "DIVIDING" | "CLOSING" | "LETTER";
 export type ReadingMode = "basic" | "re_read";
 
+export interface LetterSelectionReadAction {
+  mode: ReadingMode;
+  label: "읽기" | "다시 읽기";
+}
+
 const STATUS_ORDER: ArticleStatus[] = ["DIVIDING", "CLOSING", "LETTER"];
 
 export const ArticlePolicy = {
@@ -74,13 +79,29 @@ export function getInboxReadingMode(
   return isRead || hasReadBefore ? "re_read" : "basic";
 }
 
+/**
+ * The selection overlay and its navigation callback must agree about whether
+ * the selected article is a first read or a reread. `isRead` describes the
+ * current delivery, while `hasReadBefore` describes article-level history.
+ */
+export function getLetterSelectionReadAction(
+  isRead?: boolean,
+  hasReadBefore?: boolean,
+): LetterSelectionReadAction {
+  const mode = getInboxReadingMode(isRead, hasReadBefore);
+  return {
+    mode,
+    label: mode === "re_read" ? "다시 읽기" : "읽기",
+  };
+}
+
 export interface InboxReaderEntryInput {
   id: string;
   articleId: string;
   isRead?: boolean;
   hasReadBefore?: boolean;
   replyToArticleId?: string | null;
-  hasReadSourceArticle?: boolean;
+  hasReadSourceArticle?: boolean | null;
 }
 
 export interface InboxReaderEntry {
