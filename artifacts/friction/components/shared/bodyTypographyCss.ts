@@ -57,15 +57,15 @@ export function buildBodyTypographyCss(opts: BodyTypographyCssOptions): string {
   const uExtras = readerUnderline ? ";text-underline-offset:0.2em" : "";
 
   return [
-    `${r}{font-family:var(--body-regular-font-family,${BODY_REGULAR_FONT_FAMILY});font-size:var(--body-font-size);line-height:var(--body-line-height);letter-spacing:var(--body-letter-spacing);color:#1A1A1A;background:transparent;text-size-adjust:100%;-webkit-text-size-adjust:100%;text-align:justify;overflow-wrap:anywhere;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
-    `${b} p{${pMargin};text-align:justify;overflow-wrap:anywhere;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
+    `${r}{font-family:var(--body-regular-font-family,${BODY_REGULAR_FONT_FAMILY});font-size:var(--body-font-size);line-height:var(--body-line-height);letter-spacing:var(--body-letter-spacing);color:#1A1A1A;background:transparent;text-size-adjust:100%;-webkit-text-size-adjust:100%;text-align:justify;text-align-last:left;overflow-wrap:anywhere;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-character}`,
+    `${b} p{${pMargin};text-align:justify;text-align-last:left;overflow-wrap:anywhere;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-character}`,
     `${b} h1{font-family:var(--body-semibold-font-family,${BODY_SEMIBOLD_FONT_FAMILY});font-size:var(--title-font-size);font-weight:600;letter-spacing:0.025em;${h1Margin};line-height:1.25;text-align:left}`,
     `${b} h2{font-family:var(--body-semibold-font-family,${BODY_SEMIBOLD_FONT_FAMILY});font-size:1.3em;font-weight:600;letter-spacing:0.025em;${h2Margin};line-height:1.3;text-align:left}`,
     `${b} h3{font-family:var(--body-semibold-font-family,${BODY_SEMIBOLD_FONT_FAMILY});font-size:1.1em;font-weight:600;letter-spacing:0.025em;${h3Margin};line-height:1.35;text-align:left}`,
     `${b} ul,${b} ol{padding-left:1.5em;${listMargin};text-align:left}`,
     `${b} li{${liMargin};text-align:left}`,
-    `${b} li p{margin-bottom:0}`,
-    `${b} blockquote{font-family:var(--body-regular-font-family,${BODY_REGULAR_FONT_FAMILY});font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;${blockquoteMargin};color:#52525b;text-align:justify;overflow-wrap:anywhere;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-ideograph}`,
+    `${b} li p{margin-bottom:0;text-align:left}`,
+    `${b} blockquote{font-family:var(--body-regular-font-family,${BODY_REGULAR_FONT_FAMILY});font-style:italic;border-left:3px solid #d4d4d8;padding-left:1em;${blockquoteMargin};color:#52525b;text-align:justify;text-align-last:left;overflow-wrap:anywhere;word-wrap:break-word;word-break:normal;-webkit-hyphens:auto;hyphens:auto;text-justify:inter-character}`,
     `${b} hr{border:none;border-top:1px solid #e4e4e7;${hrCss}}`,
     `${b} u{text-decoration:underline${uExtras}}`,
     `${b} strong{font-family:var(--body-semibold-font-family,${BODY_SEMIBOLD_FONT_FAMILY});font-weight:600}`,

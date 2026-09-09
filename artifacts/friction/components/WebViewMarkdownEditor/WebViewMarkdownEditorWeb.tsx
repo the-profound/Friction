@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useLayoutEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extension-placeholder";
@@ -165,6 +165,12 @@ const InlineImage = TipTapNode.create({
 
 const CHANGE_THROTTLE_MS = 500;
 
+function autoResizeTitle(element: HTMLTextAreaElement | null): void {
+  if (!element) return;
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight}px`;
+}
+
 const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdownEditorProps>(
   function WebViewMarkdownEditorWeb(
     {
@@ -196,6 +202,29 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
     const [fontsReady, setFontsReady] = useState(false);
     const fontStatusRef = useRef<BodyFontLoadStatus | null>(null);
     useEffect(() => { onExportMarkdownRef.current = onExportMarkdown; }, [onExportMarkdown]);
+
+    const attachTitle = useCallback((element: HTMLTextAreaElement | null) => {
+      titleRef.current = element;
+      autoResizeTitle(element);
+    }, []);
+
+    useLayoutEffect(() => {
+      const title = titleRef.current;
+      if (!title) return;
+      if (title.value !== (titleValue || "")) {
+        title.value = titleValue || "";
+      }
+      autoResizeTitle(title);
+    }, [titleValue, hideTitle, fontsReady, typography.textColumnWidth, typography.titleFontSizePx]);
+
+    useEffect(() => {
+      const title = titleRef.current;
+      const container = containerRef.current;
+      if (!title || !container || typeof ResizeObserver === "undefined") return;
+      const observer = new ResizeObserver(() => autoResizeTitle(title));
+      observer.observe(container);
+      return () => observer.disconnect();
+    }, [hideTitle]);
 
     const editor = useEditor({
       extensions: [
@@ -421,6 +450,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
       setTitle(title: string) {
         if (titleRef.current) {
           titleRef.current.value = title;
+          autoResizeTitle(titleRef.current);
         }
       },
       focus() {
@@ -502,8 +532,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
           title.value = next.value;
           title.setSelectionRange(next.caret, next.caret);
           onTitleChange?.(next.value);
-          title.style.height = "auto";
-          title.style.height = title.scrollHeight + "px";
+          autoResizeTitle(title);
           return;
         }
         if (editor && !editor.isDestroyed) {
@@ -545,9 +574,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
     const handleTitleInput = useCallback(
       (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         onTitleChange?.(e.target.value);
-        const el = e.target;
-        el.style.height = "auto";
-        el.style.height = el.scrollHeight + "px";
+        autoResizeTitle(e.target);
       },
       [onTitleChange],
     );
@@ -606,7 +633,7 @@ const WebViewMarkdownEditorWeb = forwardRef<WebViewMarkdownEditorRef, WebViewMar
         <style>{proseMirrorCss}</style>
         {!hideTitle && onTitleChange !== undefined && (
           <textarea
-            ref={titleRef}
+            ref={attachTitle}
             defaultValue={titleValue || ""}
             placeholder="제목"
             onChange={handleTitleInput}

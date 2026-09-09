@@ -1517,4 +1517,20 @@ describe("shared title keyboard contract", () => {
     expect(editorSource).toContain("titleInput.value = cmd.title ||");
     expect(editorSource).toContain("autoResizeTitle()");
   });
+
+  it("auto-resizes the web title for input, external restoration, and layout changes", () => {
+    const editorWeb = readEditorWeb();
+
+    expect(editorWeb).toContain("function autoResizeTitle(");
+    expect(editorWeb).toContain('element.style.height = "auto"');
+    expect(editorWeb).toContain('element.style.height = `${element.scrollHeight}px`');
+    expect(editorWeb).toContain("ref={attachTitle}");
+    expect(editorWeb).toContain("autoResizeTitle(e.target)");
+    expect(editorWeb).toContain("autoResizeTitle(titleRef.current)");
+    expect(editorWeb).toContain(
+      "[titleValue, hideTitle, fontsReady, typography.textColumnWidth, typography.titleFontSizePx]",
+    );
+    expect(editorWeb).toContain("new ResizeObserver(() => autoResizeTitle(title))");
+    expect(editorWeb).toContain("observer.observe(container)");
+  });
 });

@@ -612,6 +612,28 @@ describe("reader title typography", () => {
     ]);
   });
 
+  it("justifies Korean paragraphs and quotes while keeping headings and lists left-aligned", () => {
+    const css = buildBodyTypographyCss({
+      rootSelector: ".web-markdown-editor-scroll-container",
+      blockSelector: ".ProseMirror",
+      blockMargins: "spaced",
+      hrStyle: "spaced",
+    });
+    const sharedCss = read("components/shared/bodyTypographyCss.ts");
+    const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
+
+    expect(css).toContain(".ProseMirror p{");
+    expect(css).toContain("text-align:justify;text-align-last:left");
+    expect(css).toContain("text-justify:inter-character");
+    expect(css).toContain("overflow-wrap:anywhere");
+    expect(css).toMatch(/\.ProseMirror blockquote\{[^}]*text-align:justify/);
+    expect(css).toMatch(/\.ProseMirror h1\{[^}]*text-align:left/);
+    expect(css).toMatch(/\.ProseMirror ul,.ProseMirror ol\{[^}]*text-align:left/);
+    expect(css).toContain(".ProseMirror li p{margin-bottom:0;text-align:left}");
+    expect(sharedCss).not.toContain("text-justify:inter-ideograph");
+    expect(webEditor).toContain("${editorTypographyCss}");
+  });
+
   it("ties measurement callbacks to the request that produced them", () => {
     const writingScreen = read("app/on-01a.tsx");
     const nativeMeasure = read("components/WebViewMeasureLayer/WebViewMeasureLayer.tsx");
