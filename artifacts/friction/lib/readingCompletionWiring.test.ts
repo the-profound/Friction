@@ -50,6 +50,43 @@ describe("rereceived inbox completion wiring", () => {
   });
 });
 
+describe("safe reading exit navigation", () => {
+  it("returns to the previous screen when possible and falls back to records", () => {
+    const navigation = sourceBetween(
+      "const navigateBackDelayed = useCallback",
+      "const handleBack = useCallback",
+    );
+
+    expect(navigation).toContain("setTimeout(() => {");
+    expect(navigation).toContain("if (router.canGoBack())");
+    expect(navigation).toContain("router.back()");
+    expect(navigation).toContain('router.replace("/(tabs)/on")');
+  });
+
+  it("keeps every delayed reading exit on the shared safe path", () => {
+    const generalExit = sourceBetween(
+      "const handleBack = useCallback",
+      "useEffect(() => {",
+    );
+    const saveExit = sourceBetween(
+      "const handleCommitAndSave = useCallback",
+      "const handleCommitAndSkip = useCallback",
+    );
+    const completionExit = sourceBetween(
+      "const handleCommitAndSkip = useCallback",
+      "const handleRereadExit = useCallback",
+    );
+    const rereadExit = sourceBetween(
+      "const handleRereadExit = useCallback",
+      "const handleTextSelect = useCallback",
+    );
+
+    for (const handler of [generalExit, saveExit, completionExit, rereadExit]) {
+      expect(handler).toContain("runOnJS(navigateBackDelayed)()");
+    }
+  });
+});
+
 describe("in-screen reread reset wiring", () => {
   it("restarts the reading session at the cover and retires the completed pager", () => {
     const handler = sourceBetween(

@@ -880,7 +880,13 @@ export default function ReadScreen() {
 
 
   const navigateBackDelayed = useCallback(() => {
-    setTimeout(() => router.back(), 300);
+    setTimeout(() => {
+      if (router.canGoBack()) {
+        router.back();
+        return;
+      }
+      router.replace("/(tabs)/on");
+    }, 300);
   }, [router]);
 
   const handleBack = useCallback(async () => {
