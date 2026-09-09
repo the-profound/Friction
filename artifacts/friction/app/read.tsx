@@ -274,6 +274,13 @@ export default function ReadScreen() {
 
 
   const questionCardRef = useRef<QuestionCardCurlHandle>(null);
+  // 질문 카드 자체는 3슬롯 페이저에서 멀어지면 언마운트된다. 답변은
+  // 읽기 세션 ref에 백업해 글 페이지를 여러 장 오간 뒤에도 복원한다.
+  // state가 아니라 ref라서 질문 입력마다 전체 읽기 화면을 재렌더하지 않는다.
+  const questionCardAnswersRef = useRef<Record<number, string>>({});
+  const handleQuestionCardAnswersChange = useCallback((answers: Record<number, string>) => {
+    questionCardAnswersRef.current = answers;
+  }, []);
   const [exitConfirmVisible, setExitConfirmVisible] = useState(false);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [showSelectionPill, setShowSelectionPill] = useState(false);
@@ -1102,6 +1109,7 @@ export default function ReadScreen() {
     setCompleteScreenVisible(false);
     setIsInScreenReread(false);
     setReadingCompleteCaseType("read");
+    questionCardAnswersRef.current = {};
     setIsThoughtsOpen(false);
     setIsThoughtsVisible(false);
     setThoughtsQuote(undefined);
@@ -1938,6 +1946,9 @@ export default function ReadScreen() {
                               <QuestionCardCurl
                                 ref={questionCardRef}
                                 questions={questionCardQuestions}
+                                initialAnswers={questionCardAnswersRef.current}
+                                onAnswersChange={handleQuestionCardAnswersChange}
+                                answerSessionKey={readerIdentity}
                                 containerWidth={layout.containerWidth}
                                 containerHeight={layout.containerHeight}
                                 keyboardVisibleRef={keyboardVisibleRef}

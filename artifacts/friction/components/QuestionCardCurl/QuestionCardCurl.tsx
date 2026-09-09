@@ -75,6 +75,13 @@ export interface QuestionCardCurlProps {
   containerHeight: number;
   /** 이 글에 대한 질문 카드 질문 목록 */
   questions?: string[];
+  /**
+   * 질문 카드가 3슬롯 페이저 밖으로 나가 언마운트돼도 유지되는 답변.
+   * 수명은 카드가 아니라 읽기 세션이 소유한다.
+   */
+  initialAnswers: Record<number, string>;
+  onAnswersChange: (answers: Record<number, string>) => void;
+  answerSessionKey: string;
   /** read.tsx의 keyboardVisibleRef */
   keyboardVisibleRef: React.RefObject<boolean>;
 }
@@ -138,6 +145,9 @@ function QuestionCardCurlInner({
   containerWidth: screenWidth,
   containerHeight: screenHeight,
   questions,
+  initialAnswers,
+  onAnswersChange,
+  answerSessionKey,
   keyboardVisibleRef,
 }: QuestionCardCurlProps, ref: React.ForwardedRef<QuestionCardCurlHandle>) {
   /* 3~5개 가변 질문 목록: prop이 비어있거나 없으면 고정 3개 질문으로 대체 */
@@ -158,12 +168,19 @@ function QuestionCardCurlInner({
   const peekOffset = cardSmallH + CARD_GAP;
 
   /* ── 덱 상태 ─────────────────────────────────────────────────────────
-   * answers: 질문 인덱스별 답변 텍스트. cursor: 현재 중앙 카드 인덱스. */
-  const [answers, setAnswers] = useState<Record<number, string>>({});
+   * 읽기 화면이 answers의 백업을 소유한다. 질문 카드 슬롯은 앞뒤 한
+   * 페이지만 유지하므로 더 멀리 이동하면 언마운트되며, 다시 마운트될
+   * 때 initialAnswers로 복원한다. 입력 중에는 카드 로컬 상태를 써서
+   * 매 글자마다 무거운 읽기 화면 전체를 다시 렌더링하지 않는다. */
+  const [answers, setAnswers] = useState<Record<number, string>>(() => initialAnswers);
   const [cursor, setCursor] = useState(0);
 
   const answersRef = useRef(answers);
   answersRef.current = answers;
+  useEffect(() => {
+    setAnswers(initialAnswers);
+    answersRef.current = initialAnswers;
+  }, [answerSessionKey]);
 
   /* ── Shared values ──────────────────────────────────────────────────
    * pos: 덱 전체 배치의 단일 소스 (카드 단위 float).
@@ -653,11 +670,10 @@ function QuestionCardCurlInner({
                         value={answers[idx] ?? ""}
                         editable={isActive}
                         onChangeText={isActive ? (v) => {
-                          setAnswers((prev) => {
-                            const next = { ...prev, [idx]: v };
-                            answersRef.current = next;
-                            return next;
-                          });
+                          const next = { ...answersRef.current, [idx]: v };
+                          answersRef.current = next;
+                          setAnswers(next);
+                          onAnswersChange(next);
                         } : undefined}
                         onContentSizeChange={isActive ? (ev) => {
                           contentHeightSV.value = ev.nativeEvent.contentSize.height;
