@@ -92,6 +92,34 @@ describe("send picker presentation", () => {
     ).toEqual({ kind: "missing" });
   });
 
+  it("replaces an entry snapshot with the latest server letter of the same id", () => {
+    const snapshot = {
+      ...article("same"),
+      title: "이전 제목",
+    } as never;
+    const current = {
+      ...article("same"),
+      title: "최신 제목",
+    } as never;
+
+    expect(
+      resolvePrefillArticleState({
+        prefillArticleId: "same",
+        articles: [snapshot],
+        isLoading: true,
+        isError: false,
+      }),
+    ).toEqual({ kind: "ready", article: snapshot });
+    expect(
+      resolvePrefillArticleState({
+        prefillArticleId: "same",
+        articles: [current],
+        isLoading: false,
+        isError: false,
+      }),
+    ).toEqual({ kind: "ready", article: current });
+  });
+
   it("sorts picker letters newest first and searches titles case-insensitively", () => {
     const items = [
       { id: "old", title: "오래된 안부", sortAt: "2026-09-01T00:00:00.000Z" },

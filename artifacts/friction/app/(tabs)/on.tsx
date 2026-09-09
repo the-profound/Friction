@@ -1159,7 +1159,31 @@ function OnScreenContent() {
             style: "default",
             onPress: () => {
               if (letterActionTarget?.kind === "letter") {
-                router.push({ pathname: "/to-send", params: { prefillArticleId: letterActionTarget.article.id } });
+                  const article = letterActionTarget.article;
+                  if (userId) {
+                    const letterQueryKey = getListArticlesQueryKey({
+                      authorId: userId,
+                      status: "LETTER",
+                    });
+                    queryClient.setQueryData<Article[]>(
+                      letterQueryKey,
+                      (current) => {
+                        const remaining = (current ?? []).filter(
+                          (item) => item.id !== article.id,
+                        );
+                        return [article, ...remaining];
+                      },
+                    );
+                    void queryClient.invalidateQueries({
+                      queryKey: letterQueryKey,
+                      exact: true,
+                      refetchType: "none",
+                    });
+                  }
+                  router.push({
+                    pathname: "/to-send",
+                    params: { prefillArticleId: article.id },
+                  });
               }
             },
           },

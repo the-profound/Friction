@@ -31,6 +31,9 @@ import { SpacePickerModal } from "@/components/shared/SpacePickerModal";
 import { CollapsibleDatePicker } from "@/components/shared/CalendarGrid";
 import {
   ApiError,
+  getListArticlesQueryKey,
+  getListInboxQueryKey,
+  getListNeighborsQueryKey,
   getListSendRecordsQueryKey,
   getListSpacesQueryKey,
   useListArticles,
@@ -116,6 +119,10 @@ export function SendInline({
   const { showToast } = useToast();
 
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedArticleKey, setSelectedArticleKey] = useState<
+    string | number | undefined
+  >(undefined);
+  const [selectedArticleVerified, setSelectedArticleVerified] = useState(false);
   const [mode, setMode] = useState<SendMode>("person");
   const [selectedNeighbor, setSelectedNeighbor] =
     useState<NeighborWithUser | null>(null);
@@ -141,14 +148,32 @@ export function SendInline({
 
   const initialDefaultsPendingRef = useRef(false);
 
-  const articlesQuery = useListArticles({
-    authorId: userId,
+  const articleQueryParams = {
+    authorId: userId ?? "",
     status: "LETTER" as const,
+  };
+  const articlesQuery = useListArticles(articleQueryParams, {
+    query: {
+      enabled: !!userId,
+      queryKey: getListArticlesQueryKey(articleQueryParams),
+    },
   });
   const articles = (articlesQuery.data ?? []) as Article[];
-  const neighborsQuery = useListNeighbors({ userId });
+  const neighborQueryParams = { userId: userId ?? "" };
+  const neighborsQuery = useListNeighbors(neighborQueryParams, {
+    query: {
+      enabled: !!userId,
+      queryKey: getListNeighborsQueryKey(neighborQueryParams),
+    },
+  });
   const neighbors = (neighborsQuery.data ?? []) as NeighborWithUser[];
-  const inboxQuery = useListInbox({ recipientId: userId });
+  const inboxQueryParams = { recipientId: userId ?? "" };
+  const inboxQuery = useListInbox(inboxQueryParams, {
+    query: {
+      enabled: !!userId,
+      queryKey: getListInboxQueryKey(inboxQueryParams),
+    },
+  });
   const replyCandidates = useMemo(
     () => filterReadReplyLetters((inboxQuery.data ?? []) as InboxItem[]),
     [inboxQuery.data],
@@ -169,20 +194,60 @@ export function SendInline({
     isLoading: articlesQuery.isFetching,
     isError: articlesQuery.isError,
   });
+  const currentSelectedArticle =
+    selectedArticle && selectedArticleKey === prefillKey
+      ? selectedArticle
+      : null;
   const displayedArticle =
-    selectedArticle ??
+    currentSelectedArticle ??
     (prefillArticleState.kind === "ready" ? prefillArticleState.article : null);
 
-  // Preserve all existing entry points while applying their preselection once
-  // their corresponding list has arrived.
+  // A route can reuse this mounted screen. Retire the previous selection and
+  // its reply defaults before reconciling the next entry snapshot.
   useEffect(() => {
-    if (!prefillArticleId) return;
+    setSelectedArticle(null);
+    setSelectedArticleKey(undefined);
+    setSelectedArticleVerified(false);
+    setSelectedReplyInbox(null);
+    setMode("person");
+    setConfirmVisible(false);
+    setEnvelopePromptVisible(false);
+    setRetryEnvelope(null);
+    setSendError(null);
+    initialDefaultsPendingRef.current = false;
+  }, [prefillKey]);
+
+  // Preserve all existing entry points while applying their preselection once
+  // their corresponding server list has arrived. Cached route snapshots are
+  // display-only until this background verification settles successfully.
+  useEffect(() => {
+    if (
+      !prefillArticleId ||
+      !userId ||
+      articlesQuery.isFetching ||
+      articlesQuery.isError
+    )
+      return;
     const found = articles.find((article) => article.id === prefillArticleId);
     if (found) {
       setSelectedArticle(found);
+      setSelectedArticleKey(prefillKey);
+      setSelectedArticleVerified(true);
       initialDefaultsPendingRef.current = true;
+    } else {
+      setSelectedArticle(null);
+      setSelectedArticleKey(undefined);
+      setSelectedArticleVerified(false);
+      setSelectedReplyInbox(null);
     }
-  }, [articles, prefillArticleId, prefillKey]);
+  }, [
+    articles,
+    articlesQuery.isError,
+    articlesQuery.isFetching,
+    prefillArticleId,
+    prefillKey,
+    userId,
+  ]);
 
   useEffect(() => {
     if (!prefillNeighborId) return;
@@ -265,7 +330,8 @@ export function SendInline({
   const spacePolicyReady =
     mode !== "space" || typeof selectedSpace?.isAnonymous === "boolean";
   const canSend = Boolean(
-    selectedArticle &&
+    currentSelectedArticle &&
+    selectedArticleVerified &&
     spacePolicyReady &&
     ((mode === "person" && selectedNeighbor) ||
       (mode === "reply" && selectedReplyInbox) ||
@@ -732,6 +798,8 @@ export function SendInline({
           if (found) {
             initialDefaultsPendingRef.current = false;
             setSelectedArticle(found);
+            setSelectedArticleKey(prefillKey);
+            setSelectedArticleVerified(true);
           }
         }}
       />

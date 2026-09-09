@@ -157,6 +157,14 @@ describe("ArticleListItem contract", () => {
     expect(pickerSource).not.toContain("useGetArticle");
   });
 
+  it("shows a route-prefilled letter from the shared list cache but verifies it before sending", () => {
+    expect(sendInlineSource).toContain("prefillArticleState.kind === \"ready\"");
+    expect(sendInlineSource).toContain("selectedArticleVerified");
+    expect(sendInlineSource).toContain("selectedArticleKey === prefillKey");
+    expect(sendInlineSource).toContain("enabled: !!userId");
+    expect(sendInlineSource).not.toContain("useGetArticle");
+  });
+
   it("uses the shared cover row for collection list and selection modes", () => {
     expect(collectionDetailSource.match(/<ArticleListItem/g)).toHaveLength(2);
     expect(collectionDetailSource).toContain(
