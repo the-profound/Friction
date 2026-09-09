@@ -10,7 +10,7 @@
  * • TextInput 멀티라인, 내용에 따라 자동 높이 증가, returnKey = return.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -49,8 +49,10 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  resolveThoughtInputHeight,
   shouldShowReadingThoughtToolbar,
   startImmediateClose,
+  type ThoughtInputHeightMeasurement,
   type OptimisticReadingThought,
 } from "@/lib/thoughtInlineEditor";
 
@@ -224,7 +226,8 @@ export default function ThoughtsBottomSheet({
   const [thoughtCardWidth, setThoughtCardWidth] = useState(
     Math.max(0, screenWidth - Spacing.screenPx * 2),
   );
-  const [inputContentHeight, setInputContentHeight] = useState(0);
+  const [inputHeightMeasurement, setInputHeightMeasurement] =
+    useState<ThoughtInputHeightMeasurement>();
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef<EditorState | null>(null);
   editorRef.current = editor;
@@ -238,7 +241,12 @@ export default function ThoughtsBottomSheet({
   const inputMinHeight =
     thoughtTypography.lineHeight * THOUGHT_INPUT_MIN_LINES +
     THOUGHT_INPUT_VERTICAL_PADDING;
-  const inputHeight = Math.max(inputMinHeight, inputContentHeight);
+  const inputHeight = resolveThoughtInputHeight({
+    editorKey: editor?.key,
+    width: thoughtCardWidth,
+    minHeight: inputMinHeight,
+    measurement: inputHeightMeasurement,
+  });
   const showKeyboardToolbar = shouldShowReadingThoughtToolbar({
     visible,
     editorActive: editor != null,
@@ -252,9 +260,34 @@ export default function ThoughtsBottomSheet({
     Keyboard.dismiss();
   }, []);
 
-  useEffect(() => {
-    setInputContentHeight(0);
-  }, [editor?.key]);
+  const measureWebInputHeight = useCallback((key: string) => {
+    if (Platform.OS !== "web") return;
+    const element = inputRef.current as unknown as {
+      scrollHeight?: number;
+      style?: { height: string };
+    } | null;
+    if (!element?.style || typeof element.scrollHeight !== "number") return;
+
+    // A controlled textarea's fixed React Native height can itself become the
+    // scrollHeight floor. Temporarily release it so shrinking and initial
+    // prefilled quotes are both measured from the real DOM content.
+    const previousHeight = element.style.height;
+    element.style.height = "0px";
+    const contentHeight = element.scrollHeight;
+    element.style.height = previousHeight;
+    setInputHeightMeasurement({
+      editorKey: key,
+      width: thoughtCardWidth,
+      contentHeight,
+    });
+  }, [thoughtCardWidth]);
+
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web" || !editor) return;
+    measureWebInputHeight(editor.key);
+    const frame = requestAnimationFrame(() => measureWebInputHeight(editor.key));
+    return () => cancelAnimationFrame(frame);
+  }, [editor?.key, editor?.text, measureWebInputHeight]);
   /** 같은 편집 저장을 요청한 닫기/전환은 하나의 물리 요청을 함께 기다린다. */
   const commitSingleFlightRef = useRef(createKeyedSingleFlight<boolean>());
   /** 연속 닫기 탭이 저장과 close 애니메이션을 여러 번 시작하지 않게 한다. */
@@ -853,21 +886,41 @@ export default function ThoughtsBottomSheet({
     key: string,
     layout: { width: number; y: number; height: number },
   ) => {
+    const previous = cardLayoutRef.current[key];
     cardLayoutRef.current[key] = { y: layout.y, height: layout.height };
     setThoughtCardWidth((current) =>
       Math.abs(current - layout.width) < 0.5 ? current : layout.width,
     );
-  }, []);
+    if (
+      editorRef.current?.key === key
+      && (!previous || Math.abs(previous.height - layout.height) >= 0.5)
+    ) {
+      scrollEditorBottomIntoView(key);
+    }
+  }, [scrollEditorBottomIntoView]);
 
   const handleEditorContentSizeChange = useCallback((
     key: string,
     contentHeight: number,
   ) => {
-    setInputContentHeight((current) =>
-      Math.abs(current - contentHeight) < 0.5 ? current : contentHeight,
-    );
-    scrollEditorBottomIntoView(key);
-  }, [scrollEditorBottomIntoView]);
+    if (Platform.OS === "web") {
+      measureWebInputHeight(key);
+      return;
+    }
+    setInputHeightMeasurement((current) => {
+      const next = {
+        editorKey: key,
+        width: thoughtCardWidth,
+        contentHeight,
+      };
+      return current
+        && current.editorKey === next.editorKey
+        && Math.abs(current.width - next.width) < 0.5
+        && Math.abs(current.contentHeight - next.contentHeight) < 0.5
+        ? current
+        : next;
+    });
+  }, [measureWebInputHeight, thoughtCardWidth]);
 
   // 모든 닫기 경로(배경 탭, 핸들 드래그, 외부 ref)는 동일한 저장 수명주기를 거친다.
   // 최신 스냅샷 저장을 시작한 직후 결과를 기다리지 않고 닫기 애니메이션을 시작한다.

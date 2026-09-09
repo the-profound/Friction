@@ -12,6 +12,7 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  resolveThoughtInputHeight,
   shouldShowReadingThoughtToolbar,
   startImmediateClose,
   type OptimisticReadingThought,
@@ -174,6 +175,68 @@ describe("inline reading thought lifecycle", () => {
   it("formats selected text and its source in the new inline card", () => {
     expect(formatReadingThoughtQuote("첫 줄\n둘째 줄", "작가, 제목, 2면"))
       .toBe("> 첫 줄\n> 둘째 줄\n\n— 작가, 제목, 2면");
+  });
+
+  it("uses a multiline quote measurement immediately for the matching web editor", () => {
+    expect(resolveThoughtInputHeight({
+      editorKey: "quoted",
+      width: 320,
+      minHeight: 72,
+      measurement: {
+        editorKey: "quoted",
+        width: 320,
+        contentHeight: 148,
+      },
+    })).toBe(148);
+  });
+
+  it("keeps the minimum height for blank, switched, or resized editors", () => {
+    const measurement = {
+      editorKey: "previous",
+      width: 320,
+      contentHeight: 148,
+    };
+    expect(resolveThoughtInputHeight({
+      editorKey: "current",
+      width: 320,
+      minHeight: 72,
+      measurement,
+    })).toBe(72);
+    expect(resolveThoughtInputHeight({
+      editorKey: "previous",
+      width: 280,
+      minHeight: 72,
+      measurement,
+    })).toBe(72);
+    expect(resolveThoughtInputHeight({
+      editorKey: "empty",
+      width: 320,
+      minHeight: 72,
+    })).toBe(72);
+  });
+
+  it("keeps growing and shrinking from fresh measurements without going below minimum", () => {
+    const base = { editorKey: "editor", width: 320, minHeight: 72 };
+    expect(resolveThoughtInputHeight({
+      ...base,
+      measurement: { editorKey: "editor", width: 320, contentHeight: 196 },
+    })).toBe(196);
+    expect(resolveThoughtInputHeight({
+      ...base,
+      measurement: { editorKey: "editor", width: 320, contentHeight: 45 },
+    })).toBe(72);
+  });
+
+  it("keeps DOM height measurement web-only while retaining native content-size events", () => {
+    const source = readFileSync(
+      join(__dirname, "../../components/ThoughtsBottomSheet/ThoughtsBottomSheet.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('if (Platform.OS !== "web") return;');
+    expect(source).toContain('if (Platform.OS === "web") {');
+    expect(source).toContain('element.style.height = "0px";');
+    expect(source.match(/onContentSizeChange=\{/g)).toHaveLength(2);
+    expect(source).toContain("scrollEditorBottomIntoView(key);");
   });
 
   const optimistic = (

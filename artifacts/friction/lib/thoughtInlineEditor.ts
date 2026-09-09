@@ -22,6 +22,31 @@ export interface KeyedSingleFlight<TResult> {
   pendingKey(): string | undefined;
 }
 
+export interface ThoughtInputHeightMeasurement {
+  editorKey: string;
+  width: number;
+  contentHeight: number;
+}
+
+export function resolveThoughtInputHeight(input: {
+  editorKey?: string;
+  width: number;
+  minHeight: number;
+  measurement?: ThoughtInputHeightMeasurement;
+}): number {
+  const { editorKey, width, minHeight, measurement } = input;
+  if (
+    !editorKey
+    || !measurement
+    || measurement.editorKey !== editorKey
+    || Math.abs(measurement.width - width) >= 0.5
+    || !Number.isFinite(measurement.contentHeight)
+  ) {
+    return minHeight;
+  }
+  return Math.max(minHeight, measurement.contentHeight);
+}
+
 export function shouldShowReadingThoughtToolbar(input: {
   visible: boolean;
   editorActive: boolean;
