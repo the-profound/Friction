@@ -2645,7 +2645,17 @@ function ReadingCompleteScreen({
 
       {/* 하단 버튼 영역 */}
       <View style={[readingCompleteStyles.bottom, { paddingBottom: Math.max(insets.bottom, 24) }]}>
-        {/* 보관하기 (primary) */}
+        {/* 다시 읽기 (primary) */}
+        <Pressable
+          style={readingCompleteStyles.rereadBtn}
+          onPress={onReread}
+          accessibilityRole="button"
+          accessibilityLabel="다시 읽기"
+        >
+          <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
+        </Pressable>
+
+        {/* 보관하기 (secondary) */}
         <Pressable
           style={[readingCompleteStyles.saveBtn, (isSaving || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
           onPress={onSave}
@@ -2657,16 +2667,6 @@ function ReadingCompleteScreen({
           <Text style={readingCompleteStyles.saveBtnText}>
             {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "이미 보관된 글이에요" : "보관하기"}
           </Text>
-        </Pressable>
-
-        {/* 다시 읽기 (secondary) */}
-        <Pressable
-          style={readingCompleteStyles.rereadBtn}
-          onPress={onReread}
-          accessibilityRole="button"
-          accessibilityLabel="다시 읽기"
-        >
-          <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
         </Pressable>
 
         {/* 나가기 (tertiary) */}
@@ -2725,8 +2725,10 @@ const readingCompleteStyles = StyleSheet.create({
     height: 52,
     flexGrow: 0,
     flexShrink: 0,
-    backgroundColor: Colors.primaryAction,
+    backgroundColor: Colors.noticeAccentSoft,
     borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.primaryAction,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2734,7 +2736,7 @@ const readingCompleteStyles = StyleSheet.create({
     fontSize: 16,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     fontWeight: "600",
-    color: Colors.primaryActionForeground,
+    color: Colors.primaryAction,
   },
   skipBtn: {
     width: "100%",
@@ -2743,14 +2745,14 @@ const readingCompleteStyles = StyleSheet.create({
     flexShrink: 0,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: Colors.zinc200,
+    borderColor: Colors.black,
     alignItems: "center",
     justifyContent: "center",
   },
   skipBtnText: {
     fontSize: 15,
     fontFamily: ReaderTokens.fontFamily.sans,
-    color: Colors.zinc500,
+    color: Colors.black,
   },
   rereadBtn: {
     width: "100%",
@@ -2758,7 +2760,7 @@ const readingCompleteStyles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     borderRadius: 12,
-    backgroundColor: Colors.noticeAccentSoft,
+    backgroundColor: Colors.primaryAction,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2766,7 +2768,7 @@ const readingCompleteStyles = StyleSheet.create({
     fontSize: 16,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     fontWeight: "600",
-    color: Colors.primaryAction,
+    color: Colors.primaryActionForeground,
   },
   btnDisabled: {
     opacity: 0.5,

@@ -82,12 +82,12 @@ describe("non-blocking completion save", () => {
     expect(screen).toContain("disabled={isSaving || !isCollectionsReady || isAlreadySaved}");
     expect(screen).toContain('accessibilityState={{ disabled: isSaving || !isCollectionsReady || isAlreadySaved, busy: isSaving }}');
 
-    const save = screen.indexOf('accessibilityLabel="보관하기"');
     const reread = screen.indexOf('accessibilityLabel="다시 읽기"');
+    const save = screen.indexOf('accessibilityLabel="보관하기"');
     const exit = screen.indexOf('accessibilityLabel="나가기"');
-    expect(save).toBeGreaterThanOrEqual(0);
-    expect(reread).toBeGreaterThan(save);
-    expect(exit).toBeGreaterThan(reread);
+    expect(reread).toBeGreaterThanOrEqual(0);
+    expect(save).toBeGreaterThan(reread);
+    expect(exit).toBeGreaterThan(save);
   });
 
   it("uses stable full-width button dimensions and brand action colors", () => {
@@ -96,10 +96,12 @@ describe("non-blocking completion save", () => {
       "\n});",
     );
 
-    expect(styles).toMatch(/saveBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.primaryAction/);
-    expect(styles).toMatch(/saveBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryActionForeground/);
-    expect(styles).toMatch(/rereadBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.noticeAccentSoft/);
-    expect(styles).toMatch(/rereadBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryAction/);
-    expect(styles).toMatch(/skipBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52/);
+    expect(styles).toMatch(/rereadBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.primaryAction/);
+    expect(styles).toMatch(/rereadBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryActionForeground/);
+    expect(styles).toMatch(/saveBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.noticeAccentSoft[\s\S]*?borderWidth:\s*1\.5[\s\S]*?borderColor:\s*Colors\.primaryAction/);
+    expect(styles).toMatch(/saveBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryAction/);
+    expect(styles).toMatch(/skipBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?borderWidth:\s*1\.5[\s\S]*?borderColor:\s*Colors\.black/);
+    expect(styles).toMatch(/skipBtnText:\s*\{[\s\S]*?color:\s*Colors\.black/);
+    expect(styles).not.toMatch(/(?:saveBtn|skipBtn):\s*\{[\s\S]*?overflow:\s*"hidden"/);
   });
 });
