@@ -246,6 +246,11 @@ export default function ThoughtsBottomSheet({
     width: thoughtCardWidth,
     minHeight: inputMinHeight,
     measurement: inputHeightMeasurement,
+    // A native multiline TextInput must be allowed to lay itself out before its
+    // first content-size event (and again after editor/width invalidation).
+    // Forcing the minimum height during that window makes the measured viewport
+    // feed back as the content height and leaves long content clipped.
+    unmeasuredHeight: Platform.OS === "web" ? "minimum" : "intrinsic",
   });
   const showKeyboardToolbar = shouldShowReadingThoughtToolbar({
     visible,

@@ -215,6 +215,46 @@ describe("inline reading thought lifecycle", () => {
     })).toBe(72);
   });
 
+  it("releases native height while a new editor or width waits for a fresh measurement", () => {
+    const staleMeasurement = {
+      editorKey: "previous",
+      width: 320,
+      contentHeight: 148,
+    };
+    expect(resolveThoughtInputHeight({
+      editorKey: "current",
+      width: 320,
+      minHeight: 72,
+      measurement: staleMeasurement,
+      unmeasuredHeight: "intrinsic",
+    })).toBeUndefined();
+    expect(resolveThoughtInputHeight({
+      editorKey: "previous",
+      width: 280,
+      minHeight: 72,
+      measurement: staleMeasurement,
+      unmeasuredHeight: "intrinsic",
+    })).toBeUndefined();
+  });
+
+  it("uses fresh native measurements after initialization and width changes", () => {
+    const native = {
+      editorKey: "editor",
+      minHeight: 72,
+      unmeasuredHeight: "intrinsic" as const,
+    };
+    expect(resolveThoughtInputHeight({
+      ...native,
+      width: 320,
+      measurement: { editorKey: "editor", width: 320, contentHeight: 196 },
+    })).toBe(196);
+    expect(resolveThoughtInputHeight({
+      ...native,
+      width: 280,
+      measurement: { editorKey: "editor", width: 280, contentHeight: 224 },
+    })).toBe(224);
+  });
+
   it("keeps growing and shrinking from fresh measurements without going below minimum", () => {
     const base = { editorKey: "editor", width: 320, minHeight: 72 };
     expect(resolveThoughtInputHeight({
@@ -237,6 +277,10 @@ describe("inline reading thought lifecycle", () => {
     expect(source).toContain('element.style.height = "0px";');
     expect(source.match(/onContentSizeChange=\{/g)).toHaveLength(2);
     expect(source).toContain("scrollEditorBottomIntoView(key);");
+    expect(source).toContain(
+      'unmeasuredHeight: Platform.OS === "web" ? "minimum" : "intrinsic"',
+    );
+    expect(source.match(/scrollEnabled=\{false\}/g)).toHaveLength(2);
   });
 
   const optimistic = (

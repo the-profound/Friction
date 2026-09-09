@@ -33,8 +33,15 @@ export function resolveThoughtInputHeight(input: {
   width: number;
   minHeight: number;
   measurement?: ThoughtInputHeightMeasurement;
-}): number {
-  const { editorKey, width, minHeight, measurement } = input;
+  unmeasuredHeight?: "minimum" | "intrinsic";
+}): number | undefined {
+  const {
+    editorKey,
+    width,
+    minHeight,
+    measurement,
+    unmeasuredHeight = "minimum",
+  } = input;
   if (
     !editorKey
     || !measurement
@@ -42,7 +49,7 @@ export function resolveThoughtInputHeight(input: {
     || Math.abs(measurement.width - width) >= 0.5
     || !Number.isFinite(measurement.contentHeight)
   ) {
-    return minHeight;
+    return unmeasuredHeight === "intrinsic" ? undefined : minHeight;
   }
   return Math.max(minHeight, measurement.contentHeight);
 }
