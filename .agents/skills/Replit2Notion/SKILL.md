@@ -1,331 +1,241 @@
 ---
 name: Replit2Notion
-description: 채팅으로 요청받은 개발 작업을 완료한 뒤, 그 결과를 Notion Queue DB에 새 항목으로 생성하고 필요 시 SSOT Docs DB를 수정하는 역방향 워크플로우. 사용자가 "이 작업 Queue에 기록해줘", "개발 완료 내용 Notion에 올려줘", "Queue DB에 등록하고 SSOT도 업데이트해줘" 같은 요청을 할 때 사용.
+description: UTF-8 Markdown 명세서 파일을 안전하고 멱등적으로 Notion 데이터베이스에 게시하는 절차와 실행 계약.
 ---
 
-# Chat → Dev → Queue DB 생성 + SSOT 수정
+# 파일 기반 Markdown 명세서 → Notion 게시
 
-채팅으로 요청받아 개발을 완료한 뒤, 그 결과를 Queue DB에 새 항목으로 생성하고,
-구현 내용이 기존 SSOT 문서와 불일치하면 SSOT를 최소 변경으로 수정한다.
+작업 결과로 생성된 Markdown 명세서 파일을 읽어 Notion 데이터베이스에 한 번에
+게시한다. 파일 해석·제목 추출·Markdown 블록 변환·해시 계산은 로컬에서
+결정론적으로 수행하고, Notion 연결은 얇은 전송 계층으로만 사용한다.
 
-기존 Notion2Replit 스킬의 역방향 흐름이다.
+이 SKILL은 **파일 기반 명세서 게시만 담당한다.** 기존의 Notion Queue 항목
+선택, Queue → Replit 개발 계획 수립, SSOT 문서 해석·수정, 기존 Queue
+페이지 Quick Writeback 절차는 제거되었으며 이 문서에서 지원하지 않는다.
 
----
+## 1. 사용 시점
 
-## 1. 언제 사용하는가
+- 완료된 작업의 Markdown 명세서 전체를 별도 Notion DB 페이지로 보존할 때
+- 같은 명세서를 재실행해도 중복 페이지를 만들지 않아야 할 때
+- Notion DB마다 속성 이름이 다른 경우 명시적 속성 매핑으로 게시할 때
 
-- 채팅으로 개발 요청을 받아 구현을 완료한 뒤, 그 내용을 Queue DB에 기록해야 할 때
-- 개발 완료 후 SSOT 문서에 반영이 필요한 변경이 있을 때
-- Queue DB에 작업 이력을 남기고 SSOT 정합성을 유지하고 싶을 때
+다음 목적에는 이 SKILL을 사용하지 않는다.
 
----
+- Notion Queue에서 개발 항목을 읽어 작업을 시작하는 흐름
+- 기존 Queue 페이지의 상태·개발 기록을 갱신하는 흐름
+- SSOT 문서의 내용을 자동으로 변경하는 흐름
+- 파일 내용을 요약하거나 LLM으로 다시 작성하는 흐름
 
-## 2. 사전 조건
+## 2. 안전 원칙
 
-- (선택) Notion 수정 로그 DB: Replit이 Notion을 수정한 내역을 남기는 DB
-- Notion MCP: `.local/mcp_skills/notion_mcp_server/SKILL.md` 참고, 연결·인증 완료
-- Replit Secrets
-  - `NOTION_QUEUE_DB_URL`: Queue DB Notion URL
-  - `NOTION_SSOT_DB_URL`: SSOT Docs DB Notion URL
-  - (선택) `NOTION_EDIT_LOG_DB_URL`: Replit → Notion 수정 로그 DB URL
+- Notion 인증 정보는 Replit에 연결된 Notion 커넥터/MCP에서만 얻는다.
+- 토큰·본문·전체 DB URL을 소스, CLI 인자, 로그, 오류에 기록하지 않는다.
+- DB 속성을 새로 만들거나 기존 데이터를 일괄 정리하지 않는다.
+- DB URL은 환경변수 또는 함수 옵션으로 받고, 실행 로그에는 페이지 URL과
+  제한된 요약 메타데이터만 출력한다.
+- 원본 Queue 페이지 URL이 전달되면 새 페이지를 만들지 않고 즉시 중단한다.
+  기존 Queue 업데이트는 이 SKILL의 책임이 아니므로 별도 절차를 사용해야 한다.
+- 운영 DB에 대한 실제 쓰기 검증은 별도 비운영 테스트 DB가 제공된 경우에만
+  수행한다.
 
-환경 변수가 없으면 Step 0에서 사용자에게 요청한다.
+## 3. 입력 계약
 
----
+구현은 `scripts/src/notion-publisher/publisher.ts`의
+`publishMarkdownFile(transport, options)`을 사용한다.
 
-## 3. 입력 스키마
+필수 입력:
 
-### 3-1. Queue DB 속성 (NOTION_QUEUE_DB_URL)
+- `filePath`: UTF-8 Markdown 파일 경로
+- `databaseUrl` 또는 `databaseUrlEnv`: 대상 DB URL. 기본 환경변수는
+  `NOTION_QUEUE_DB_URL`이다.
 
-- 요청 제목 (title): 요청 한 줄 요약
-- 개발 상태 (status): 개발 전 / 개발 중 / 검토 필요 / 개발 완료
-- 요청자 (person, 1명)
-- 개발 순서 (number, 소수 허용): near-term 우선순위. 백로그는 비워둠.
-- 개발 기록 (text): 배경/문제 + 개발 완료 후 결과 기록
-- 영향 문서 (relation → SSOT Docs DB): 이 요청이 영향을 미치는 문서
-- 요청 ID (auto_increment_id)
-- 생성 일시 (created_time)
-- 최종 편집 일시 (last_edited_time)
+선택 입력:
 
-운영 규칙
-- 백로그 vs 이번 스코프 분리: 개발 순서가 있는 요청만 near-term
-- 우선순위 변경은 개발 순서를 소수로 조정해 끼워넣기
-- 기본 정렬: 개발 상태 오름차순 → 개발 순서 오름차순 → 요청 ID 오름차순
+- `title`: 지정하면 첫 제목 대신 페이지 제목으로 사용
+- `status`: 대상 DB의 상태 속성 값
+- `mapping`: 대상 DB 속성 매핑
+- `sourceQueuePageUrl`: 실제 URL이면 중복 게시 방지를 위해 fail-closed
 
-### 3-2. SSOT DB 속성 (NOTION_SSOT_DB_URL)
+기본 Queue 매핑:
 
-- 문서 이름 (title)
-- Owner (person)
-- 작성 상태 (status): Draft / In Progress / Complete
-- 개발 상태 (status): 개발 전 / 개발 중 / 검토 필요 / 개발 완료
-- 유형 (select): Principles&Scope / Screen / Component / Data&Logic
-- 화면 ID (text): 예) IN-00, ON-01
+- `요청 제목`: `title`
+- `개발 상태`: `status`
+- `개발 기록`: `body`
 
-관계 규칙
-- Queue DB의 "영향 문서"는 반드시 SSOT Docs DB의 레코드에 relation으로 연결한다.
-- 요청 처리 시: (요청 페이지 → 영향 문서 목록)을 기준으로 어떤 문서를 업데이트해야 하는지 결정한다.
+다른 DB는 예를 들어 다음처럼 명시한다.
 
----
-
-## 4. 워크플로우 (Step 0 ~ Step 7)
-
-### Step 0: 환경 변수 확인 (check_env_vars)
-
-- (선택) 수정 로그 DB를 남기려면 NOTION_EDIT_LOG_DB_URL도 확인
-- 항상 가장 먼저 수행한다.
-- 확인 키: NOTION_QUEUE_DB_URL, NOTION_SSOT_DB_URL, NOTION_EDIT_LOG_DB_URL
-- Secrets 실제 값은 bash로만 읽는다.
-- Notion URL은 `?v=...`, `&source=copy_link` 등을 제거해 정제한다.
-
-정제 함수 (필요 최소)
-- cleanNotionUrl(url): url에서 `?` 이후 제거
-- maskDomain 옵션이 필요하면 에러 로그에서 도메인 마스킹 적용
-
-### Step 1: Queue DB 구조 조회 (fetch_queue_db_schema)
-
-목적
-- Queue DB의 data_source_id 확보 (페이지 생성에 필요)
-
-원칙
-- DB는 먼저 fetch해서 collection URL/ID를 추출한다.
-- 추출 실패 시: NOTION_QUEUE_DB_URL 재확인을 요청하고 중단한다.
-
-출력
-- queueDataSourceId
-
-### Step 2: 개발 내용 수집 (collect_dev_context)
-
-현재 세션 컨텍스트에서 아래를 수집한다.
-- request_title: 사용자 요청 한 줄 요약
-- dev_record: 아래 형식을 그대로 사용해 작성 (레이블·순서 고정)
-- files_changed: 수정된 파일 목록
-- change_summary: 변경사항 요약 bullet
-- how_to_test: 테스트 방법
-
-개발 기록(dev_record)은 아래 레이블 형식을 **그대로** 사용해 작성한다.
-레이블 뒤에 콜론(:)과 공백 한 칸을 쓰고, 값을 이어서 작성한다.
-항목이 여러 줄이면 레이블 아래에 들여쓰기 없이 bullet(-)으로 나열한다.
-
-```
-- 완료 일시:
-- 구현 요약(핵심 2~5줄):
-- 수정 파일/영역:
-- 테스트 방법:
-- 비고(있으면):
+```json
+{
+  "title": "문서 이름",
+  "status": "작성 상태",
+  "body": "게시 식별자",
+  "documentKey": "문서 키",
+  "contentHash": "내용 해시"
+}
 ```
 
-규칙
-- 레이블 이름·순서는 변경하지 않는다.
-- 값이 없는 항목은 비워두지 않고 "없음"으로 채운다. 단, "비고(있으면):"는 내용이 없으면 항목 자체를 생략해도 된다.
-- 완료 일시는 반드시 KST 기준 실제 시각을 기입한다.
+멱등성 조회를 위해 `body` 또는 `documentKey`와 `contentHash` 조합 중 하나가
+필수다. 대상 DB에 해당 속성이 실제로 존재하고 타입이 일치하는지 먼저
+검증한다.
 
-### Step 3: Queue DB 항목 생성 (create_queue_item)
+## 4. 표준 실행 절차
 
-- notionCreatePages로 새 항목을 생성한다.
-- 기본값
-  - 개발 상태: 개발 완료
-  - 개발 기록: dev_record
+### Step 0: 대상과 인증 확인
 
-출력
-- queue_page_url 또는 queue_page_id
+1. `databaseUrl` 또는 지정된 환경변수를 확인한다.
+2. URL에서 쿼리·fragment를 제거하고 HTTPS Notion URL인지 검증한다.
+3. Secret 값을 출력하거나 채팅·파일에 복사하지 않는다.
+4. 인증은 Replit Notion 연결/MCP 전송 어댑터를 통해서만 수행한다.
+   Replit Notion 커넥터 프록시가 호환되는 `Notion-Version` 헤더를 주입하므로
+   어댑터에서 해당 헤더를 직접 설정하지 않는다.
 
-### Step 4: 생성 확인 (verify_created_item)
+### Step 1: 파일을 한 번 읽고 검증
 
-- read-before-write: 생성된 항목을 다시 fetch해서 속성이 정확히 기록되었는지 확인한다.
-- 필수 검증
-  - 요청 제목 존재
-  - 개발 기록 존재
+1. 파일을 UTF-8로 한 번 읽는다.
+2. 파일 없음·읽기 실패·빈 파일을 명확한 다음 조치와 함께 반환한다.
+3. `--title`이 없으면 첫 번째 Markdown 제목을 페이지 제목으로 사용한다.
+4. 제목은 Notion rich-text 제한인 2,000자 이하여야 한다. 초과하면 쓰기
+   전에 중단한다.
 
-### Step 5: SSOT 변경 필요 여부 판단 (ssot_change_review)
+파일 본문은 콘솔이나 에이전트 컨텍스트에 출력하지 않는다.
 
-구현 내용이 기존 SSOT 문서와 불일치하는지 검토한다.
-판단 기준 예시
-- 새로운 화면 추가 여부
-- 기존 컴포넌트 동작 변경 여부
-- 데이터 모델/API 변경 여부
-- SSOT 기술과 실제 구현 불일치 여부
+### Step 2: 로컬 변환
 
-관련 SSOT 문서는 키워드 검색으로 찾는다.
-- 결과가 2개 이상이면 사용자에게 목록을 보여주고 선택을 받는다.
+LLM 호출 없이 아래 규칙으로 변환한다.
 
-출력
-- ssot_change_needed
-- ssot_change_reason
-- ssot_patch_proposal
-- ssot_target_pages
+- `#`, `##`, `###` 제목 → Notion `heading_1`, `heading_2`, `heading_3`
+- `-`, `*`, `+` 목록 → `bulleted_list_item`
+- 숫자 목록 → `numbered_list_item`
+- fenced code block → `code`
+- 나머지 일반 문단 → `paragraph`
+- 빈 줄 → 문단 경계
 
-### Step 6: SSOT 변경 제안·승인·반영 (propose_ssot_changes)
+각 rich-text 조각은 2,000자 이하로 줄 단위·공백 우선 분할한다.
+`ts`, `tsx`, `js`, `jsx` 등 흔한 코드 언어 별칭은 Notion 언어명으로
+정규화하고 알 수 없는 언어는 `plain text`로 게시한다.
+블록은 요청당 최대 100개 배치로 만든다.
 
-- ssot_change_needed == true인 경우에만 실행
-- 하드 게이트: SSOT 문서 내용 수정 전에 반드시 user_query로 사용자 승인을 받는다.
+### Step 3: DB 스키마 조회
 
-승인 시
-- SSOT 문서를 update_content로 최소 변경 반영
-- Queue 항목에 "영향 문서" relation 연결
-- Queue 항목의 개발 기록에 SSOT 수정 로그를 추가
+1. `notionFetch` 또는 커넥터 API로 DB의 data source/database 식별자와
+   필요한 속성 이름·타입만 읽는다.
+2. 속성 매핑이 스키마 계약과 다르면 게시하지 않고 원인과 수정할 매핑을
+   반환한다.
+3. 같은 프로세스의 같은 전송 계층에서는 스키마 조회 결과를 캐시한다.
 
-거절 시
-- SSOT는 유지
-- (식별된 경우) Queue 항목의 "영향 문서" relation만 설정
+DB 속성을 자동 생성하지 않는다.
 
-### Step 7: 완료 보고 (summary)
+### Step 4: 멱등성 조회
 
-사용자에게 아래를 보고한다.
-- Queue DB 생성 결과 (페이지 URL, 속성 요약)
-- SSOT 수정 여부 및 결과
-- 전체 작업 요약
+문서 키는 정제된 DB URL과 canonical file path를 SHA-256으로 계산한 안정적인
+값이다. 파일 내용은 별도의 SHA-256 해시로 계산한다. 제목·상태·매핑까지
+포함한 desired-state hash를 최종 게시 식별자로 사용한다.
 
-(선택) NOTION_EDIT_LOG_DB_URL이 설정되어 있으면 수정 로그 DB에 남긴다.
+1. 현재 프로세스 캐시에 검증된 페이지 메타데이터가 있으면 먼저 비교한다.
+2. 캐시가 없으면 문서 키 속성 또는 본문 식별 마커로 기존 페이지를 조회한다.
+3. 기존 페이지의 최종 desired-state hash가 같으면 `unchanged`로 즉시 종료한다.
+   이 경로에서는 쓰기와 후속 본문 조회를 하지 않는다.
+4. 제목·상태·매핑이 달라졌으면 같은 페이지를 갱신한다.
 
----
+같은 문서 키가 여러 페이지에 존재하면 중복을 조용히 선택하지 말고 중단한다.
 
-## 5. Notion MCP 도구 요약
+### Step 5: 게시
 
-- notionFetch(id): DB/페이지 읽기 (권장 기본)
-- notionSearch(query, data_source_url): 키워드 검색 (빈 쿼리 불가)
-- notionCreatePages(parent.data_source_id, pages): DB에 페이지 생성
-- notionUpdatePage(page_id, command, ...)
-  - update_properties: properties 객체로 속성 업데이트
-  - update_content: content_updates 배열로 내용 업데이트 (SSOT 수정은 user_query 승인 필수)
+1. 첫 블록 배치와 속성을 생성 또는 갱신한다.
+2. 처음에는 `pending-...` 식별자를 저장한다.
+3. 나머지 블록 배치를 최대 100개씩 순서대로 추가한다.
+4. 모든 본문 배치가 성공한 뒤에만 최종 desired-state hash를 저장한다.
+5. 중간 실패가 발생하면 다음 실행이 pending 식별자를 완료로 오인하지 않고
+   기존 페이지를 복구하도록 한다.
 
----
+페이지 갱신 시 기존 본문을 대체해야 하며, 이전 본문 뒤에 새 본문을
+무조건 덧붙여 중복시키지 않는다.
 
-## 6. 알려진 문제 및 해결책
+### Step 6: 최소 검증
 
-- Secrets 값 접근: code_execution에서 직접 접근 불가 → bash로만 읽기
-- Notion URL 쿼리 파라미터: `?v=...`, `&source=copy_link` 제거 필요
-- notionSearch 제약: 빈 쿼리 불가, filter 미지원 → 결과 속성으로 후보 필터링 후 개별 fetch 최소화
-- Properties 파싱: 파싱 실패 시 명시적 에러
-- notionUpdatePage 파라미터: update_content는 content_updates, update_properties는 properties
-- notionCreatePages: database_id가 아니라 data_source_id 필요
-- MCP 응답 빈 값: 비어 있으면 즉시 실패 처리
-- URL 보안: 에러 메시지에 URL이 포함되지 않도록 마스킹
+게시 후 제목, 지정된 상태, 문서 키/최종 해시 식별자만 다시 읽는다.
+검증 결과가 기대값과 다르면 실패로 반환한다. 본문 전체를 다시 모델
+컨텍스트나 로그로 가져오지 않는다.
 
----
+성공 결과에는 다음 제한된 메타데이터만 포함한다.
 
-## 7. 컨벤션
+- `created`, `updated`, `unchanged` 중 action
+- 생성·갱신된 Notion 페이지 URL
+- 제목
+- 상태
+- 블록 수
+- 실제 API 요청 수 또는 논리적 전송 호출 수
+- 해시 prefix
 
-공통 규칙 (N2R · R2N 공통)
-- env_vars_first: Step 0 항상 먼저
-- bash_for_secrets: Secrets는 bash로만
-- clean_url: URL 쿼리 파라미터 제거
-- notionFetch_first: DB 조회는 notionFetch 우선
-- parallel_fetch: 서로 독립적인 읽기 호출은 병렬 실행 (최대 동시 3건)
-- serial_writes: 락·writeback 등 순서가 중요한 쓰기 호출은 직렬 유지
-- session_cache: 한 세션에서 Queue DB collection URL과 후보 페이지 목록은 캐시해 재사용. 사용자가 명시적으로 새로고침을 요청하면 캐시 무효화.
-- parse_strict: properties 파싱 실패 시 즉시 중단
-- schema_is_contract: 속성 이름·타입은 스킬 정의를 계약으로
-- ssot_priority: relation > DB 검색
-- ssot_wins: 충돌 시 SSOT 우선
-- minimal_ssot_edits: SSOT 수정은 최소 변경
-- ssot_hard_gate: SSOT update_content 전 user_query 승인 필수
-- read_before_write: 수정 전 fetch
-- fail_closed: 기대값 아니면 즉시 중단
-- url_as_variable: URL은 변수로만 참조
-- disambiguate_results: 검색 결과 2개 이상이면 사용자 선택
-- record_via_property: 개발 기록은 text 속성 업데이트로
+## 5. CLI
 
-R2N 전용 규칙
-- create_with_record: Queue 페이지 생성 시 개발 기록 포함
-- data_source_id_for_create: parent는 data_source_id
-- verify_after_create: 생성 후 fetch로 확인
-- update_source_when_known: 원본 Queue 식별자(Source Queue Page URL)가 있으면 신규 생성하지 않고 원본 페이지를 업데이트한다
-- last_split_completes: `Split: i of N`에서 `i == N`인 Task만 원본 Queue의 "개발 상태"를 "개발 완료"로 세팅한다. 나머지는 "개발 중"으로 유지한다
+기본 CLI는 설치된 Replit Notion 커넥터를 사용한다.
 
----
+```sh
+pnpm --filter @workspace/scripts notion:publish -- \
+  --file .local/tasks/example.md \
+  --database-url-env NOTION_QUEUE_DB_URL \
+  --status "개발 완료"
+```
 
-## 8. Task 에이전트용 Quick Writeback 절차
+MCP 호스트가 제공하는 별도 전송 어댑터가 필요하면
+`--adapter /absolute/path/to/adapter.ts`를 추가한다. 어댑터는
+`createNotionTransport`를 export하고 `NotionTransport` 계약을 구현해야 한다.
+어댑터 초기화 오류도 안전한 고정 메시지로 마스킹한다.
 
-Task 에이전트가 구현을 완료한 뒤 사용자 개입 없이 Notion Queue DB에 완료 기록만 남기는 경량 절차이다.
-SSOT 수정 판단(Step 5~6)은 생략한다.
+실행 결과는 페이지 URL과 제한된 메타데이터만 JSON으로 출력한다. 오류에는
+파일 경로의 상세 내용, 파일 본문, 토큰, 전체 DB URL, 원격 응답 본문을
+포함하지 않는다.
 
-### 언제 사용하는가
+## 6. 전송 어댑터 계약
 
-- Task 에이전트가 할당된 구현 작업을 마치고 `mark_task_complete`를 호출하기 직전
+`NotionTransport`는 다음을 제공한다.
 
-### Quick Writeback 흐름 (QW-Step 0 ~ QW-Step 4)
+- `fetchDatabase`: 식별자와 필요한 속성 타입 조회
+- `findByDocumentKey`: 문서 키와 최종 해시를 가진 페이지 조회
+- `createPage`: 첫 블록 배치와 pending 속성으로 페이지 생성
+- `updatePage`: 속성 갱신 및 기존 본문 대체
+- `appendBlocks`: 최대 100개 블록 추가
+- `finalizePage`: 모든 본문 쓰기 후 최종 해시 저장
+- `verifyPage`: 제목·상태·식별자 최소 검증
+- 선택적 `getRequestCount`: 실제 HTTP 요청 계측
 
-**QW-Step 0: 환경 변수 확인**
-- bash로 `NOTION_QUEUE_DB_URL` 값을 읽는다.
-- 값이 없으면 writeback을 건너뛰고, `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 "NOTION_QUEUE_DB_URL 미설정으로 건너뜀" 사유를 기록한다.
+기본 구현은 `scripts/src/notion-publisher/connector-adapter.ts`에 있다.
+Replit 커넥터 SDK의 인증·토큰 갱신을 직접 재구현하거나 캐시하지 않는다.
 
-**QW-Step 1: Queue DB 구조 조회**
-- `notionFetch`로 Queue DB를 조회해 `queueDataSourceId`를 확보한다.
-- 실패 시 writeback을 건너뛰고, `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 실패 사유를 기록한다.
+## 7. 오류 처리
 
-**QW-Step 1.5: 원본 Queue 식별자 파싱**
-- 현재 Task 설명의 `## Notion Writeback` 섹션에서 아래 줄을 파싱한다.
-  - `Source Queue Page URL:` — 원본 Queue 페이지 URL (복수 줄 가능)
-  - `Source Queue Request ID:` — 원본 Queue 요청 ID (Page URL과 짝으로 복수 줄 가능)
-  - `Split: i of N` — 분리 순서 (없으면 단일 Task로 취급, i=1, N=1)
-- 파싱 규칙
-  - `Source Queue Page URL: (none)` 이면 폴백(신규 생성) 경로임을 확정하고 QW-Step 3-B로 이동한다.
-  - URL이 유효한 값이면 QW-Step 3-A(원본 페이지 업데이트)로 이동한다.
-  - `## Notion Writeback` 섹션 자체가 없거나 파싱 실패(필수 줄 누락 등)는 **명시적 에러**로 처리한다. 조용한 폴백 불가. `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 파싱 실패 사유를 기록하고 중단한다.
+| 상황 | 처리 |
+| --- | --- |
+| 파일 없음/읽기 실패 | 파일 경로와 UTF-8 여부를 확인하라는 메시지 |
+| 빈 파일 | 게시할 Markdown을 추가하라는 메시지 |
+| 제목 없음 | `--title` 지정 안내 |
+| 제목 2,000자 초과 | 더 짧은 제목 지정 안내 |
+| DB URL 없음/형식 오류 | 환경변수 또는 Notion 공유 URL 확인 안내 |
+| 속성 매핑 불일치 | 필요한 속성 이름·타입 수정 안내 |
+| 중복 문서 키 | 중복 페이지를 수동 확인하라는 메시지 |
+| 인증·권한·Notion API 실패 | 연결, 페이지 공유 범위, API 상태 확인 안내 |
+| 게시 후 검증 실패 | 페이지의 제목·상태·식별자 확인 안내 |
 
-**QW-Step 2: 개발 내용 수집**
-- 현재 세션 컨텍스트에서 아래 항목을 작성한다.
-  ```
-  - 완료 일시: (KST 실제 시각)
-  - 구현 요약(핵심 2~5줄):
-  - 수정 파일/영역:
-  - 테스트 방법:
-  - 비고(있으면):
-  ```
-- `request_title`: Task 제목 한 줄 요약
-- `task_ref_header`: `### [Task #<ref>] <request_title> — <완료 일시 KST>` 형식의 헤더 문자열. append 블록의 첫 줄에 사용한다.
+원격 오류의 원문 응답과 요청 본문은 사용자 출력에 전달하지 않는다.
 
-**QW-Step 3-A: 원본 Queue 페이지 업데이트** (Source Queue Page URL이 유효한 경우)
+## 8. 검증 명령
 
-원본 페이지가 여러 개(다수 Queue → 단일 Task 묶음)면 각 페이지에 대해 아래를 순서대로 실행한다.
+실제 Notion 쓰기 없이 다음 명령으로 로컬 동작을 검증한다.
 
-1. read-before-write: 원본 Queue 페이지를 `notionFetch`로 읽어 기존 "개발 기록" 텍스트를 확보한다.
-2. 멱등성 체크: 기존 "개발 기록"에 이번 `task_ref_header`와 동일한 줄이 이미 존재하면 해당 블록만 교체하고 새로 추가하지 않는다(재실행 안전).
-3. 없으면 기존 "개발 기록" 뒤에 아래를 append한다.
-   ```
-   <task_ref_header>
-   <QW-Step 2의 dev_record>
-   ```
-4. 상태 결정 (`Split: i of N` 기준)
-   - `i == N` 이거나 Split 표기가 없으면(단일): 개발 상태 = "개발 완료"
-   - `i < N` 이면: 개발 상태 = "개발 중"
-5. `notionUpdatePage(update_properties)`로 아래를 1회 업데이트한다.
-   - 개발 기록: 위에서 조합한 fullRecord
-   - 개발 상태: 위 규칙대로 결정된 값
+```sh
+pnpm --filter @workspace/scripts test:notion-publisher
+pnpm --filter @workspace/scripts typecheck
+```
 
-**QW-Step 3-B: 신규 Queue 페이지 생성** (Source Queue Page URL이 `(none)`인 경우)
-- `notionCreatePages`로 새 항목을 생성한다.
-- 기본값: 개발 상태 = "개발 완료", 개발 기록 = QW-Step 2의 dev_record
+별도 비운영 Notion DB가 있을 때만 생성 → 동일 파일 재실행 → 변경 파일
+갱신 순서의 실제 커넥터 검증을 추가한다. 운영 Queue DB를 테스트 대상으로
+사용하지 않는다.
 
-**QW-Step 4: 검증 및 기록**
-- QW-Step 3-A(업데이트) 경로: 원본 페이지를 `notionFetch`로 읽어 아래를 확인한다.
-  - (a) 이번 `task_ref_header`가 "개발 기록"에 포함되어 있는지
-  - (b) "개발 상태"가 위 규칙대로 설정되었는지
-  - 확인 성공 시 `.local/tasks/evidence/qw-<taskRef>-done.md`에 원본 Queue 페이지 ID, 요청 제목, 적용된 개발 상태, Split 정보를 기록한다.
-- QW-Step 3-B(신규 생성) 경로: 생성된 항목을 `notionFetch`로 읽어 요청 제목과 개발 기록이 존재하는지 확인한다.
-  - 확인 성공 시 `.local/tasks/evidence/qw-<taskRef>-done.md`에 Queue 페이지 ID와 요청 제목을 기록한다.
+## 9. 관련 구현 문서
 
-### 동시성·멱등성 가이드
-
-- 각 Task의 append 블록은 `### [Task #ref] 제목 — 완료 시각` 형식의 고유 헤더로 시작한다.
-- 같은 Task ref 헤더가 이미 "개발 기록"에 존재하면 새로 추가하지 않고 해당 블록만 교체한다(재실행 안전).
-- 상태 세팅("개발 완료" / "개발 중")은 마지막 쓰기가 이기는 idempotent 동작이다.
-- 분산 락은 구현하지 않는다. read-before-write append와 Task ref 헤더 체크로 best-effort 처리한다.
-
-### Quick Writeback 전용 규칙
-
-- **no_ssot_in_quick**: SSOT 문서 수정·판단·검토를 일절 수행하지 않는다.
-- **no_user_approval**: 사용자 승인(user_query) 없이 바로 실행한다.
-- **skip_on_error**: 환경 변수 누락·네트워크 오류 등으로 실패하더라도 Task 완료를 막지 않는다. 실패 사유는 `.local/tasks/evidence/qw-<taskRef>-skipped.md`에 기록한다. 단, QW-Step 1.5 파싱 실패는 명시적 에러로 기록 후 중단한다(skip_on_error의 예외).
-- **update_source_when_known**: 원본 Queue 식별자(Source Queue Page URL)가 있으면 신규 생성하지 않고 원본 페이지를 업데이트한다.
-- **last_split_completes**: `Split: i of N`에서 `i == N`인 Task만 원본 Queue의 "개발 상태"를 "개발 완료"로 변경한다. 나머지는 "개발 중"으로 유지한다.
-- 그 외 공통 규칙(env_vars_first, bash_for_secrets, clean_url, read_before_write 등)은 동일하게 적용한다.
-
----
-
-## 변경 로그
-
-- 2026-04-26 [편집] Quick Writeback 원본 Queue 인식: QW-Step 1.5(소스 식별자 파싱) 추가, QW-Step 3을 3-A(원본 업데이트)/3-B(신규 생성 폴백)으로 분리, QW-Step 4 검증 강화, 동시성·멱등성 가이드 추가, R2N 컨벤션에 update_source_when_known·last_split_completes 추가 (Task #126)
-- 2026-04-26 [편집] 체감 속도 개선 리팩터: sequential_fetch → parallel_fetch(최대 3건 동시)/serial_writes로 대체, session_cache 컨벤션 추가 (Task #119)
-- 2026-04-25 [추가] Task 에이전트용 Quick Writeback 절차 (Section 8) 추가
-- 2026-03-27 [편집] 코드 블록 과다 사용 제거, SKILL 본문을 단일 code block으로 통합
+- 실행 계약과 사용 예시: `scripts/src/notion-publisher/README.md`
+- 순수 변환·해시·매핑: `scripts/src/notion-publisher/core.ts`
+- 게시 오케스트레이션: `scripts/src/notion-publisher/publisher.ts`
+- Replit Notion 커넥터: `scripts/src/notion-publisher/connector-adapter.ts`
+- 로컬 단위 테스트: `scripts/src/notion-publisher/core.test.ts`

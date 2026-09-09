@@ -10,9 +10,12 @@
     "seed:articles": "tsx ./src/seed-long-articles.ts",
     "backfill-public-users": "tsx ./src/backfill-public-users.ts",
     "migrate-pages-format": "tsx ./src/migrate-pages-format.ts",
+    "notion:publish": "tsx ./src/notion-publisher/cli.ts",
+    "test:notion-publisher": "tsx --test ./src/notion-publisher/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@replit/connectors-sdk": "^0.3.0",
     "@workspace/db": "workspace:*",
     "drizzle-orm": "catalog:"
   },

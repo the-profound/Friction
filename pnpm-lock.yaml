@@ -765,6 +765,9 @@ importers:
 
   scripts:
     dependencies:
+      '@replit/connectors-sdk':
+        specifier: ^0.3.0
+        version: 0.3.0
       '@workspace/db':
         specifier: workspace:*
         version: link:../lib/db
