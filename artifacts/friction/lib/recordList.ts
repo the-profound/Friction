@@ -352,8 +352,10 @@ export function buildRecordDateGroups<T extends UnifiedRecord>(
     : [...records].sort(compareRecordsNewestFirst);
 
   for (const record of orderedRecords) {
+    const recordDate =
+      record.kind === "thought" ? record.thought.createdAt : record.article.createdAt;
     const dateKey = toKstCalendarDateKey(
-      record.thought?.createdAt ?? record.article?.createdAt ?? record.updatedAt,
+      recordDate ?? record.updatedAt,
     );
     const dateRecords = grouped.get(dateKey);
     if (dateRecords) dateRecords.push(record);

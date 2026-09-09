@@ -16,6 +16,7 @@ const sentence = (overrides: Partial<StoredSentence> = {}): StoredSentence => ({
   userId: "user-1",
   articleId: "article-1",
   text: "문장",
+  sourceText: null,
   isFavorite: false,
   favoritedAt: null,
   createdAt: "2026-01-01T00:00:00.000Z",

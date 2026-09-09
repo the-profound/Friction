@@ -161,7 +161,14 @@ function RoundEditSheet({
       setEditingSlotId(slot.id);
       const m = members.find((m) => m.userId === slot.assignedUserId);
       setEditSlotMember(
-        m ?? { userId: slot.assignedUserId, nickname: slot.assignedUserNickname ?? null, role: "", status: "" },
+        m ?? {
+          id: `slot-member:${slot.id}`,
+          userId: slot.assignedUserId,
+          nickname: slot.assignedUserNickname ?? null,
+          role: "",
+          status: "",
+          createdAt: "",
+        },
       );
       setEditSlotDate(slot.scheduledDate ? new Date(slot.scheduledDate) : null);
       setShowEditMemberPicker(false);

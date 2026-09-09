@@ -23,6 +23,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   useListArticles,
   useListSendRecords,
+  getListArticlesQueryKey,
+  getListSendRecordsQueryKey,
   SpaceLetterVisibility,
   type Article,
   type SendRecordWithDetails,
@@ -52,11 +54,21 @@ export default function RecipientOnlyLettersScreen() {
 
   const articlesQuery = useListArticles(
     { authorId: userId },
-    { query: { enabled: !authIsLoading } },
+    {
+      query: {
+        queryKey: getListArticlesQueryKey({ authorId: userId }),
+        enabled: !authIsLoading,
+      },
+    },
   );
   const sendRecordsQuery = useListSendRecords(
     { senderId: userId ?? "" },
-    { query: { enabled: !authIsLoading } },
+    {
+      query: {
+        queryKey: getListSendRecordsQueryKey({ senderId: userId ?? "" }),
+        enabled: !authIsLoading,
+      },
+    },
   );
 
   const {

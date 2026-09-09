@@ -181,6 +181,7 @@ const MemoBottomSheet = forwardRef<MemoBottomSheetRef, MemoBottomSheetProps>(
 
     const handleExport = useCallback(
       (payload: OnExportMarkdownPayload) => {
+        if (payload.markdown === undefined) return;
         onExportMarkdown(payload.markdown, payload.requestId);
         if (payload.requestId === "close-flush") {
           closeFlushRef.current = false;

@@ -215,7 +215,7 @@ describe("createActiveSessionRestoreGate", () => {
 describe("waitForActiveAppState", () => {
   it("waits through background and resolves once on foreground", async () => {
     let state = "background";
-    let listener: ((next: string) => void) | null = null;
+    let listener: ((next: string) => void) | undefined;
     const remove = vi.fn();
     const waiting = waitForActiveAppState({
       getCurrentState: () => state,

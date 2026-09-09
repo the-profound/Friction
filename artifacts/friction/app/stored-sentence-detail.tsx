@@ -51,7 +51,12 @@ export default function StoredSentenceDetailScreen() {
   const { showToast } = useToast();
   const { startFadeToBlack } = useReaderTransition();
   const queryClient = useQueryClient();
-  const query = useGetStoredSentence(sentenceId, { query: { retry: false } });
+  const query = useGetStoredSentence(sentenceId, {
+    query: {
+      queryKey: getGetStoredSentenceQueryKey(sentenceId),
+      retry: false,
+    },
+  });
   const toggleFavorite = useToggleStoredSentenceFavorite();
   const deleteSentence = useDeleteStoredSentence();
   const createThought = useCreateThought();

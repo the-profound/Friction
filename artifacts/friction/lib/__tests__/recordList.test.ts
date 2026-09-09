@@ -34,8 +34,8 @@ function queuedThought(id: string): Thought {
     content: `# ${id}?\n\n질문 설명`,
     createdFrom: "question",
     status: "PRELIMINARY",
-    createdAt: new Date("2026-01-01T00:00:00.000Z"),
-    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 
@@ -217,7 +217,11 @@ describe("record list model", () => {
       { id: "newer", kind: "thought", updatedAt: "2026-01-02T00:00:00.000Z", thought: {} as never },
     ];
     const incoming: UnifiedRecord[] = [
-      { ...previous[1], thought: { content: "refreshed" } as never },
+      {
+        ...previous[1],
+        kind: "thought",
+        thought: { content: "refreshed" } as never,
+      },
       { id: "new-b", kind: "thought", updatedAt: "2026-01-03T00:00:00.000Z", thought: {} as never },
       { ...previous[0] },
       { id: "new-a", kind: "editing", updatedAt: "2026-01-03T00:00:00.000Z", article: {} as never },

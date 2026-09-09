@@ -124,6 +124,7 @@ export default function ArchiveScreen() {
     queries: sortedMyCollections.map((collection) =>
       getListMyCollectionArticlesQueryOptions(collection.id, {
         query: {
+          queryKey: getListMyCollectionArticlesQueryKey(collection.id),
           staleTime: 30_000,
           refetchOnMount: false,
           refetchOnWindowFocus: false,

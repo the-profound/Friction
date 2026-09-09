@@ -162,6 +162,7 @@ const MemoWebEditor = forwardRef<MemoWebEditorRef, MemoWebEditorProps>(
 
     const handleExport = useCallback(
       (payload: OnExportMarkdownPayload) => {
+        if (payload.markdown === undefined) return;
         onExportMarkdown?.(payload.markdown, payload.requestId);
       },
       [onExportMarkdown],

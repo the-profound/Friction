@@ -1056,7 +1056,7 @@ function RecentPostCards({
           >
             <ArticleCardItem
               title={letter.articleTitle || "제목 없음"}
-              authorName={card.authorName}
+              authorName={card.authorName ?? undefined}
               spaceName={card.spaceName}
               cover={card.cover}
               cardWidth={coverWidth}

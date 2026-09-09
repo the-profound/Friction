@@ -99,7 +99,12 @@ export default function MyScreen() {
   const userQuery = useGetUser(userId);
   const articlesQuery = useListArticles(
     { authorId: userId },
-    { query: { enabled: !authIsLoading } },
+    {
+      query: {
+        queryKey: getListArticlesQueryKey({ authorId: userId }),
+        enabled: !authIsLoading,
+      },
+    },
   );
   const spacesQuery = useListSpaces({ userId });
   const sendRecordsQuery = useListSendRecords({ senderId: userId });

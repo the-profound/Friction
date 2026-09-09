@@ -36,6 +36,7 @@ import {
   useDeleteNeighborRequest,
   useRemoveNeighbor,
   useListUserSpaceLetters,
+  getListUserSpaceLettersQueryKey,
   SpaceLetterVisibility,
 } from "@workspace/api-client-react";
 import type {
@@ -110,7 +111,10 @@ export default function UserProfileScreen() {
   // cross-reference here so cache invalidation after a visibility change in on.tsx
   // immediately refreshes this tab too.
   const profileSpaceLettersQuery = useListUserSpaceLetters(profileUserId ?? "", {
-    query: { enabled: Boolean(profileUserId) },
+    query: {
+      queryKey: getListUserSpaceLettersQueryKey(profileUserId ?? ""),
+      enabled: Boolean(profileUserId),
+    },
   });
 
   const createNeighborRequest = useCreateNeighborRequest();

@@ -39,7 +39,7 @@ export function useNotificationDeepLink(userId: string | null | undefined): void
       // Use the explicit tab route. The normal initial tab is the record
       // screen, so relying on the tab navigator's initial route would send a
       // notification tap to the wrong place.
-      router.replace("/(tabs)/index");
+      router.replace("/(tabs)");
     }
 
     // Cold-start: check for the response that launched the app

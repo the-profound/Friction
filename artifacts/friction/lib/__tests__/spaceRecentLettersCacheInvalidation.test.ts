@@ -55,7 +55,6 @@ function spaceListLettersKey() {
 
 function makeLetter(overrides: Partial<SpaceLetter> & { id: string }): SpaceLetter {
   return {
-    id: overrides.id,
     spaceId,
     authorId: "author-1",
     letterType: "CENTER",

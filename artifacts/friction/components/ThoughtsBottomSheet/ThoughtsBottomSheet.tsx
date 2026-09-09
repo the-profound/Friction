@@ -699,17 +699,20 @@ export default function ThoughtsBottomSheet({
         return true;
       } catch (e) {
         console.warn("[ThoughtsBottomSheet] inline commit failed:", e);
-        setEditor((value) => isCurrentEditorCommit(value?.key, current.key) ? {
-          ...value,
-          pending: false,
-          requestGeneration:
-            !current.thought && action === "create"
-              ? current.requestGeneration + 1
-              : current.requestGeneration,
-          error: current.thought
-            ? (action === "delete" ? "삭제하지 못했어요. 다시 시도해 주세요." : "수정하지 못했어요. 다시 시도해 주세요.")
-            : "저장하지 못했어요. 다시 시도해 주세요.",
-        } : value);
+        setEditor((value) => {
+          if (!value || !isCurrentEditorCommit(value.key, current.key)) return value;
+          return {
+            ...value,
+            pending: false,
+            requestGeneration:
+              !current.thought && action === "create"
+                ? current.requestGeneration + 1
+                : current.requestGeneration,
+            error: current.thought
+              ? (action === "delete" ? "삭제하지 못했어요. 다시 시도해 주세요." : "수정하지 못했어요. 다시 시도해 주세요.")
+              : "저장하지 못했어요. 다시 시도해 주세요.",
+          };
+        });
         return false;
       }
     });

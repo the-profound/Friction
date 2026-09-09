@@ -19,7 +19,11 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
 import type { BodyTypographyMetrics } from "../../../lib/bodyLayout";
 import { shouldApplyBodyTypographyGeneration } from "../../../lib/bodyTypographyDiagnostics";
-import { BODY_FONT_FALLBACK_PROBE_TEXT } from "../../shared/bodyTypographyFonts";
+import {
+  BODY_FONT_FALLBACK_PROBE_TEXT,
+  BODY_FALLBACK_REGULAR_FONT_FAMILY,
+  BODY_FALLBACK_SEMIBOLD_FONT_FAMILY,
+} from "../../shared/bodyTypographyFonts";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { normalizeMarkdownEmphasisDelimiters } from "../../../lib/markdownEmphasis";
 import { splitLeadingThoughtH1 } from "@workspace/api-zod";
@@ -955,6 +959,7 @@ interface Command {
   mode?: "fallback";
   paddingPx?: number;
   text?: string;
+  attribution?: string;
   metrics?: BodyTypographyMetrics;
   layoutGeneration?: number;
   blockType?: string;
@@ -2458,7 +2463,7 @@ function spellFindRange(
 
     document.addEventListener("focusin", function (e) {
       if (!isEditorElement(e.target)) return;
-      const target = e.target as Node;
+      const target = e.target as Element;
       if (target.id === "title-input") {
         titleFocused = true;
       } else {
@@ -2469,7 +2474,7 @@ function spellFindRange(
 
     document.addEventListener("focusout", function (e) {
       if (!isEditorElement(e.target)) return;
-      const target = e.target as Node;
+      const target = e.target as Element;
       if (target.id === "title-input") {
         titleFocused = false;
       } else {
@@ -2509,7 +2514,9 @@ function spellFindRange(
       if (selHandleDragging) return;
       if (!selHandleHasActiveSelection) return;
       var t = e.touches[0];
-      updateEditorSurfaceTouchSession(surfaceTouchSession, t.clientX, t.clientY);
+      if (surfaceTouchSession && t) {
+        updateEditorSurfaceTouchSession(surfaceTouchSession, t.clientX, t.clientY);
+      }
     }, { passive: true });
 
     const markSurfaceTouchScrolled = function () {

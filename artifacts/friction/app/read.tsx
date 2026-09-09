@@ -74,6 +74,7 @@ import {
   useCreateThought,
   getGetArticleQuestionsQueryKey,
   getGetUserRecentCollectionQueryKey,
+  getListMyCollectionsQueryKey,
   getListInboxQueryKey,
   getListStoredSentencesQueryKey,
   getListThoughtsQueryKey,
@@ -494,7 +495,15 @@ export default function ReadScreen() {
   const createThought = useCreateThought();
   const collectionsQuery = useListMyCollections(
     { ownerId: userId, ...(articleId ? { articleId } : {}) },
-    { query: { enabled: !!userId && !!articleId } },
+    {
+      query: {
+        queryKey: getListMyCollectionsQueryKey({
+          ownerId: userId,
+          ...(articleId ? { articleId } : {}),
+        }),
+        enabled: !!userId && !!articleId,
+      },
+    },
   );
   const addToCollection = useAddArticleToMyCollection();
   const createCollection = useCreateMyCollection();

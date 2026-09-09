@@ -11,7 +11,11 @@
  */
 
 import { useMemo } from "react";
-import { useListUserSpaceLetters, SpaceLetterVisibility } from "@workspace/api-client-react";
+import {
+  useListUserSpaceLetters,
+  getListUserSpaceLettersQueryKey,
+  SpaceLetterVisibility,
+} from "@workspace/api-client-react";
 import type { Article, SpaceLetter } from "@workspace/api-client-react";
 import type { LetterCardViewModel } from "@/types/letterCard";
 
@@ -25,6 +29,7 @@ export function useRecordSpaceLetterMap(
       // resolving. This prevents the unauthed empty response from polluting
       // the cache with an empty list that hides the user's own space letters.
       enabled: Boolean(userId) && !authIsLoading,
+      queryKey: getListUserSpaceLettersQueryKey(userId ?? ""),
     },
   });
 
