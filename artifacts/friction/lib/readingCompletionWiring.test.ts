@@ -49,3 +49,57 @@ describe("rereceived inbox completion wiring", () => {
     expect(handler).toContain("runOnJS(navigateBackDelayed)()");
   });
 });
+
+describe("non-blocking completion save", () => {
+  it("starts persistence in the background and navigates without awaiting it", () => {
+    const handler = sourceBetween(
+      "const handleCommitAndSave = useCallback",
+      "const handleCommitAndSkip = useCallback",
+    );
+
+    expect(handler).toContain("if (isSavingRef.current) return");
+    expect(handler).toContain("void (async () => {");
+    expect(handler).toContain("await reading.commitCompletion()");
+    expect(handler).toContain("invalidateInbox(queryClient)");
+    expect(handler).toContain("invalidateMyCollections(queryClient)");
+    expect(handler).toContain("invalidateRecentCollection(queryClient, userId)");
+    expect(handler).toContain("background save failed");
+
+    const backgroundStart = handler.indexOf("void (async () => {");
+    const navigationStart = handler.indexOf('trackArticleAction({ articleId, action: "save"');
+    expect(backgroundStart).toBeGreaterThanOrEqual(0);
+    expect(navigationStart).toBeGreaterThan(backgroundStart);
+    expect(handler.slice(navigationStart)).toContain("clearActiveSession()");
+    expect(handler.slice(navigationStart)).toContain("overlayOpacity.value = withTiming(1");
+  });
+
+  it("keeps safe unavailable states and the requested action order", () => {
+    const screen = sourceBetween(
+      "function ReadingCompleteScreen({",
+      "const readingCompleteStyles = StyleSheet.create",
+    );
+
+    expect(screen).toContain("disabled={isSaving || !isCollectionsReady || isAlreadySaved}");
+    expect(screen).toContain('accessibilityState={{ disabled: isSaving || !isCollectionsReady || isAlreadySaved, busy: isSaving }}');
+
+    const save = screen.indexOf('accessibilityLabel="보관하기"');
+    const reread = screen.indexOf('accessibilityLabel="다시 읽기"');
+    const exit = screen.indexOf('accessibilityLabel="나가기"');
+    expect(save).toBeGreaterThanOrEqual(0);
+    expect(reread).toBeGreaterThan(save);
+    expect(exit).toBeGreaterThan(reread);
+  });
+
+  it("uses stable full-width button dimensions and brand action colors", () => {
+    const styles = sourceBetween(
+      "const readingCompleteStyles = StyleSheet.create",
+      "\n});",
+    );
+
+    expect(styles).toMatch(/saveBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.primaryAction/);
+    expect(styles).toMatch(/saveBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryActionForeground/);
+    expect(styles).toMatch(/rereadBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.noticeAccentSoft/);
+    expect(styles).toMatch(/rereadBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryAction/);
+    expect(styles).toMatch(/skipBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52/);
+  });
+});

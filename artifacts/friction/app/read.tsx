@@ -494,6 +494,7 @@ export default function ReadScreen() {
   });
   const updateRecentCollection = useUpdateUserRecentCollection();
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Detect other unread inbox copies of the same article (same article delivered
@@ -1456,77 +1457,85 @@ export default function ReadScreen() {
   const isCollectionsReady = !!userId && !!articleId && !collectionsQuery.isLoading && !collectionsQuery.isError;
   const isAlreadySaved = collectionsQuery.data?.some((collection) => collection.containsArticle) ?? false;
 
-  const handleCommitAndSave = useCallback(async () => {
-    if (isSaving) return;
+  const handleCommitAndSave = useCallback(() => {
+    if (isSavingRef.current) return;
     if (!isCollectionsReady) {
       showToast({ message: "보관함 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.", type: "info" });
       return;
     }
     if (isAlreadySaved) return;
+    isSavingRef.current = true;
     setIsSaving(true);
-    try {
-      const result = await reading.commitCompletion();
-      if (!result.success) {
-        showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
-        return;
-      }
 
-      let targetCollectionId: string | undefined = selectedCollectionId;
-      if (!targetCollectionId) {
-        const collections = collectionsQuery.data;
-        const impressionCol = collections?.find((c: { isImpression?: boolean }) => c.isImpression);
-        if (impressionCol) {
-          targetCollectionId = impressionCol.id;
-        } else if (collections && collections.length > 0) {
-          targetCollectionId = collections[0].id;
-        } else {
+    // Fire-and-handle: completion and collection persistence continue after the
+    // reader starts leaving, while this task owns every rejection it can produce.
+    void (async () => {
+      try {
+        const result = await reading.commitCompletion();
+        if (!result.success) {
+          showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
+          return;
+        }
+        invalidateInbox(queryClient);
+
+        let targetCollectionId: string | undefined = selectedCollectionId;
+        if (!targetCollectionId) {
+          const collections = collectionsQuery.data;
+          const impressionCol = collections?.find((c: { isImpression?: boolean }) => c.isImpression);
+          if (impressionCol) {
+            targetCollectionId = impressionCol.id;
+          } else if (collections && collections.length > 0) {
+            targetCollectionId = collections[0].id;
+          } else {
+            try {
+              const newCol = await createCollection.mutateAsync({
+                data: { ownerId: userId, name: "인상깊은 편지", isImpression: true },
+              });
+              targetCollectionId = newCol.id;
+            } catch {
+              showToast({ message: "완독 기록은 저장했지만 보관함 생성에 실패했습니다.", type: "info" });
+            }
+          }
+        }
+
+        if (targetCollectionId && articleId) {
           try {
-            const newCol = await createCollection.mutateAsync({
-              data: { ownerId: userId, name: "인상깊은 편지", isImpression: true },
+            await addToCollection.mutateAsync({
+              id: targetCollectionId,
+              data: { articleId },
             });
-            targetCollectionId = newCol.id;
+            invalidateMyCollections(queryClient);
+            try {
+              await updateRecentCollection.mutateAsync({
+                id: userId,
+                data: { collectionId: targetCollectionId },
+              });
+              invalidateRecentCollection(queryClient, userId);
+            } catch (e) {
+              console.warn("[handleCommitAndSave] recent collection update failed (non-fatal):", e);
+            }
           } catch {
-            showToast({ message: "완독 기록은 저장했지만 보관함 생성에 실패했습니다.", type: "info" });
+            showToast({ message: "완독 기록은 저장했지만 보관함 추가에 실패했습니다.", type: "info" });
           }
         }
+        showToast({ message: "보관함에 저장됐어요.", type: "success" });
+      } catch (error) {
+        console.warn("[handleCommitAndSave] background save failed:", error);
+        showToast({ message: "완독 및 보관 처리에 실패했습니다.", type: "error" });
+      } finally {
+        isSavingRef.current = false;
+        setIsSaving(false);
       }
+    })();
 
-      if (targetCollectionId && articleId) {
-        try {
-          await addToCollection.mutateAsync({
-            id: targetCollectionId,
-            data: { articleId },
-          });
-          invalidateMyCollections(queryClient);
-          try {
-            await updateRecentCollection.mutateAsync({
-              id: userId,
-              data: { collectionId: targetCollectionId },
-            });
-            invalidateRecentCollection(queryClient, userId);
-          } catch (e) {
-            console.warn("[handleCommitAndSave] recent collection update failed (non-fatal):", e);
-          }
-        } catch {
-          showToast({ message: "완독 기록은 저장했지만 보관함 추가에 실패했습니다.", type: "info" });
-        }
-      }
-
-      // 완독 화면을 유지한 채 fade-out — 슬롯을 되돌리면 편지 페이지가
-      // 잠깐 보이는 점프가 생기므로 completeScreenVisible은 건드리지 않는다.
-      // (화면을 떠나므로 되돌릴 필요 없음)
-      trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
-      invalidateInbox(queryClient);
-      clearActiveSession();
-      applyAnsweredQuestionCardsToMemo();
-      overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
-        if (finished) runOnJS(navigateBackDelayed)();
-      });
-      showToast({ message: "보관함에 저장됐어요.", type: "success" });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [isSaving, isCollectionsReady, isAlreadySaved, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, router, applyAnsweredQuestionCardsToMemo]);
+    // Navigation is intentionally independent of the background network chain.
+    trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
+    clearActiveSession();
+    applyAnsweredQuestionCardsToMemo();
+    overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
+      if (finished) runOnJS(navigateBackDelayed)();
+    });
+  }, [isCollectionsReady, isAlreadySaved, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, applyAnsweredQuestionCardsToMemo, overlayOpacity, navigateBackDelayed, showToast]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isDeleting) return;
@@ -2641,27 +2650,39 @@ function ReadingCompleteScreen({
           style={[readingCompleteStyles.saveBtn, (isSaving || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
           onPress={onSave}
           disabled={isSaving || !isCollectionsReady || isAlreadySaved}
+          accessibilityRole="button"
+          accessibilityLabel="보관하기"
+          accessibilityState={{ disabled: isSaving || !isCollectionsReady || isAlreadySaved, busy: isSaving }}
         >
           <Text style={readingCompleteStyles.saveBtnText}>
             {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "이미 보관된 글이에요" : "보관하기"}
           </Text>
         </Pressable>
 
-        {/* 나가기 (secondary) */}
+        {/* 다시 읽기 (secondary) */}
+        <Pressable
+          style={readingCompleteStyles.rereadBtn}
+          onPress={onReread}
+          accessibilityRole="button"
+          accessibilityLabel="다시 읽기"
+        >
+          <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
+        </Pressable>
+
+        {/* 나가기 (tertiary) */}
         <Pressable
           style={[readingCompleteStyles.skipBtn, isDeleting && readingCompleteStyles.btnDisabled]}
           onPress={onSkip}
           disabled={isDeleting}
+          accessibilityRole="button"
+          accessibilityLabel="나가기"
+          accessibilityState={{ disabled: isDeleting, busy: isDeleting }}
         >
           <Text style={readingCompleteStyles.skipBtnText}>
             {isDeleting ? "처리 중..." : "나가기"}
           </Text>
         </Pressable>
 
-        {/* 다시 읽기 (tertiary) */}
-        <Pressable style={readingCompleteStyles.rereadBtn} onPress={onReread}>
-          <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -2701,24 +2722,30 @@ const readingCompleteStyles = StyleSheet.create({
   },
   saveBtn: {
     width: "100%",
-    paddingVertical: 15,
-    backgroundColor: Colors.zinc900,
+    height: 52,
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: Colors.primaryAction,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnText: {
     fontSize: 16,
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     fontWeight: "600",
-    color: Colors.white,
+    color: Colors.primaryActionForeground,
   },
   skipBtn: {
     width: "100%",
-    paddingVertical: 12,
+    height: 52,
+    flexGrow: 0,
+    flexShrink: 0,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: Colors.zinc200,
     alignItems: "center",
+    justifyContent: "center",
   },
   skipBtnText: {
     fontSize: 15,
@@ -2727,15 +2754,19 @@ const readingCompleteStyles = StyleSheet.create({
   },
   rereadBtn: {
     width: "100%",
-    paddingVertical: 12,
+    height: 52,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderRadius: 12,
+    backgroundColor: Colors.noticeAccentSoft,
     alignItems: "center",
+    justifyContent: "center",
   },
   rereadBtnText: {
-    fontSize: 14,
-    fontFamily: ReaderTokens.fontFamily.sans,
-    fontWeight: "400",
-    color: Colors.zinc500,
-    textDecorationLine: "underline",
+    fontSize: 16,
+    fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+    fontWeight: "600",
+    color: Colors.primaryAction,
   },
   btnDisabled: {
     opacity: 0.5,
