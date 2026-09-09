@@ -443,6 +443,7 @@ function SpaceRoundSlotCard({
   onSchedule,
   withdrawnLetter,
   isScheduled = false,
+  schedulingDisabled = false,
 }: {
   slot: SpaceRoundSlotWithUser;
   userId: string;
@@ -457,6 +458,7 @@ function SpaceRoundSlotCard({
    */
   withdrawnLetter?: SpaceLetter | null;
   isScheduled?: boolean;
+  schedulingDisabled?: boolean;
 }) {
   const isMySlot = slot.assignedUserId === userId;
   const isPastEmptySlot =
@@ -499,14 +501,16 @@ function SpaceRoundSlotCard({
           </Text>
         ) : null}
       </View>
-      {isMySlot && !isPastEmptySlot && !isScheduled && (
+      {isMySlot && !isScheduled && !schedulingDisabled && (
         <ScalePressable
           style={styles.slotCtaOuter}
           contentStyle={styles.slotCta}
           onPress={() => onSchedule(slot)}
+          accessibilityRole="button"
+          accessibilityLabel={isPastEmptySlot ? "지난 내 차례 채우기" : undefined}
         >
           <Text style={styles.slotCtaText}>
-            {isWithdrawn ? "다시 예약하기" : "글 예약하기"}
+            {isPastEmptySlot ? "지난 차례 채우기" : isWithdrawn ? "다시 예약하기" : "글 예약하기"}
           </Text>
         </ScalePressable>
       )}
@@ -540,6 +544,7 @@ function UpcomingRoundSlots({
   onSchedule,
   openingSlot,
   openingSlotIsExpired = false,
+  schedulingDisabled = false,
 }: {
   slots: SpaceRoundSlotWithUser[];
   isLoading: boolean;
@@ -559,6 +564,7 @@ function UpcomingRoundSlots({
   onSchedule: (slot: SpaceRoundSlotWithUser) => void;
   openingSlot?: React.ReactNode;
   openingSlotIsExpired?: boolean;
+  schedulingDisabled?: boolean;
 }) {
   if (isLoading || isPendingCenterLettersFetching) {
     return (
@@ -610,6 +616,7 @@ function UpcomingRoundSlots({
               now={now}
               onSchedule={onSchedule}
               isScheduled
+              schedulingDisabled={schedulingDisabled}
             />
           ),
         }
@@ -625,6 +632,7 @@ function UpcomingRoundSlots({
                 withdrawnCenterLetters ?? [],
                 item.slot,
               )}
+              schedulingDisabled={schedulingDisabled}
             />
           ),
         },
@@ -734,6 +742,7 @@ function RoundSection({
           now={now}
           onSchedule={onScheduleSlot}
           isScheduled={item.kind === "scheduled"}
+          schedulingDisabled={roundStatus === "COMPLETED" || isSpaceArchived}
           withdrawnLetter={
             item.kind === "scheduled"
               ? null
@@ -880,6 +889,7 @@ function RoundSection({
         onSchedule={onScheduleSlot}
         openingSlot={upcomingOpeningSlotNode}
         openingSlotIsExpired={!hasOpeningLetter && !openingReservationAvailable}
+        schedulingDisabled={isSpaceArchived}
       />
     );
   } else if (isSpaceRecruiting) {
@@ -1197,6 +1207,7 @@ export default function SpaceDetailScreen() {
   }, []);
 
   const [showInviteGuideModal, setShowInviteGuideModal] = useState(false);
+  const [catchUpSlot, setCatchUpSlot] = useState<SpaceRoundSlotWithUser | null>(null);
   useEffect(() => {
     if (showInviteGuide === "1") {
       setShowInviteGuideModal(true);
@@ -1434,6 +1445,10 @@ export default function SpaceDetailScreen() {
 
   const handleScheduleSlot = useCallback(
     (slot: SpaceRoundSlotWithUser) => {
+      if (slot.scheduledDate && !isKstSlotReservable(slot.scheduledDate, now)) {
+        setCatchUpSlot(slot);
+        return;
+      }
       wentToScheduleRef.current = true;
       router.push({
         pathname: "/of-space-schedule-send" as never,
@@ -1445,8 +1460,24 @@ export default function SpaceDetailScreen() {
         },
       });
     },
-    [router, id],
+    [router, id, now],
   );
+
+  const handleConfirmCatchUp = useCallback(() => {
+    if (!catchUpSlot) return;
+    const slot = catchUpSlot;
+    setCatchUpSlot(null);
+    wentToScheduleRef.current = true;
+    router.push({
+      pathname: "/of-space-schedule-send" as never,
+      params: {
+        id,
+        slotId: slot.id,
+        roundId: slot.spaceRoundId,
+        catchUp: "1",
+      },
+    });
+  }, [catchUpSlot, router, id]);
 
   const handleOpenScheduleList = useCallback(() => {
     wentToScheduleRef.current = true;
@@ -1889,6 +1920,16 @@ export default function SpaceDetailScreen() {
       {renderLetterOverlay()}
 
       <ConfirmModal
+        visible={!!catchUpSlot}
+        title="지난 차례를 지금 채울까요?"
+        description="날짜는 직접 고를 수 없어요. 글을 등록하면 현재 시점에서 가장 가까운 발신 가능 시각으로 자동 예약돼요."
+        confirmLabel="확인하고 글 고르기"
+        cancelLabel="취소"
+        onConfirm={handleConfirmCatchUp}
+        onCancel={() => setCatchUpSlot(null)}
+      />
+
+      <ConfirmModal
         visible={showInviteGuideModal}
         title="공간이 만들어졌어요 🎉"
         description="초대 문구로 초대하거나 아이디로 직접 초대할 수 있어요."
@@ -2295,14 +2336,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   slotCtaOuter: {
+    height: 34,
+    flexGrow: 0,
+    flexShrink: 0,
     marginBottom: 8,
   },
   slotCta: {
+    height: 34,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: Colors.zinc900,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 7,
     alignItems: "center",
+    justifyContent: "center",
   },
   slotCtaText: {
     ...Typography.bodySemiBold,

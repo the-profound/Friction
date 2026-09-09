@@ -5515,16 +5515,31 @@ components:
         [id, spaceId, spaceLetterId, scheduledAt, status, createdAt, updatedAt]
 
     CreateSpaceScheduledSendBody:
-      type: object
-      additionalProperties: false
-      properties:
-        scheduledAt:
-          type: string
-          format: date-time
-        slotId:
-          type: string
-          format: uuid
-      required: [scheduledAt]
+      oneOf:
+        - type: object
+          additionalProperties: false
+          properties:
+            scheduledAt:
+              type: string
+              format: date-time
+            slotId:
+              type: string
+              format: uuid
+            catchUp:
+              type: boolean
+              const: false
+          required: [scheduledAt]
+        - type: object
+          additionalProperties: false
+          properties:
+            slotId:
+              type: string
+              format: uuid
+            catchUp:
+              type: boolean
+              const: true
+              description: Fills an expired assigned CENTER slot at the server-selected nearest delivery time.
+          required: [slotId, catchUp]
 
     UpdateSpaceScheduledSendBody:
       type: object

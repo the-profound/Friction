@@ -61,7 +61,7 @@ const DUPLICATE_RESERVATION_MESSAGE =
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-export type ArticleScheduleSheetMode = "general" | "opening-letter";
+export type ArticleScheduleSheetMode = "general" | "opening-letter" | "catch-up";
 
 export type ArticleScheduleSheetProps = {
   mode: ArticleScheduleSheetMode;
@@ -117,6 +117,7 @@ export function ArticleScheduleSheet({
   isLoadingCenterDates = false,
 }: ArticleScheduleSheetProps) {
   const isOpeningLetter = mode === "opening-letter";
+  const isCatchUp = mode === "catch-up";
 
   const minDate = useMemo(
     () => (isOpeningLetter ? minOpeningSendDate() : new Date()),
@@ -276,13 +277,14 @@ export function ArticleScheduleSheet({
           spaceLetterId = newLetter.id;
           queryClient.invalidateQueries({ queryKey: getListSpaceLettersQueryKey(spaceId) });
         }
-        const finalScheduledAt = kstDateAt6(parseYmdToLocalDate(centerSlot.date));
         await createSend.mutateAsync({
           id: spaceId,
           letterId: spaceLetterId,
           data: {
-            scheduledAt: finalScheduledAt.toISOString(),
             slotId: centerSlot.slotId,
+            ...(isCatchUp
+              ? { catchUp: true }
+              : { scheduledAt: kstDateAt6(parseYmdToLocalDate(centerSlot.date)).toISOString() }),
           },
         });
         queryClient.invalidateQueries({ queryKey: getListAllSpaceScheduledSendsQueryKey(spaceId) });
@@ -303,13 +305,13 @@ export function ArticleScheduleSheet({
       setSaving(false);
     }
   }, [
-    selectedArticleId, selectedCenterSlot, scheduledAt, isOpeningLetter, spaceId, letters, userId,
+    selectedArticleId, selectedCenterSlot, scheduledAt, isOpeningLetter, isCatchUp, spaceId, letters, userId,
     slotId, createLetter, createSend, queryClient, onSaved, onClose,
     openingRoundId, maxDate, minDate, showToast,
   ]);
 
-  const title = isOpeningLetter ? "여는 편지 글 선택" : "글 예약 발신";
-  const saveLabel = isOpeningLetter ? "여는 편지로 등록" : "예약 등록";
+  const title = isOpeningLetter ? "여는 편지 글 선택" : isCatchUp ? "지난 차례 보충 발신" : "글 예약 발신";
+  const saveLabel = isOpeningLetter ? "여는 편지로 등록" : isCatchUp ? "가장 가까운 시각에 보내기" : "예약 등록";
   const dateLabel = isOpeningLetter ? "발신 예약 날짜 (06:00 발신)" : "발신 예약 일시";
 
   return (
@@ -409,9 +411,16 @@ export function ArticleScheduleSheet({
 
         {selectedArticleId && !isOpeningLetter ? (
           <>
-            <Text style={styles.fieldLabel}>{SpaceCopy.scheduledSend_dateFieldLabel}</Text>
+            <Text style={styles.fieldLabel}>
+              {isCatchUp ? "발신 시각" : SpaceCopy.scheduledSend_dateFieldLabel}
+            </Text>
 
-            {isLoadingCenterDates ? (
+            {isCatchUp ? (
+              <SpaceInfoNote
+                variant="inline"
+                text="날짜는 직접 선택할 수 없어요. 서버가 현재 시점에서 가장 가까운 발신 가능 시각을 자동으로 지정해요."
+              />
+            ) : isLoadingCenterDates ? (
               <View style={styles.centerDatesLoading}>
                 <ActivityIndicator size="small" color={Colors.zinc400} />
                 <Text style={styles.centerDatesLoadingText}>배정된 차례를 확인하는 중이에요</Text>
@@ -456,6 +465,8 @@ export function ArticleScheduleSheet({
               ]}
               onPress={handleSave}
               disabled={saving || !selectedCenterSlot}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: saving || !selectedCenterSlot, busy: saving }}
             >
               <Text style={styles.saveBtnText}>
                 {saving ? "등록 중..." : saveLabel}
@@ -550,13 +561,21 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   saveBtnOuter: {
+    width: "100%",
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
     marginTop: 16,
   },
   saveBtn: {
+    width: "100%",
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: Colors.zinc900,
     borderRadius: 12,
-    paddingVertical: 14,
     alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnDisabled: {
     opacity: 0.5,

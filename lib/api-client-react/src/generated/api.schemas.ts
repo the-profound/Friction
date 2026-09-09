@@ -1395,10 +1395,17 @@ export interface SpaceScheduledSend {
   updatedAt: string;
 }
 
-export interface CreateSpaceScheduledSendBody {
-  scheduledAt: string;
-  slotId?: string;
-}
+export type CreateSpaceScheduledSendBody =
+  | {
+      scheduledAt: string;
+      slotId?: string;
+      catchUp?: false;
+    }
+  | {
+      slotId: string;
+      /** Fills an expired assigned CENTER slot at the server-selected nearest delivery time. */
+      catchUp: true;
+    };
 
 export type UpdateSpaceScheduledSendBodyStatus =
   (typeof UpdateSpaceScheduledSendBodyStatus)[keyof typeof UpdateSpaceScheduledSendBodyStatus];

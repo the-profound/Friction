@@ -38,7 +38,10 @@ import {
 } from "../lib/spaceSchedule";
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
 import { getCorrelationId } from "../lib/operationalTelemetry";
-import { synchronizeSpaceRoundStatuses } from "../lib/spaceRoundStatus";
+import {
+  getSpaceRoundStatusForPeriod,
+  synchronizeSpaceRoundStatuses,
+} from "../lib/spaceRoundStatus";
 import {
   isRecruitmentFull,
   startsConsumingRecruitmentPlace,
@@ -3011,6 +3014,7 @@ async function validateCenterSlotDate(
   letter: { spaceRoundId: string | null; authorId: string },
   normalizedScheduledAt: Date | undefined,
   requestedSlotId?: string,
+  catchUp = false,
   database: any = db,
 ): Promise<CenterSlotValidation> {
   if (!letter.spaceRoundId) {
@@ -3026,10 +3030,14 @@ async function validateCenterSlotDate(
   if (!slot.scheduledDate) {
     return { ok: false, error: "슬롯에 배정된 발신일이 없습니다." };
   }
-  if (!isKstDateReservable(slot.scheduledDate)) {
+  const isExpired = !isKstDateReservable(slot.scheduledDate);
+  if (catchUp && !isExpired) {
+    return { ok: false, error: "아직 지나지 않은 슬롯은 보충 발신으로 예약할 수 없습니다." };
+  }
+  if (!catchUp && isExpired) {
     return { ok: false, error: "이 슬롯의 예약 가능 시간이 지났습니다." };
   }
-  if (normalizedScheduledAt && kstDateString(normalizedScheduledAt) !== slot.scheduledDate) {
+  if (!catchUp && normalizedScheduledAt && kstDateString(normalizedScheduledAt) !== slot.scheduledDate) {
     return { ok: false, error: "요청한 발신 예정일이 배정된 슬롯 날짜와 일치하지 않습니다." };
   }
   return { ok: true, slot };
@@ -3053,6 +3061,33 @@ async function lockAndCheckPendingCenterReservation(
   if (input.exceptSendId) conditions.push(ne(spaceScheduledSendsTable.id, input.exceptSendId));
   const [existing] = await tx.select({ id: spaceScheduledSendsTable.id })
     .from(spaceScheduledSendsTable).where(and(...conditions)).limit(1);
+  return !!existing;
+}
+
+async function hasSentCenterSlotUse(
+  tx: any,
+  input: {
+    spaceId: string;
+    roundId: string;
+    authorId: string;
+    slotId: string;
+    reservedDate: string;
+  },
+): Promise<boolean> {
+  const [existing] = await tx
+    .select({ id: spaceScheduledSendsTable.id })
+    .from(spaceScheduledSendsTable)
+    .where(
+      and(
+        eq(spaceScheduledSendsTable.spaceId, input.spaceId),
+        eq(spaceScheduledSendsTable.status, "SENT"),
+        eq(spaceScheduledSendsTable.reservedRoundId, input.roundId),
+        eq(spaceScheduledSendsTable.reservationAuthorId, input.authorId),
+        eq(spaceScheduledSendsTable.slotId, input.slotId),
+        eq(spaceScheduledSendsTable.reservedDate, input.reservedDate),
+      ),
+    )
+    .limit(1);
   return !!existing;
 }
 
@@ -3145,21 +3180,34 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
   }
 
   const parsedBody = z.object({
-    scheduledAt: z.string().datetime(),
+    scheduledAt: z.string().datetime().optional(),
     slotId: z.string().uuid().optional(),
-  }).strict().safeParse(req.body);
+    catchUp: z.boolean().optional(),
+  }).strict().superRefine((value, ctx) => {
+    if (value.catchUp) {
+      if (value.scheduledAt !== undefined) {
+        ctx.addIssue({ code: "custom", path: ["scheduledAt"], message: "보충 발신 시각은 서버가 결정합니다." });
+      }
+    } else if (value.scheduledAt === undefined) {
+      ctx.addIssue({ code: "custom", path: ["scheduledAt"], message: "scheduledAt is required" });
+    }
+  }).safeParse(req.body);
   if (!parsedBody.success) {
     res.status(400).json({ error: "Invalid request body", details: parsedBody.error.flatten() });
     return;
   }
-  const parsedScheduledAt = toDate(parsedBody.data.scheduledAt);
-  if (!parsedScheduledAt) {
+  const parsedScheduledAt = parsedBody.data.scheduledAt
+    ? toDate(parsedBody.data.scheduledAt)
+    : undefined;
+  if (parsedBody.data.scheduledAt && !parsedScheduledAt) {
     res.status(400).json({ error: "잘못된 발신 시각입니다." });
     return;
   }
   // Reservation send times are always normalized to KST 06:00, regardless of
   // whatever date/time value the client actually sent.
-  const normalizedScheduledAt = normalizeToKst6(parsedScheduledAt);
+  let normalizedScheduledAt = parsedScheduledAt
+    ? normalizeToKst6(parsedScheduledAt)
+    : undefined;
 
   let resolvedSlotId: string | undefined;
   let reservationIdentity: {
@@ -3176,6 +3224,9 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
       res.status(400).json({ error: "CENTER 예약에는 slotId가 필요합니다." });
       return;
     }
+  } else if (parsedBody.data.catchUp) {
+    res.status(400).json({ error: "보충 발신은 CENTER 슬롯에만 사용할 수 있습니다." });
+    return;
   } else if (letter.letterType === "OPENING") {
     const validation = await validateOpeningRoundDate(letter, normalizedScheduledAt);
     if (!validation.ok) {
@@ -3193,6 +3244,9 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
         await tx.execute(sql`SELECT pg_advisory_xact_lock(
           hashtextextended(${`${req.params.id}:${letter.spaceRoundId}:${letter.authorId}`}, 0)
         )`);
+        // Lifecycle mutations lock the space row first. Keep the same order,
+        // then lock the assigned round before evaluating catch-up eligibility.
+        await tx.execute(sql`SELECT id FROM spaces WHERE id = ${req.params.id} FOR UPDATE`);
         await tx.execute(sql`SELECT id FROM space_letters WHERE id = ${req.params.letterId} FOR UPDATE`);
         const [lockedLetter] = await tx.select().from(spaceLettersTable).where(and(
           eq(spaceLettersTable.id, req.params.letterId),
@@ -3201,13 +3255,18 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
           eq(spaceLettersTable.letterType, "CENTER"),
         )).limit(1);
         if (!lockedLetter) throw Object.assign(new Error("letter changed"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
+        if (lockedLetter.spaceRoundId) {
+          await tx.execute(
+            sql`SELECT id FROM space_rounds WHERE id = ${lockedLetter.spaceRoundId} FOR UPDATE`,
+          );
+        }
         const validation = await validateCenterSlotDate(
-          lockedLetter, normalizedScheduledAt, parsedBody.data.slotId, tx,
+          lockedLetter, normalizedScheduledAt, parsedBody.data.slotId, !!parsedBody.data.catchUp, tx,
         );
         if (!validation.ok) throw Object.assign(new Error(validation.error), { statusCode: 400 });
         await tx.execute(sql`SELECT id FROM space_round_slots WHERE id = ${validation.slot.id} FOR UPDATE`);
         const lockedValidation = await validateCenterSlotDate(
-          lockedLetter, normalizedScheduledAt, parsedBody.data.slotId, tx,
+          lockedLetter, normalizedScheduledAt, parsedBody.data.slotId, !!parsedBody.data.catchUp, tx,
         );
         if (!lockedValidation.ok) throw Object.assign(new Error(lockedValidation.error), { statusCode: 400 });
         resolvedSlotId = lockedValidation.slot.id;
@@ -3222,10 +3281,52 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
         })) {
           throw Object.assign(new Error("pending CENTER reservation conflict"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
         }
+        if (parsedBody.data.catchUp) {
+          const [[lockedSpace], [lockedRound]] = await Promise.all([
+            tx
+              .select({ status: spacesTable.status })
+              .from(spacesTable)
+              .where(eq(spacesTable.id, req.params.id))
+              .limit(1),
+            tx
+              .select({
+                status: spaceRoundsTable.status,
+                startsAt: spaceRoundsTable.startsAt,
+                endsAt: spaceRoundsTable.endsAt,
+              })
+              .from(spaceRoundsTable)
+              .where(eq(spaceRoundsTable.id, reservationIdentity.reservedRoundId))
+              .limit(1),
+          ]);
+          if (
+            !lockedSpace ||
+            lockedSpace.status === "ARCHIVED" ||
+            !lockedRound ||
+            getSpaceRoundStatusForPeriod(lockedRound) === "COMPLETED"
+          ) {
+            throw Object.assign(
+              new Error("완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다."),
+              { statusCode: 409 },
+            );
+          }
+          if (await hasSentCenterSlotUse(tx, {
+            spaceId: String(req.params.id),
+            roundId: reservationIdentity.reservedRoundId,
+            authorId: reservationIdentity.reservationAuthorId,
+            slotId: resolvedSlotId,
+            reservedDate: reservationIdentity.reservedDate,
+          })) {
+            throw Object.assign(new Error("이미 발신이 완료된 슬롯입니다."), { statusCode: 409 });
+          }
+          // Decide as late as possible, under the same locks that protect the
+          // slot binding and duplicate check. The client cannot choose or
+          // reuse the expired slot's original date.
+          normalizedScheduledAt = computeDeliverySlot();
+        }
       }
       return tx.insert(spaceScheduledSendsTable).values({
         spaceId: req.params.id, spaceLetterId: req.params.letterId,
-        scheduledAt: normalizedScheduledAt,
+        scheduledAt: normalizedScheduledAt!,
         ...(resolvedSlotId != null ? { slotId: resolvedSlotId } : {}),
         ...reservationIdentity,
       }).returning();
@@ -3242,6 +3343,10 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
   } catch (err) {
     if ((err as { statusCode?: number }).statusCode === 400) {
       res.status(400).json({ error: (err as Error).message });
+      return;
+    }
+    if ((err as { statusCode?: number }).statusCode === 409) {
+      res.status(409).json({ error: (err as Error).message });
       return;
     }
     const pg = getPgError(err);
@@ -3365,7 +3470,7 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
         await tx.execute(sql`SELECT id FROM space_letters WHERE id = ${lockedLetter.id} FOR UPDATE`);
         await tx.execute(sql`SELECT id FROM space_round_slots WHERE id = ${lockedSend.slotId} FOR UPDATE`);
         const validation = await validateCenterSlotDate(
-          lockedLetter, normalizedScheduledAt ?? lockedSend.scheduledAt, lockedSend.slotId, tx,
+          lockedLetter, normalizedScheduledAt ?? lockedSend.scheduledAt, lockedSend.slotId, false, tx,
         );
         if (!validation.ok) throw Object.assign(new Error(validation.error), { statusCode: 400 });
         if (

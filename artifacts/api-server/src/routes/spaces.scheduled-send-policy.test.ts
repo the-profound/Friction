@@ -105,6 +105,49 @@ describe("space scheduled-send role policy", () => {
     );
   });
 
+  it("keeps catch-up scheduling server-authoritative and isolated to expired CENTER slots", () => {
+    const createRoute = routesSource.slice(
+      routesSource.indexOf(
+        'router.post("/spaces/:id/letters/:letterId/scheduled-sends"',
+      ),
+      routesSource.indexOf(
+        'router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId"',
+      ),
+    );
+    const validationHelper = routesSource.slice(
+      routesSource.indexOf("async function validateCenterSlotDate"),
+      routesSource.indexOf("async function lockAndCheckPendingCenterReservation"),
+    );
+
+    expect(createRoute).toContain('catchUp: z.boolean().optional()');
+    expect(createRoute).toContain('"보충 발신 시각은 서버가 결정합니다."');
+    expect(createRoute).toContain('letter.letterType !== "CENTER"');
+    expect(createRoute).toContain("normalizedScheduledAt = computeDeliverySlot()");
+    expect(createRoute).toContain("lockAndCheckPendingCenterReservation");
+    expect(createRoute).toContain("hasSentCenterSlotUse");
+    expect(createRoute).toContain("getSpaceRoundStatusForPeriod(lockedRound)");
+    expect(createRoute).toContain('lockedSpace.status === "ARCHIVED"');
+    expect(createRoute).toContain("reservedDate: reservationIdentity.reservedDate");
+    expect(validationHelper).toContain("if (!slot.scheduledDate)");
+    expect(validationHelper).toContain("requestedSlotId !== slot.id");
+    expect(validationHelper).toContain("if (catchUp && !isExpired)");
+    expect(validationHelper).toContain("if (!catchUp && isExpired)");
+  });
+
+  it("does not let normal CENTER updates reuse the catch-up exception", () => {
+    const patchRoute = routesSource.slice(
+      routesSource.indexOf(
+        'router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId"',
+      ),
+      routesSource.indexOf('router.get("/spaces/:id/scheduled-sends"'),
+    );
+
+    expect(patchRoute).toContain(
+      "lockedLetter, normalizedScheduledAt ?? lockedSend.scheduledAt, lockedSend.slotId, false, tx",
+    );
+    expect(patchRoute).not.toContain("computeDeliverySlot()");
+  });
+
   it("links every pre-start OPENING reservation to the first round", () => {
     const startRoute = routesSource.slice(
       routesSource.indexOf('router.post("/spaces/:id/start"'),

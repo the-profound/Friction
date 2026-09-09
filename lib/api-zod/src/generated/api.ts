@@ -3986,10 +3986,21 @@ export const CreateSpaceScheduledSendParams = zod.object({
   letterId: zod.coerce.string().uuid(),
 });
 
-export const CreateSpaceScheduledSendBody = zod.object({
-  scheduledAt: zod.date(),
-  slotId: zod.string().uuid().optional(),
-});
+export const CreateSpaceScheduledSendBody = zod.union([
+  zod.object({
+    scheduledAt: zod.date(),
+    slotId: zod.string().uuid().optional(),
+    catchUp: zod.boolean().optional(),
+  }),
+  zod.object({
+    slotId: zod.string().uuid(),
+    catchUp: zod
+      .boolean()
+      .describe(
+        "Fills an expired assigned CENTER slot at the server-selected nearest delivery time.",
+      ),
+  }),
+]);
 
 /**
  * @summary Cancel or update a scheduled send

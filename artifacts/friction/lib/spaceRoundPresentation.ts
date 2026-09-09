@@ -136,8 +136,10 @@ function isExactReservationForSlot(
   ) {
     return false;
   }
-  const slotDate = parseKstDateString(slot.scheduledDate);
-  return !!slotDate && reservation.scheduledAt === kstDateAt6(slotDate).toISOString();
+  // scheduledAt can differ from the historical slot instant for a catch-up
+  // send. The persisted slot/round/author/date tuple is the immutable identity;
+  // delivery time is intentionally not part of slot ownership.
+  return true;
 }
 
 /**

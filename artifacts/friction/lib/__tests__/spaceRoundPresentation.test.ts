@@ -224,6 +224,15 @@ describe("space round presentation", () => {
     ).toEqual(["future", "past"]);
   });
 
+  it("classifies a slot as expired exactly at its KST deadline for catch-up entry", () => {
+    const immediatelyBefore = new Date("2026-08-19T20:59:59.999Z");
+    const atDeadline = new Date("2026-08-19T21:00:00.000Z");
+
+    expect(isKstSlotReservable("2026-08-20", immediatelyBefore)).toBe(true);
+    expect(isKstSlotReservable("2026-08-20", atDeadline)).toBe(false);
+    expect(isKstSlotReservable(null, atDeadline)).toBe(false);
+  });
+
   it("shows pending center letters only as non-readable scheduled states in their own upcoming slots", () => {
     const slots = [
       { id: "round-one-other", spaceRoundId: "round-one", assignedUserId: "other", scheduledDate: "2026-08-20" },
@@ -344,7 +353,7 @@ describe("space round presentation", () => {
     }, "round-one")).toBe("round-one");
   });
 
-  it("requires a pending, resolved exact KST 06:00 reservation preview", () => {
+  it("requires a pending, resolved exact slot identity reservation preview", () => {
     const slot = { id: "slot", spaceRoundId: "round", assignedUserId: "me", scheduledDate: "2026-08-20" };
     const letter = { id: "letter", spaceRoundId: "round", authorId: "me", letterType: "CENTER" };
     const metadata = (changes: Partial<SpaceReservationMetadataPresentation> = {}): SpaceReservationMetadataPresentation => ({
@@ -356,7 +365,6 @@ describe("space round presentation", () => {
     ])[0].kind).toBe("scheduled");
     for (const badMetadata of [
       metadata({ date: "2026-08-21" }),
-      metadata({ scheduledAt: "2026-08-19T21:01:00.000Z" }),
       metadata({ status: "CANCELLED" }),
       metadata({ status: "FAILED" }),
       metadata({ resolved: false, roundId: null }),
@@ -365,6 +373,12 @@ describe("space round presentation", () => {
         { spaceLetterId: "letter", reservation: badMetadata },
       ])[0].kind).toBe("slot");
     }
+    expect(resolveUpcomingRoundCenterCards([letter], [slot], "me", [
+      {
+        spaceLetterId: "letter",
+        reservation: metadata({ scheduledAt: "2026-08-20T21:00:00.000Z" }),
+      },
+    ])[0].kind).toBe("scheduled");
   });
 
   it("uses exact slot identity when two rounds have slots on the same date", () => {

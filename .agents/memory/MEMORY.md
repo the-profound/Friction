@@ -136,3 +136,4 @@
 - [Metro public asset readiness](friction-metro-public-asset-readiness.md) — validate native assets by downloading bundle-derived URLs from every device-facing origin; tunnels must open before this gate.
 - [Generated API Zod default initialization](api-zod-generated-default-tdz.md) — a generated default constant can throw during web module load and blank the Expo preview before routing renders.
 - [Space-detail unsent letter boundary](space-detail-unsent-letter-boundary.md) — author APIs may retain management rows, but detail cards require SENT or true legacy; hidden past slots need privacy-neutral copy.
+- [Past-slot catch-up identity](past-slot-catch-up-identity.md) — catch-up keeps historical slot identity while delivery time moves; lifecycle checks and time selection stay server-authoritative.

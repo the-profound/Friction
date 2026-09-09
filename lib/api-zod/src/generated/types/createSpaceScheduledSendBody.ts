@@ -6,7 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateSpaceScheduledSendBody {
-  scheduledAt: Date;
-  slotId?: string;
-}
+export type CreateSpaceScheduledSendBody =
+  | {
+      scheduledAt: Date;
+      slotId?: string;
+      catchUp?: false;
+    }
+  | {
+      slotId: string;
+      /** Fills an expired assigned CENTER slot at the server-selected nearest delivery time. */
+      catchUp: true;
+    };

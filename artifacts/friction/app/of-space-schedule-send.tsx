@@ -570,12 +570,13 @@ function ChangeSheet({
 export default function SpaceScheduleSendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id, slotId, roundId, scheduledDate, openingRoundId } = useLocalSearchParams<{
+  const { id, slotId, roundId, scheduledDate, openingRoundId, catchUp } = useLocalSearchParams<{
     id: string;
     slotId?: string;
     roundId?: string;
     scheduledDate?: string;
     openingRoundId?: string;
+    catchUp?: string;
   }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
@@ -658,7 +659,7 @@ export default function SpaceScheduleSendScreen() {
     );
   }, [presentationRounds, roundId]);
 
-  // ─── "내 차례" CENTER slot dates, gathered across ACTIVE/UPCOMING rounds ────
+  // ─── "내 차례" CENTER slots, gathered across ACTIVE/UPCOMING rounds ────
   // `allCenterSlots` always includes every round the user is assigned a CENTER
   // slot in (regardless of existing reservations) — it's the source of truth
   // used to resolve "which date belongs to which round" for editing an
@@ -713,7 +714,7 @@ export default function SpaceScheduleSendScreen() {
       const unresolved = new Set<string>();
       targetRounds.forEach((r, idx) => {
         const mySlot = results[idx].find((s) => s.assignedUserId === userId);
-        if (mySlot?.scheduledDate && isKstSlotReservable(mySlot.scheduledDate, now)) {
+        if (mySlot?.scheduledDate) {
           mine.push({ slotId: mySlot.id, date: mySlot.scheduledDate, roundId: r.id });
         } else if (mySlot) {
           unresolved.add(r.id);
@@ -768,6 +769,16 @@ export default function SpaceScheduleSendScreen() {
       allCenterSlots?.filter(
         (s) =>
           isKstSlotReservable(s.date, now) &&
+          !pendingCenterRoundIds.has(s.roundId) &&
+          !sentCenterRoundIds.has(s.roundId),
+      ),
+    [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds, now],
+  );
+  const catchUpCenterSlots = useMemo(
+    () =>
+      allCenterSlots?.filter(
+        (s) =>
+          !isKstSlotReservable(s.date, now) &&
           !pendingCenterRoundIds.has(s.roundId) &&
           !sentCenterRoundIds.has(s.roundId),
       ),
@@ -985,11 +996,22 @@ export default function SpaceScheduleSendScreen() {
     if (!slotId || consumedSlotIdRef.current === slotId) return;
     if (roundsQuery.isLoading || allCenterSlots === undefined) return;
     consumedSlotIdRef.current = slotId;
-    const target = newReservationCenterSlots?.find(
-      (slot) => slot.slotId === slotId,
+    const isCatchUpRoute = catchUp === "1";
+    const target = (isCatchUpRoute ? catchUpCenterSlots : newReservationCenterSlots)?.find(
+      (slot) => slot.slotId === slotId && (!roundId || slot.roundId === roundId),
     );
     if (target) {
-      setShowNewSheet(true);
+      if (isCatchUpRoute) {
+        setPickedSlot({
+          kind: "center",
+          ...target,
+          catchUp: true,
+          roundNumber:
+            presentationRounds.find((round) => round.id === target.roundId)?.roundNumber ?? null,
+        });
+      } else {
+        setShowNewSheet(true);
+      }
       return;
     }
     showToast({
@@ -1005,6 +1027,9 @@ export default function SpaceScheduleSendScreen() {
     roundsQuery.isLoading,
     allCenterSlots,
     newReservationCenterSlots,
+    catchUpCenterSlots,
+    catchUp,
+    presentationRounds,
     showToast,
   ]);
 
@@ -1156,7 +1181,13 @@ export default function SpaceScheduleSendScreen() {
 
       {pickedSlot && (
         <ArticleScheduleSheet
-          mode={pickedSlot.kind === "opening" ? "opening-letter" : "general"}
+          mode={
+            pickedSlot.kind === "opening"
+              ? "opening-letter"
+              : pickedSlot.catchUp
+                ? "catch-up"
+                : "general"
+          }
           spaceId={id}
           userId={userId ?? ""}
           letters={letters}

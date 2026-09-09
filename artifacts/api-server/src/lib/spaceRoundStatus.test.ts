@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isKstDateReservable, kstDateAt6, kstDateString } from "./deliverySlot";
+import {
+  computeDeliverySlot,
+  isKstDateReservable,
+  kstDateAt6,
+  kstDateString,
+} from "./deliverySlot";
 import {
   isRecruitmentFull,
   startsConsumingRecruitmentPlace,
@@ -66,6 +71,15 @@ describe("KST send-date normalization", () => {
     expect(isKstDateReservable("2026-08-20", before)).toBe(true);
     expect(isKstDateReservable("2026-08-20", at)).toBe(false);
     expect(isKstDateReservable("2026-08-21", at)).toBe(true);
+  });
+
+  it("selects the authoritative nearest delivery instant for a catch-up send", () => {
+    expect(computeDeliverySlot(new Date("2026-08-19T20:59:59.999Z")).toISOString()).toBe(
+      "2026-08-19T21:00:00.000Z",
+    );
+    expect(computeDeliverySlot(new Date("2026-08-19T21:00:00.000Z")).toISOString()).toBe(
+      "2026-08-20T21:00:00.000Z",
+    );
   });
 });
 
