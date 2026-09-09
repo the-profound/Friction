@@ -13,6 +13,7 @@ import {
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
 } from "@/lib/bodyTypographyDiagnostics";
+import { Colors } from "@/constants/tokens";
 
 export default function WebViewMarkdownReaderWeb({
   markdown,
@@ -115,7 +116,7 @@ export default function WebViewMarkdownReaderWeb({
 
   return (
     <div style={{ ...wrapperStyle, visibility: fontsReady ? "visible" : "hidden" }}>
-      <style>{webReaderCSS}</style>
+      <style>{`${webReaderCSS}\n.reader-content{caret-color:${Colors.cursorAccent}}\n::selection{background:${Colors.cursorAccent}40}`}</style>
       <div
         ref={containerRef}
         style={contentStyle}
@@ -142,4 +143,4 @@ const webReaderCSS = `${buildBodyTypographyCss({
   blockMargins: "spaced",
   hrStyle: "spaced",
   readerUnderline: true,
-})}\n::selection{background:rgba(59,130,246,0.3)}`;
+})}`;

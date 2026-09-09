@@ -79,6 +79,46 @@ describe("editable React Native input cursor contract", () => {
     expect(source).toContain('selectionColor="transparent"');
   });
 
+  it("uses the Friction cursor accent throughout reading selection surfaces", () => {
+    const selectableText = readFileSync(
+      join(appRoot, "components/SelectableText/SelectableText.tsx"),
+      "utf8",
+    );
+    const nativeInputs = selectableText.match(/^\s*<TextInput\b[\s\S]*?\/>/gm) ?? [];
+    expect(selectableText).toContain("selectionColor={Colors.cursorAccent}");
+    expect(nativeInputs).toHaveLength(2);
+    for (const input of nativeInputs) {
+      expect(input).toContain("selectionColor={Colors.cursorAccent}");
+      expect(input).toContain("cursorColor={Colors.cursorAccent}");
+    }
+
+    const webReader = readFileSync(
+      join(appRoot, "components/WebViewMarkdownReader/WebViewMarkdownReaderWeb.tsx"),
+      "utf8",
+    );
+    const nativeReaderHtml = readFileSync(
+      join(appRoot, "components/WebViewMarkdownReader/readerHtml.ts"),
+      "utf8",
+    );
+    expect(webReader).toContain("caret-color:${Colors.cursorAccent}");
+    expect(webReader).toContain("::selection{background:${Colors.cursorAccent}40}");
+    expect(nativeReaderHtml).toContain("caret-color:${Colors.cursorAccent}");
+    expect(nativeReaderHtml).toContain("::selection{background:${Colors.cursorAccent}40}");
+  });
+
+  it("collects reading selections immediately without a confirmation sheet", () => {
+    const source = readFileSync(join(appRoot, "app/read.tsx"), "utf8");
+
+    expect(source).not.toContain('title="문장 저장"');
+    expect(source).not.toContain("sentencePopupVisible");
+    expect(source).toContain("sentenceSaveKeysRef.current.has(saveKey)");
+    expect(source).toContain("void createSentence.mutateAsync");
+    expect(source).toContain("setClearSelectionSignal((n) => n + 1)");
+    expect(source).toContain("getListStoredSentencesQueryKey({ userId })");
+    expect(source).toContain("trackSentenceCollected({");
+    expect(source).toContain("sentenceSaveKeysRef.current.delete(saveKey)");
+  });
+
   it("keeps reading thoughts proportional and lets the outer list own long-input scrolling", () => {
     const source = readFileSync(
       join(appRoot, "components/ThoughtsBottomSheet/ThoughtsBottomSheet.tsx"),

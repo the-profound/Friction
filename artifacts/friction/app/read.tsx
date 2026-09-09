@@ -51,7 +51,6 @@ import {
 } from "@/constants/tokens";
 import { bodyTypographyMetrics, computeBodyLayout } from "@/lib/bodyLayout";
 import ProgressIndicator from "@/components/ProgressIndicator/ProgressIndicator";
-import BottomSheet from "@/components/BottomSheet/BottomSheet";
 import type { StoredSentence, Thought } from "@workspace/api-client-react";
 import CoverPreview from "@/components/CoverPreview/CoverPreview";
 import { resolveArticleCover } from "@/utils/articleCover";
@@ -271,8 +270,6 @@ export default function ReadScreen() {
 
   const questionCardRef = useRef<QuestionCardCurlHandle>(null);
   const [exitConfirmVisible, setExitConfirmVisible] = useState(false);
-  const [sentencePopupVisible, setSentencePopupVisible] = useState(false);
-  const [selectedText, setSelectedText] = useState("");
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [showSelectionPill, setShowSelectionPill] = useState(false);
   const showSelectionPillRef = useRef(false);
@@ -481,6 +478,7 @@ export default function ReadScreen() {
 
 
   const createSentence = useCreateStoredSentence();
+  const sentenceSaveKeysRef = useRef(new Set<string>());
   const createThought = useCreateThought();
   const collectionsQuery = useListMyCollections(
     { ownerId: userId, ...(articleId ? { articleId } : {}) },
@@ -1612,11 +1610,43 @@ export default function ReadScreen() {
   }, []);
 
   const handleCollectSentence = useCallback((text: string) => {
-    if (text.trim().length > 0) {
-      setSelectedText(text.trim());
-      setSentencePopupVisible(true);
-    }
-  }, []);
+    const sentence = text.trim();
+    if (!sentence) return;
+
+    const page = contentPageIndex;
+    const saveKey = `${articleId}:${page}:${sentence}`;
+    if (sentenceSaveKeysRef.current.has(saveKey)) return;
+    sentenceSaveKeysRef.current.add(saveKey);
+
+    void createSentence.mutateAsync({
+      data: {
+        userId,
+        articleId,
+        text: sentence,
+        position: { page },
+      },
+    }).then(() => {
+      void queryClient.invalidateQueries({
+        queryKey: getListStoredSentencesQueryKey({ userId }),
+      });
+      trackSentenceCollected({ articleId, page, textLength: sentence.length });
+      showToast({ message: "문장이 저장되었습니다.", type: "success" });
+    }).catch((error: unknown) => {
+      const message = error instanceof Error
+        ? error.message
+        : "문장 저장에 실패했습니다. 다시 수집해주세요.";
+      showToast({ message, type: "error" });
+    }).finally(() => {
+      sentenceSaveKeysRef.current.delete(saveKey);
+    });
+  }, [
+    articleId,
+    contentPageIndex,
+    createSentence,
+    queryClient,
+    showToast,
+    userId,
+  ]);
 
   const handleMemoSentence = useCallback((text: string) => {
     if (text.trim().length === 0) return;
@@ -1633,36 +1663,6 @@ export default function ReadScreen() {
     );
     handleOpenThoughts(quoteText);
   }, [currentPage, authorName, article?.title, handleOpenThoughts, articleId]);
-
-  const handleSaveSentence = useCallback(async () => {
-    if (!selectedText) return;
-    try {
-      await createSentence.mutateAsync({
-        data: {
-          userId,
-          articleId,
-          text: selectedText,
-          position: {
-            page: contentPageIndex,
-          },
-        },
-      });
-      queryClient.invalidateQueries({ queryKey: getListStoredSentencesQueryKey({ userId }) });
-      trackSentenceCollected({ articleId, page: contentPageIndex, textLength: selectedText.length });
-      setSentencePopupVisible(false);
-      setSelectedText("");
-      showToast({ message: "문장이 저장되었습니다.", type: "success" });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "문장 저장에 실패했습니다.";
-      showToast({ message: msg, type: "error" });
-    }
-  }, [selectedText, userId, articleId, contentPageIndex, createSentence, queryClient]);
-
-  const handleCancelSentence = useCallback(() => {
-    setSentencePopupVisible(false);
-    setSelectedText("");
-    setClearSelectionSignal((n) => n + 1);
-  }, []);
 
   const dynamicStyles = useMemo(
     () =>
@@ -1704,25 +1704,6 @@ export default function ReadScreen() {
           fontFamily: ReaderTokens.fontFamily.sans,
           color: Colors.zinc600,
         },
-        sentencePreview: {
-          fontSize: layout.bodyFontSize,
-          fontFamily: ReaderTokens.fontFamily.serif,
-          color: Colors.zinc700,
-          fontStyle: "italic" as const,
-          lineHeight: layout.bodyLineHeight,
-        },
-        sentenceButtonText: {
-          fontSize: layout.captionFontSize,
-          fontWeight: "600" as const,
-          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
-          color: Colors.white,
-        },
-        sentenceButtonCancelText: {
-          fontSize: layout.captionFontSize,
-          fontWeight: "600" as const,
-          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
-          color: Colors.zinc600,
-        },
         memoInput: {
           fontSize: layout.bodyFontSize,
           fontFamily: ReaderTokens.fontFamily.sans,
@@ -1744,12 +1725,6 @@ export default function ReadScreen() {
           fontWeight: "600" as const,
           fontFamily: ReaderTokens.fontFamily.sansSemiBold,
           color: Colors.white,
-        },
-        sheetTitle: {
-          fontSize: layout.bodyFontSize,
-          fontWeight: "600" as const,
-          fontFamily: ReaderTokens.fontFamily.sansSemiBold,
-          color: Colors.zinc900,
         },
       }),
     [layout],
@@ -2141,38 +2116,6 @@ export default function ReadScreen() {
         </View>
       )}
 
-      <BottomSheet
-        visible={sentencePopupVisible}
-        onClose={handleCancelSentence}
-        title="문장 저장"
-        titleStyle={dynamicStyles.sheetTitle}
-        snapPoints={[0.3]}
-        dismissable={false}
-        closeButton
-      >
-        <View style={styles.sentenceContent}>
-          <Text style={dynamicStyles.sentencePreview} numberOfLines={3}>
-            &ldquo;{selectedText}&rdquo;
-          </Text>
-          <View style={styles.sentenceActions}>
-            <ScalePressable
-              style={styles.sentenceButton}
-              onPress={handleCancelSentence}
-              contentStyle={[styles.sentenceButtonContent, styles.sentenceButtonCancel]}
-            >
-              <Text style={dynamicStyles.sentenceButtonCancelText}>취소</Text>
-            </ScalePressable>
-            <ScalePressable style={styles.sentenceButton} onPress={handleSaveSentence}
-            contentStyle={styles.sentenceButtonContent}
-            >
-              <Feather name="bookmark" size={16} color={Colors.white} />
-              <Text style={dynamicStyles.sentenceButtonText}>저장</Text>
-            </ScalePressable>
-          </View>
-        </View>
-      </BottomSheet>
-
-
       {/* ── 진입/퇴장 검은 오버레이 ──────────────────────────────────── */}
       <Animated.View
         style={[styles.blackOverlay, overlayAnimStyle]}
@@ -2505,29 +2448,6 @@ const styles = StyleSheet.create({
   },
   completionButtonDisabled: {
     opacity: 0.6,
-  },
-  sentenceContent: {
-    paddingVertical: 12,
-    gap: 16,
-  },
-  sentenceActions: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  sentenceButton: {
-    flex: 1,
-  },
-  sentenceButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: Colors.zinc900,
-    borderRadius: 10,
-    paddingVertical: 12,
-  },
-  sentenceButtonCancel: {
-    backgroundColor: Colors.zinc100,
   },
   memoContent: {
     paddingVertical: 12,

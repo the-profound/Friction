@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, TextInput, StyleSheet, Text, Platform, type TextStyle, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
-import { ReaderTokens } from "../../constants/tokens";
+import { Colors, ReaderTokens } from "../../constants/tokens";
 import * as TextSelectionMenu from "../../modules/TextSelectionMenu";
 
 interface SelectableTextProps {
@@ -203,7 +203,11 @@ function SelectableTextWeb({ text, onCollect, onMemo, onSelectionStateChange, fo
 
   return (
     <View style={styles.container}>
-      <Text style={textStyle} ref={textBodyRef}>
+      <Text
+        style={textStyle}
+        ref={textBodyRef}
+        selectionColor={Colors.cursorAccent}
+      >
         {children ?? text}
       </Text>
     </View>
@@ -363,6 +367,8 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
             onSelectionChange={handleSelectionChange}
             onBlur={handleBlur}
             selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
+            selectionColor={Colors.cursorAccent}
+            cursorColor={Colors.cursorAccent}
             selectTextOnFocus={false}
           />
         </View>
@@ -383,6 +389,8 @@ function SelectableTextNative({ text, onCollect, onMemo, onSelectionStateChange,
           onSelectionChange={handleSelectionChange}
           onBlur={handleBlur}
           selection={forceClearSelection ? { start: 0, end: 0 } : undefined}
+          selectionColor={Colors.cursorAccent}
+          cursorColor={Colors.cursorAccent}
           selectTextOnFocus={false}
         />
       </View>

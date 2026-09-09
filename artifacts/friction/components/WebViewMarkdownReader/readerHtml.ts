@@ -7,6 +7,7 @@ import {
   hasEmbeddedBodyFonts,
   type EmbeddedBodyFontOptions,
 } from "@/components/shared/bodyTypographyFonts";
+import { Colors } from "@/constants/tokens";
 
 export interface ReaderFontOptions extends EmbeddedBodyFontOptions {
   perfEnabled?: boolean;
@@ -41,8 +42,8 @@ ${bridgeHeadScript}
 html,body{height:100%;background:transparent;overflow:hidden;-webkit-user-select:text;user-select:text}
 body{display:flex;align-items:flex-start;justify-content:center}
 ${bodyTypographyCss}
-#reader-content{width:100%}
-::selection{background:rgba(59,130,246,0.3)}
+#reader-content{width:100%;caret-color:${Colors.cursorAccent}}
+::selection{background:${Colors.cursorAccent}40}
 </style>
 ${fontReadyScript}
 </head>
