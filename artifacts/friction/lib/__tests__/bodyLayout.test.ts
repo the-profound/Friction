@@ -100,6 +100,9 @@ describe("letter body font fallback contract", () => {
     expect(validator).toContain("bytes.equals(expected)");
     expect(validator).toContain('"--origin"');
     expect(starter).toContain("EXPO_PACKAGER_PROXY_URL");
+    expect(layout).toContain(
+      "setEditorFontFallback,\n  setEditorFonts,\n  setEditorFontsError,\n} from \"@/lib/editorFontStore\"",
+    );
     expect(layout).toContain("setEditorFontFallback");
     expect(layout).toContain("reportNativeBodyFontReady(false)");
   });

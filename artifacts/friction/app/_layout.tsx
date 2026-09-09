@@ -19,6 +19,11 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
+import {
+  setEditorFontFallback,
+  setEditorFonts,
+  setEditorFontsError,
+} from "@/lib/editorFontStore";
 import { posthog, PostHogProvider } from "@/lib/posthog";
 import { trackAppOpen } from "@/lib/analytics";
 import { usePushNotifications } from "@/lib/usePushNotifications";

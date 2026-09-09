@@ -182,6 +182,7 @@ export interface CloseArticleBody {
   /** @minItems 1 */
   pages: string[];
 }
+
 export interface ArticleCoverUploadInput {
   /** @minLength 1 */
   name: string;

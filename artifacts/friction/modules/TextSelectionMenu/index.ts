@@ -1,4 +1,8 @@
-import { requireNativeModule, type EventSubscription } from "expo-modules-core";
+import { requireNativeModule } from "expo";
+
+interface EventSubscription {
+  remove(): void;
+}
 
 interface TextSelectionMenuModule {
   activate(showMemo: boolean): void;
