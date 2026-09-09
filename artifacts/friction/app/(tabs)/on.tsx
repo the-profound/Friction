@@ -1086,6 +1086,7 @@ function OnScreenContent() {
                     onScrollLock={(locked) => setRecordListScrollEnabled(!locked)}
                     actionRightInset={Spacing.screenPx}
                     actionBottomInset={Spacing.cardGap}
+                    backgroundColor={Colors.white}
                   >
                     {row}
                   </SwipeableRow>

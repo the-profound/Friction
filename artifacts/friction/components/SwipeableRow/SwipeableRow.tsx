@@ -1,6 +1,7 @@
 import React, { useRef, useImperativeHandle, forwardRef, useState } from "react";
 import {
   Animated,
+  type ColorValue,
   Easing,
   Platform,
   PanResponder,
@@ -52,6 +53,11 @@ interface SwipeableRowProps {
   overflowTop?: number;
   actionRightInset?: number;
   actionBottomInset?: number;
+  backgroundColor?: ColorValue;
+}
+
+function hasHorizontalSwipeIntent(dx: number, dy: number): boolean {
+  return Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 6;
 }
 
 const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
@@ -64,6 +70,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
     overflowTop = 0,
     actionRightInset = 0,
     actionBottomInset = 0,
+    backgroundColor,
   }, ref) => {
     const resolvedActions: SwipeAction[] = actions
       ? actions
@@ -117,7 +124,15 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
           const { dx, dy } = gestureState;
-          return Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 6;
+          return hasHorizontalSwipeIntent(dx, dy);
+        },
+        // A card's nested Pressable may otherwise keep responder ownership
+        // until release. Capture only deliberate horizontal intent so the row
+        // can swipe, while taps/long presses stay with the card and vertical
+        // movement remains available to the parent list.
+        onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+          const { dx, dy } = gestureState;
+          return hasHorizontalSwipeIntent(dx, dy);
         },
         onPanResponderGrant: () => {
           if (currentAnim.current) {
@@ -185,6 +200,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
         ]}
       >
         <View
+          pointerEvents={open ? "auto" : "none"}
           style={[
             styles.actionsContainer,
             {
@@ -221,6 +237,7 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
           ))}
         </View>
         <View
+          pointerEvents="box-none"
           style={[
             styles.contentClip,
             {
@@ -232,7 +249,11 @@ const SwipeableRow = forwardRef<SwipeableRowHandle, SwipeableRowProps>(
           ]}
         >
           <Animated.View
-            style={[styles.rowContent, { transform: [{ translateX }] }]}
+            style={[
+              styles.rowContent,
+              backgroundColor == null ? null : { backgroundColor },
+              { transform: [{ translateX }] },
+            ]}
             {...panResponder.panHandlers}
           >
             {children}
@@ -298,7 +319,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   rowContent: {
-    backgroundColor: "#FFFFFF",
     width: "100%",
   },
 });

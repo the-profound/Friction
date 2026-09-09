@@ -32,6 +32,7 @@ describe("list swipe delete wiring", () => {
     expect(on).toContain("onPress: () => requestRecordDeletion(item)");
     expect(on).toContain("onSwipeOpen={() => handleRecordSwipeOpen(recordKey)}");
     expect(on).toContain("onScrollLock={(locked) => setRecordListScrollEnabled(!locked)}");
+    expect(on).toContain("backgroundColor={Colors.white}");
     expect(on).toContain("scrollEnabled={recordListScrollEnabled}");
     expect(on).toContain("visible={Boolean(deleteTarget)}");
     expect(on).toContain("onConfirm={confirmDelete}");

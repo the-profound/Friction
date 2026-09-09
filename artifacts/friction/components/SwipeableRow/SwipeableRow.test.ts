@@ -8,8 +8,10 @@ describe("SwipeableRow shared delete action contract", () => {
   it("claims only deliberate horizontal gestures and releases list scrolling", () => {
     expect(source).toContain("onStartShouldSetPanResponder: () => false");
     expect(source).toContain(
-      "Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 6",
+      "return Math.abs(dx) > Math.abs(dy) * 1.5 && Math.abs(dx) > 6",
     );
+    expect(source).toContain("onMoveShouldSetPanResponderCapture:");
+    expect(source.match(/return hasHorizontalSwipeIntent\(dx, dy\)/g)).toHaveLength(2);
     expect(source).toContain("onScrollLockRef.current?.(true)");
     expect(source.match(/onScrollLockRef\.current\?\.\(false\)/g)).toHaveLength(2);
     expect(source).toContain("onSwipeOpenRef.current?.()");
@@ -28,6 +30,13 @@ describe("SwipeableRow shared delete action contract", () => {
     expect(source).toContain("disabled: Boolean(action.disabled || action.busy)");
     expect(source).toContain("busy: Boolean(action.busy)");
     expect(source).toContain('accessibilityLabel="스와이프 메뉴 닫기"');
+  });
+
+  it("keeps the revealed actions tappable and leaves row background ownership to callers", () => {
+    expect(source).toContain('pointerEvents={open ? "auto" : "none"}');
+    expect(source).toContain('pointerEvents="box-none"');
+    expect(source).toContain("backgroundColor == null ? null : { backgroundColor }");
+    expect(source).not.toContain('backgroundColor: "#FFFFFF"');
   });
 
   it("keeps edge ornaments inside the translated subtree and reserves their overflow", () => {
