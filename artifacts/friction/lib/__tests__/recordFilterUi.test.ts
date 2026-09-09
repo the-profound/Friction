@@ -17,9 +17,30 @@ describe("record filter UI regression", () => {
       'useState<RecordKindIntent>("thought")',
     );
     expect(navigationContext).toContain("setRecordKindIntent,");
-    expect(recordsScreen).toContain('setKind("thought")');
+    expect(recordsScreen).toContain("setKind(advanceRecordKind(kind, reselectCount))");
     expect(recordsScreen).toContain('onPress={() => setKind("editing")}');
     expect(recordsScreen).toContain('onPress={() => setKind("letter")}');
+  });
+
+  it("cycles record filters only when the active records tab is reselected", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+    const navigationContext = readFileSync(
+      join(__dirname, "../../contexts/NavigationContext.tsx"),
+      "utf8",
+    );
+
+    expect(navigationContext).toContain("if (lastSyncRef.current.tab === tab)");
+    expect(navigationContext).toContain("[tab]: previous[tab] + 1");
+    expect(recordsScreen).toContain('import { advanceRecordKind } from "@/lib/tabReselect"');
+    expect(recordsScreen).toContain(
+      "if (handledRecordReselectVersionRef.current === tabReselectVersion.ON) return",
+    );
+    expect(recordsScreen).toContain("setKind(advanceRecordKind(kind, reselectCount))");
+    expect(recordsScreen).toContain("setView(\"card\")");
+    expect(recordsScreen).toContain("setRecordResetVersion(tabReselectVersion.ON)");
   });
 
   it("routes letter list rows through the shared action-menu flow", () => {
@@ -88,7 +109,9 @@ describe("record filter UI regression", () => {
     // absolute positioning (not a negative-margin sibling overlap), so every
     // scrollable branch below it must reserve FILTER_BAR_HEIGHT of top padding.
     expect(recordsScreen).toContain("height: FILTER_BAR_HEIGHT,");
-    expect(recordsScreen).toContain("<HeaderFadeOverlay controlHeight={FILTER_BAR_HEIGHT}>");
+    expect(recordsScreen).toMatch(
+      /<HeaderFadeOverlay controlHeight={FILTER_BAR_HEIGHT}(?:\s+fadeFromTop)?>/,
+    );
     expect(recordsScreen).not.toContain("filtersAnimated");
     expect(recordsScreen).not.toContain("marginBottom: -FILTER_GRADIENT_OVERLAP");
     expect(recordsScreen).not.toContain("outputRange: [0, FILTER_BAR_HEIGHT]");

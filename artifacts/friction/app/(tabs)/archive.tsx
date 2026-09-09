@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -52,8 +52,10 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { LIST_PERF_PRESET } from "@/lib/listPerf";
 import StoredSentenceCard from "@/components/StoredSentenceCard";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
+import { useNavigation } from "@/contexts/NavigationContext";
+import { advanceArchiveFilter, type ArchiveFilter } from "@/lib/tabReselect";
 
-type ArchiveSubTab = "personal" | "sentence";
+type ArchiveSubTab = ArchiveFilter;
 const FILTER_BUTTON_HEIGHT = 36;
 const FILTER_ROW_HEIGHT = 4 + FILTER_BUTTON_HEIGHT + 16;
 const SENTENCE_BADGE_OVERFLOW = 12;
@@ -67,8 +69,10 @@ export default function ArchiveScreen() {
   const { userId } = useUser();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const { tabReselectVersion } = useNavigation();
 
   const [activeSubTab, setActiveSubTab] = useState<ArchiveSubTab>("personal");
+  const handledArchiveReselectVersionRef = useRef(tabReselectVersion.AR);
   const [createSheetVisible, setCreateSheetVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -174,6 +178,21 @@ export default function ArchiveScreen() {
     setSelectionMode(false);
     setSelectedIds(new Set());
   }, [closeSentenceOpenRow]);
+
+  const selectArchiveSubTab = useCallback((nextSubTab: ArchiveSubTab) => {
+    closeSentenceOpenRow();
+    setActiveSubTab(nextSubTab);
+    if (nextSubTab === "personal") {
+      exitSelectionMode();
+    }
+  }, [closeSentenceOpenRow, exitSelectionMode]);
+
+  useEffect(() => {
+    if (handledArchiveReselectVersionRef.current === tabReselectVersion.AR) return;
+    const reselectCount = tabReselectVersion.AR - handledArchiveReselectVersionRef.current;
+    handledArchiveReselectVersionRef.current = tabReselectVersion.AR;
+    selectArchiveSubTab(advanceArchiveFilter(activeSubTab, reselectCount));
+  }, [tabReselectVersion.AR]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -594,11 +613,7 @@ export default function ArchiveScreen() {
                   styles.filterButtonContent,
                   activeSubTab === "personal" && styles.filterButtonContentActive,
                 ]}
-                onPress={() => {
-                  closeSentenceOpenRow();
-                  setActiveSubTab("personal");
-                  exitSelectionMode();
-                }}
+                onPress={() => selectArchiveSubTab("personal")}
                 accessibilityRole="button"
                 accessibilityLabel="모음 보기"
                 accessibilityState={{ selected: activeSubTab === "personal" }}
@@ -616,10 +631,7 @@ export default function ArchiveScreen() {
                   styles.filterButtonContent,
                   activeSubTab === "sentence" && styles.filterButtonContentActive,
                 ]}
-                onPress={() => {
-                  closeSentenceOpenRow();
-                  setActiveSubTab("sentence");
-                }}
+                onPress={() => selectArchiveSubTab("sentence")}
                 accessibilityRole="button"
                 accessibilityLabel="문장 보기"
                 accessibilityState={{ selected: activeSubTab === "sentence" }}

@@ -94,6 +94,7 @@ import {
   type UnifiedRecord,
 } from "@/lib/recordList";
 import type { ArticleStatus } from "@/lib/policies";
+import { advanceRecordKind } from "@/lib/tabReselect";
 import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
@@ -101,7 +102,6 @@ import { useIsOnline } from "@/lib/useIsOnline";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
 const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
-
 type CardRecord = UnifiedRecord & { isQuestion: boolean; questionIndex?: number };
 const cardRecordKey = (record: CardRecord) => `${record.kind}:${record.id}`;
 
@@ -376,6 +376,7 @@ function OnScreenContent() {
   const cardWidth = Math.min(width - Spacing.screenPx * 2, Sizing.cardSlotW);
   const [view, setView] = useState<RecordView>("card");
   const [recordResetVersion, setRecordResetVersion] = useState(tabReselectVersion.ON);
+  const handledRecordReselectVersionRef = useRef(tabReselectVersion.ON);
   const [cardMixSeed, setCardMixSeed] = useState(() => `${Date.now()}-${Math.random()}`);
   const recordSessionRef = useRef<UnifiedRecord[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<UnifiedRecord | null>(null);
@@ -458,7 +459,10 @@ function OnScreenContent() {
   const addToCollection = useAddArticleToMyCollection();
 
   useEffect(() => {
-    setKind("thought");
+    if (handledRecordReselectVersionRef.current === tabReselectVersion.ON) return;
+    const reselectCount = tabReselectVersion.ON - handledRecordReselectVersionRef.current;
+    handledRecordReselectVersionRef.current = tabReselectVersion.ON;
+    setKind(advanceRecordKind(kind, reselectCount));
     setView("card");
     setRecordResetVersion(tabReselectVersion.ON);
     if (shouldRefetchQuestionQueue({

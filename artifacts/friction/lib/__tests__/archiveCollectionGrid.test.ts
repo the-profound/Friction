@@ -212,6 +212,21 @@ describe("archive collected sentence list", () => {
     expect(selectionRenderer).toContain("toggleSelect(item.id)");
     expect(archiveScreen).not.toContain("selectedSentence");
   });
+
+  it("alternates archive filters on active-tab reselection through the shared cleanup path", () => {
+    expect(archiveScreen).toContain("const { tabReselectVersion } = useNavigation()");
+    expect(archiveScreen).toContain(
+      "selectArchiveSubTab(advanceArchiveFilter(activeSubTab, reselectCount))",
+    );
+    expect(archiveScreen).toContain(
+      "if (handledArchiveReselectVersionRef.current === tabReselectVersion.AR) return",
+    );
+    expect(archiveScreen).toContain("[tabReselectVersion.AR]");
+    expect(archiveScreen).toContain('onPress={() => selectArchiveSubTab("personal")}');
+    expect(archiveScreen).toContain('onPress={() => selectArchiveSubTab("sentence")}');
+    expect(archiveScreen).toContain("closeSentenceOpenRow()");
+    expect(archiveScreen).toContain("exitSelectionMode()");
+  });
 });
 
 describe("manual stored sentence creation", () => {

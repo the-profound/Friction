@@ -873,7 +873,7 @@ describe("thought card typography regression guards", () => {
     expect(inboxScreen).toContain("resetKey: tabReselectVersion.IN");
     expect(inboxScreen).toContain("index === 0 ? tabReselectVersion.IN : undefined");
     expect(inboxScreen).toContain("isSourceHidden");
-    expect(recordsScreen).toContain('setKind("thought")');
+    expect(recordsScreen).toContain("setKind(advanceRecordKind(kind, reselectCount))");
     expect(recordsScreen).toContain('setView("card")');
     expect(recordsScreen).toContain("setRecordResetVersion(tabReselectVersion.ON)");
     expect(recordsScreen).toContain("resetKey: recordResetVersion");
