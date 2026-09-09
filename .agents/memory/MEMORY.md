@@ -132,3 +132,4 @@
 - [reservation vs lastReservation](friction-reservation-vs-last-reservation.md) — `lastReservation` (any status) preserves a cancelled send's exact slot identity so UI can show "withdrawn" instead of "never touched", without resurrecting it as active.
 - [Friction article close atomicity](friction-article-close-atomicity.md) — closing must persist the complete title/content/pages snapshot with DIVIDING→CLOSING in one transaction; same-snapshot retries are successful.
 - [Active-reading restore authority](friction-active-reading-restore-authority.md) — auth landing must wait for persisted reading hydration; foreground reads and local writes share one revisioned queue.
+- [Metro public asset readiness](friction-metro-public-asset-readiness.md) — validate native assets by downloading bundle-derived URLs from every device-facing origin; tunnels must open before this gate.

@@ -80,9 +80,11 @@ describe("letter body font fallback contract", () => {
 
     expect(BODY_FONT_ASSET_NAMES).toHaveLength(4);
     expect(BODY_FONT_ASSET_PATHS).toHaveLength(4);
-    expect(layout).toContain(
-      "Asset.loadAsync(assetSpecs.map(({ module }) => module))",
-    );
+    expect(layout).toContain("Asset.fromModule(spec.module)");
+    expect(layout).toContain("await asset.downloadAsync()");
+    expect(layout).toContain("Promise.allSettled");
+    expect(layout).toContain("withEditorFontAssetTimeout");
+    expect(layout).toContain("EDITOR_FONT_ASSET_ATTEMPT_TIMEOUT_MS");
     for (const assetPath of BODY_FONT_ASSET_PATHS) {
       expect(layout).toContain(assetPath);
       expect(validator).toContain(assetPath);
@@ -94,6 +96,12 @@ describe("letter body font fallback contract", () => {
     expect(validator).toContain("serverMarker.serverId");
     expect(validator).toContain('"type": "woff2"');
     expect(validator).toContain("registerAsset");
+    expect(validator).toContain('signature !== "wOF2"');
+    expect(validator).toContain("bytes.equals(expected)");
+    expect(validator).toContain('"--origin"');
+    expect(starter).toContain("EXPO_PACKAGER_PROXY_URL");
+    expect(layout).toContain("setEditorFontFallback");
+    expect(layout).toContain("reportNativeBodyFontReady(false)");
   });
 
   it("registers WOFF2 as a Metro asset without dropping the default assets", () => {

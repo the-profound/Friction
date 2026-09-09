@@ -19,7 +19,6 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system/legacy";
-import { setEditorFonts, setEditorFontsError } from "@/lib/editorFontStore";
 import { posthog, PostHogProvider } from "@/lib/posthog";
 import { trackAppOpen } from "@/lib/analytics";
 import { usePushNotifications } from "@/lib/usePushNotifications";
@@ -87,6 +86,7 @@ try {
 } catch (err) {
   console.warn("[SplashScreen] preventAutoHideAsync failed:", err);
 }
+import { reportNativeBodyFontReady } from "@/lib/nativeBodyFontMode";
 
 function ActiveReadingGuard({
   children,
@@ -370,27 +370,86 @@ async function loadEditorFonts(): Promise<void> {
     "[editorFonts] Loading native body-font assets",
     diagnosticContext,
   );
+  const loaded = new Map<string, { asset: Asset; base64: string }>();
+  const failures = new Map<string, { uri: string; error: string }>();
+  for (
+    let attempt = 1;
+    attempt <= 2 && loaded.size < assetSpecs.length;
+    attempt += 1
+  ) {
+    const pending = assetSpecs.filter(({ name }) => !loaded.has(name));
+    const results = await Promise.allSettled(
+      pending.map(async (spec) => {
+        const asset = Asset.fromModule(spec.module);
+        const remoteUri = asset.uri;
+        try {
+          const base64 = await withEditorFontAssetTimeout(
+            (async () => {
+              await asset.downloadAsync();
+              const readableUri = asset.localUri ?? asset.uri;
+              return FileSystem.readAsStringAsync(readableUri, {
+                encoding: "base64",
+              });
+            })(),
+            spec.name,
+          );
+          return { spec, asset, base64 };
+        } catch (error) {
+          throw {
+            spec,
+            uri: remoteUri,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }),
+    );
+    results.forEach((result, index) => {
+      const spec = pending[index];
+      if (result.status === "fulfilled") {
+        loaded.set(spec.name, {
+          asset: result.value.asset,
+          base64: result.value.base64,
+        });
+        failures.delete(spec.name);
+      } else {
+        const reason = result.reason as
+          | { uri?: string; error?: string }
+          | undefined;
+        failures.set(spec.name, {
+          uri: reason?.uri ?? Asset.fromModule(spec.module).uri,
+          error: reason?.error ?? String(result.reason),
+        });
+        console.warn("[editorFonts] Native font asset attempt failed", {
+          ...diagnosticContext,
+          attempt,
+          name: spec.name,
+          path: spec.path,
+          uri: reason?.uri ?? Asset.fromModule(spec.module).uri,
+          error: reason?.error ?? String(result.reason),
+        });
+      }
+    });
+    if (loaded.size < assetSpecs.length && attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
+
   try {
-    const [regularAsset, semiBoldAsset, notoRegularAsset, notoSemiBoldAsset] =
-      await Asset.loadAsync(assetSpecs.map(({ module }) => module));
-    const regularUri = regularAsset.localUri ?? regularAsset.uri;
-    const semiBoldUri = semiBoldAsset.localUri ?? semiBoldAsset.uri;
-    const notoRegularUri = notoRegularAsset.localUri ?? notoRegularAsset.uri;
-    const notoSemiBoldUri = notoSemiBoldAsset.localUri ?? notoSemiBoldAsset.uri;
-    const [regular, semiBold, notoRegular, notoSemiBold] = await Promise.all([
-      FileSystem.readAsStringAsync(regularUri, { encoding: "base64" }),
-      FileSystem.readAsStringAsync(semiBoldUri, { encoding: "base64" }),
-      FileSystem.readAsStringAsync(notoRegularUri, { encoding: "base64" }),
-      FileSystem.readAsStringAsync(notoSemiBoldUri, { encoding: "base64" }),
-    ]);
+    if (loaded.size !== assetSpecs.length) {
+      throw new Error(
+        `Failed assets: ${assetSpecs
+          .filter(({ name }) => !loaded.has(name))
+          .map(({ name }) => name)
+          .join(", ")}`,
+      );
+    }
+    const [regular, semiBold, notoRegular, notoSemiBold] =
+      BODY_FONT_ASSET_NAMES.map((name) => loaded.get(name)!.base64);
     setEditorFonts(regular, semiBold, notoRegular, notoSemiBold);
     console.info("[editorFonts] Native body-font assets loaded", {
       ...diagnosticContext,
       loadedAssets: [
-        regularAsset,
-        semiBoldAsset,
-        notoRegularAsset,
-        notoSemiBoldAsset,
+        ...BODY_FONT_ASSET_NAMES.map((name) => loaded.get(name)!.asset),
       ].map((asset, index) => ({
         name: assetSpecs[index].name,
         type: asset.type,
@@ -400,15 +459,34 @@ async function loadEditorFonts(): Promise<void> {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const notoRegular = loaded.get(BODY_FONT_ASSET_NAMES[2])?.base64;
+    const notoSemiBold = loaded.get(BODY_FONT_ASSET_NAMES[3])?.base64;
+    reportNativeBodyFontReady(false);
+    if (notoRegular && notoSemiBold) {
+      setEditorFontFallback(notoRegular, notoSemiBold, message);
+    } else {
+      setEditorFontsError(message);
+    }
     console.error("[editorFonts] Failed to load editor fonts:", {
       ...diagnosticContext,
       error: message,
+      failedAssets: assetSpecs
+        .filter(({ name }) => !loaded.has(name))
+        .map(({ name, path }) => ({
+          name,
+          path,
+          uri: failures.get(name)?.uri ?? "unknown",
+          error: failures.get(name)?.error ?? "unknown",
+        })),
+      fallback:
+        notoRegular && notoSemiBold
+          ? "session-wide-noto-serif-kr"
+          : "embedded-noto-unavailable",
       hint:
         diagnosticContext.serverContractVersion !== BODY_FONT_CONFIG_VERSION
           ? "Dev server font contract differs from the running app bundle."
           : "Check the four WOFF2 asset modules and restart the matching Metro server.",
     });
-    setEditorFontsError(message);
   }
 }
 
@@ -548,4 +626,31 @@ export default function RootLayout() {
       {appTree}
     </PostHogProvider>
   );
+}
+
+const EDITOR_FONT_ASSET_ATTEMPT_TIMEOUT_MS = 15_000;
+
+function withEditorFontAssetTimeout<T>(
+  operation: Promise<T>,
+  assetName: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(
+          `${assetName} timed out after ${EDITOR_FONT_ASSET_ATTEMPT_TIMEOUT_MS}ms`,
+        ),
+      );
+    }, EDITOR_FONT_ASSET_ATTEMPT_TIMEOUT_MS);
+    operation.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }

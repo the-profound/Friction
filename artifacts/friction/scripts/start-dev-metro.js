@@ -308,20 +308,21 @@ async function waitForMetro(port, timeoutMs = 120_000) {
 }
 
 function validateNativeFontBundles(port) {
+  const publicOrigin = process.env.EXPO_PACKAGER_PROXY_URL?.trim();
+  const validatorArgs = [
+    path.join(projectRoot, "scripts", "validate-dev-font-bundle.mjs"),
+    "--port",
+    String(port),
+  ];
+  if (publicOrigin) {
+    validatorArgs.push("--origin", publicOrigin);
+  }
   return new Promise((resolve, reject) => {
-    const validationProcess = spawn(
-      process.execPath,
-      [
-        path.join(projectRoot, "scripts", "validate-dev-font-bundle.mjs"),
-        "--port",
-        String(port),
-      ],
-      {
-        cwd: projectRoot,
-        env: process.env,
-        stdio: "inherit",
-      },
-    );
+    const validationProcess = spawn(process.execPath, validatorArgs, {
+      cwd: projectRoot,
+      env: process.env,
+      stdio: "inherit",
+    });
     validationProcess.on("error", reject);
     validationProcess.on("exit", (code, signal) => {
       if (code === 0) {
@@ -392,7 +393,7 @@ async function main() {
 
   await waitForMetro(port);
   console.log(
-    "[Friction Metro] Validating native WOFF2 modules in iOS and Android bundles.",
+    "[Friction Metro] Validating native WOFF2 modules and downloadable assets in iOS and Android bundles.",
   );
   await validateNativeFontBundles(port);
   markBundleValidationPassed(markerPath);

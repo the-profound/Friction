@@ -40,7 +40,32 @@ export function setEditorFonts(
 }
 
 export function setEditorFontsError(message: string): void {
-  state = { ...state, error: message };
+  state = {
+    regularBase64: null,
+    semiBoldBase64: null,
+    notoRegularBase64: null,
+    notoSemiBoldBase64: null,
+    error: message,
+  };
+  emit();
+}
+
+export function setEditorFontFallback(
+  notoRegular: string,
+  notoSemiBold: string,
+  message: string,
+): void {
+  state = {
+    // Keep the four-face CSS contract complete while the session-wide mode
+    // selects the bundled Noto families. Duplicating Noto into the Eulyoo
+    // slots prevents a renderer that mounts during the transition from ever
+    // observing a partial font set.
+    regularBase64: notoRegular,
+    semiBoldBase64: notoSemiBold,
+    notoRegularBase64: notoRegular,
+    notoSemiBoldBase64: notoSemiBold,
+    error: message,
+  };
   emit();
 }
 

@@ -43,7 +43,10 @@ if (!process.env.NGROK_STATIC_DOMAIN) {
   process.exit(1);
 }
 
-const staticDomain = process.env.NGROK_STATIC_DOMAIN.replace(/^https?:\/\//, "");
+const staticDomain = process.env.NGROK_STATIC_DOMAIN.replace(
+  /^https?:\/\//,
+  "",
+);
 const tunnelUrl = `https://${staticDomain}`;
 
 // EXPO_PUBLIC_DOMAIN controls the API base URL inside the JS bundle.
@@ -139,7 +142,18 @@ async function waitForMetro(timeoutMs = 120_000) {
     }
   });
 
-  process.stdout.write("Waiting for Metro to be ready");
+  // Open the public route before waiting for start-dev-metro's validation.
+  // That validation downloads the same asset URLs a physical device uses, so
+  // waiting for it before opening ngrok would deadlock tunnel startup.
+  console.log("Opening ngrok tunnel…");
+  const listener = await ngrok.forward({
+    addr: METRO_PORT,
+    authtoken_from_env: true,
+    domain: staticDomain,
+  });
+
+  const actualUrl = listener.url();
+  process.stdout.write("Waiting for Metro and public asset validation");
   const ready = await waitForMetro();
   console.log(ready ? " ✓" : "");
 
@@ -148,26 +162,21 @@ async function waitForMetro(timeoutMs = 120_000) {
     cleanup();
   }
 
-  // Open ngrok tunnel on the static domain
-  console.log("\nOpening ngrok tunnel…");
-  const listener = await ngrok.forward({
-    addr: METRO_PORT,
-    authtoken_from_env: true,
-    domain: staticDomain,
-  });
-
-  const actualUrl = listener.url();
   console.log("");
   console.log("✅  Tunnel ready!");
   console.log("─────────────────────────────────────────────────────────");
   console.log(`  Fixed address  : ${actualUrl}`);
   console.log("");
   console.log("  To connect your dev-client:");
-  console.log(`    1. Open the Friction app (installed from TestFlight → dev-client build)`);
+  console.log(
+    `    1. Open the Friction app (installed from TestFlight → dev-client build)`,
+  );
   console.log(`    2. Tap "Enter URL manually"`);
   console.log(`    3. Enter: ${actualUrl}`);
   console.log("");
-  console.log("  (You only need to do step 3 once — the address never changes.)");
+  console.log(
+    "  (You only need to do step 3 once — the address never changes.)",
+  );
   console.log("─────────────────────────────────────────────────────────");
 
   // Keep the process alive while Metro + ngrok run
