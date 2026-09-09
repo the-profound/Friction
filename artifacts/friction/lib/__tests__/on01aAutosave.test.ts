@@ -141,7 +141,7 @@ describe("on-01a editor hydration and initialization", () => {
     expect(screen).toContain("const serverInjectionPendingRef = useRef(false);");
     expect(exportHandler).toContain("serverInjectionPendingRef.current = false;");
     expect(exportHandler).toContain("if (md === serverContentRef.current) {");
-    expect(exportHandler).toContain("markDirty(titleRef.current, md);");
+    expect(exportHandler).toContain("markDirty(titleRef.current, md, documentSnapshot);");
   });
 
   it("does not add a synthetic body paragraph to a new direct thought", () => {
@@ -379,8 +379,8 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(types).toContain("title?: string;");
     expect(editorSource).toContain('title: titleInput?.value ?? ""');
     expect(editorWeb).toContain('title: titleRef.current?.value ?? ""');
-    expect(screen).toContain("pending.resolve({");
-    expect(screen).toContain("title: payload.title ?? titleRef.current");
+    expect(screen).toContain("pending.resolve(createEditorTransitionSnapshot(");
+    expect(screen).toContain("payload.title ?? titleRef.current");
     expect(screen).toContain("const latestTitle = latestSnapshot.title;");
     expect(screen).toContain("const latestContent = latestSnapshot.content;");
   });
@@ -428,7 +428,7 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     );
 
     expect(latestFlush).toContain("latest = await getEditorContent();");
-    expect(latestFlush).toContain("markDirty(isThoughtModeRef.current ? \"\" : titleRef.current, latest);");
+    expect(latestFlush).toContain("createThoughtDocumentSnapshot(latest,");
     expect(latestFlush).toContain("const result = await flush();");
     expect(backHandler).toContain("cur = await getEditorContent()");
     expect(backHandler).toContain("await persistLatestAutosave()");

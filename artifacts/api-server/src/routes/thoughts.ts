@@ -27,6 +27,8 @@ import {
   PromoteThoughtBody,
   UpdateThoughtBody,
   isMeaningfulThoughtMarkdown,
+  splitLeadingThoughtH1,
+  serializeThoughtDocument,
 } from "@workspace/api-zod";
 import {
   generateDenseEmbedding,
@@ -678,56 +680,9 @@ async function compactQuestionQueue(
  * title that cannot be represented by the thought record.
  */
 export function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
-  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
-  const match = /^ {0,3}#(?!#)[ \t]+(.*)$/.exec(lines[0] ?? "");
-  if (!match) return null;
-
-  const titleLines = [match[1]];
-  let cursor = 1;
-  while (cursor < lines.length) {
-    const previous = titleLines[titleLines.length - 1];
-    if (!/[ \t]{2,}$/.test(previous) || lines[cursor].trim() === "") break;
-    titleLines[titleLines.length - 1] = previous.replace(/[ \t]{2,}$/, "");
-    titleLines.push(lines[cursor]);
-    cursor += 1;
-  }
-  titleLines[titleLines.length - 1] = titleLines[titleLines.length - 1].replace(
-    /[ \t]{2,}$/,
-    "",
-  );
-
-  const title = titleLines
-    .map((line) => {
-      const escapedCharacters: string[] = [];
-      const protectedLine = line.replace(
-        /\\([\\!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g,
-        (_match, character: string) => {
-          const token = `\uE000${escapedCharacters.length}\uE001`;
-          escapedCharacters.push(character);
-          return token;
-        },
-      );
-      return protectedLine
-        .replace(/!\[([^\]]*)]\([^)]*\)/g, "$1")
-        .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
-        .replace(/<\/?u>/gi, "")
-        .replace(/[*_~`]+/g, "")
-        .trim()
-        .replace(/&#(\d+);/g, (match, codePoint: string) => {
-          const value = Number(codePoint);
-          return Number.isInteger(value) && value >= 0 && value <= 0x10ffff
-            ? String.fromCodePoint(value)
-            : match;
-        })
-        .replace(
-          /\uE000(\d+)\uE001/g,
-          (_match, index: string) => escapedCharacters[Number(index)] ?? "",
-        );
-    })
-    .join("\n");
-  const body = lines.slice(cursor).join("\n").replace(/^\n/, "");
-  if (!title.trim() || !body.trim()) return null;
-  return { title, body };
+  const parts = splitLeadingThoughtH1(markdown);
+  if (!parts || !parts.title.trim() || !parts.bodyMarkdown.trim()) return null;
+  return { title: parts.title, body: parts.bodyMarkdown };
 }
 
 /**
@@ -736,23 +691,7 @@ export function parseThoughtMarkdown(markdown: string): ThoughtMarkdown | null {
  * hard breaks so a later promotion reconstructs the exact title.
  */
 export function formatThoughtMarkdown(title: string, body: string): string {
-  const normalizedTitle = title.replace(/\r\n?/g, "\n");
-  const normalizedBody = body.replace(/\r\n?/g, "\n");
-  const titleMarkdown = normalizedTitle
-    .split("\n")
-    .map((line) => {
-      const escaped = line.replace(
-        /([\\!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g,
-        "\\$1",
-      );
-      return escaped.replace(/^\s+|\s+$/g, (whitespace) =>
-        [...whitespace]
-          .map((character) => `&#${character.codePointAt(0)};`)
-          .join(""),
-      );
-    })
-    .join("  \n");
-  return `# ${titleMarkdown}\n\n${normalizedBody}`;
+  return serializeThoughtDocument(title, body);
 }
 
 type TransitionSnapshot = {

@@ -55,7 +55,6 @@ import {
   type DivisionWarning,
 } from "@/lib/pageDivision";
 import {
-  parseLeadingH1Markdown,
   parseMarkdownBlocks,
   type MarkdownBlockType,
 } from "@/utils/markdownParser";
@@ -98,7 +97,10 @@ import {
   type SpellChange,
   spellCheck as apiSpellCheck,
 } from "@workspace/api-client-react";
-import { isMeaningfulThoughtMarkdown } from "@workspace/api-zod";
+import {
+  createThoughtDocumentSnapshot,
+  isMeaningfulThoughtMarkdown,
+} from "@workspace/api-zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { buildStoredSentenceQuote } from "@/lib/storedSentenceQuote";
 import {
@@ -132,6 +134,7 @@ import AddMenuPopup from "@/components/MemoToolbar/AddMenuPopup";
 import InlineMenuPanel, { type InlineMenuMode } from "@/components/InlineMenuPanel/InlineMenuPanel";
 import HeaderButton from "@/components/shared/HeaderButton";
 import {
+  createEditorTransitionSnapshot,
   exportEditorTransitionSnapshot,
   type EditorTransitionSnapshot,
 } from "@/lib/editorTransitionSnapshot";
@@ -179,6 +182,10 @@ interface PendingStageTransition {
   entityId: string;
   title: string;
   content: string;
+  titleMarkdown: string;
+  markdown: string;
+  docVersion: number;
+  editorSessionId: string;
   expectedUpdatedAt: string;
   requestId: string;
 }
@@ -835,10 +842,14 @@ export default function WritingScreen() {
     if (pending) {
       pendingExportsRef.current.delete(payload.requestId);
       clearTimeout(pending.timer);
-      pending.resolve({
-        title: payload.title ?? titleRef.current,
-        content: persistableMarkdown,
-      });
+      pending.resolve(createEditorTransitionSnapshot(
+        persistableMarkdown,
+        payload.title ?? titleRef.current,
+        {
+          docVersion: payload.docVersion,
+          editorSessionId: payload.editorSessionId,
+        },
+      ));
     }
   }, [acceptEditorSnapshot]);
 
@@ -1116,8 +1127,14 @@ export default function WritingScreen() {
         }
       }
       md = removeUnpersistableInlineImages(md);
+      const documentSnapshot = isThoughtModeRef.current
+        ? createThoughtDocumentSnapshot(md, {
+            docVersion: lastSeenDocVersionRef.current,
+            editorSessionId: currentEditorSessionIdRef.current,
+          }) ?? undefined
+        : undefined;
       if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
-        markDirty(titleRef.current, md);
+        markDirty(titleRef.current, md, documentSnapshot);
       } else {
         void discardAutosave();
       }
@@ -1262,7 +1279,16 @@ export default function WritingScreen() {
         return { ok: true, content: latest, meaningful: false };
       }
 
-      markDirty(isThoughtModeRef.current ? "" : titleRef.current, latest);
+      markDirty(
+        isThoughtModeRef.current ? "" : titleRef.current,
+        latest,
+        isThoughtModeRef.current
+          ? createThoughtDocumentSnapshot(latest, {
+              docVersion: lastSeenDocVersionRef.current,
+              editorSessionId: currentEditorSessionIdRef.current,
+            }) ?? undefined
+          : undefined,
+      );
       const result = await flush();
       return { ...result, content: latest, meaningful: true };
     };
@@ -1569,9 +1595,9 @@ export default function WritingScreen() {
     // 루프가 완전히 settle 될 때까지 한 틱 기다린다.
     await new Promise<void>((r) => setTimeout(r, 50));
 
-    let cur: string;
+    let latestEditorSnapshot: EditorTransitionSnapshot;
     try {
-      cur = await getEditorContent();
+      latestEditorSnapshot = await getEditorSnapshot();
     } catch {
       await reportAutosaveFailure();
       isNavigatingRef.current = false;
@@ -1579,6 +1605,7 @@ export default function WritingScreen() {
       showToast({ message: "최신 내용을 확인하지 못했습니다. 다시 시도해주세요.", type: "error" });
       return;
     }
+    const cur = latestEditorSnapshot.markdown ?? latestEditorSnapshot.content;
     console.log(
       "[enterDividingMode] content acquired len=%d preview=%j",
       cur.length,
@@ -1593,9 +1620,12 @@ export default function WritingScreen() {
       );
     });
 
-    const parsedThought = parseLeadingH1Markdown(cur);
-    const thoughtBody = parsedThought?.body ?? cur;
-    const resolvedTitle = parsedThought?.title ?? "";
+    const thoughtSnapshot = createThoughtDocumentSnapshot(cur, {
+      docVersion: latestEditorSnapshot.docVersion,
+      editorSessionId: latestEditorSnapshot.editorSessionId,
+    });
+    const thoughtBody = thoughtSnapshot?.bodyMarkdown ?? "";
+    const resolvedTitle = thoughtSnapshot?.title ?? "";
     if (!resolvedTitle || !thoughtBody.trim()) {
       isNavigatingRef.current = false;
       setIsNavigating(false);
@@ -1611,7 +1641,7 @@ export default function WritingScreen() {
       // A direct local draft has no entity until its first meaningful save.
       // This is the only required preliminary round trip; promotion itself
       // still receives the exact snapshot exported above.
-      markDirty("", cur);
+       markDirty("", cur, thoughtSnapshot ?? undefined);
       const createResult = await flush();
       if (!createResult.ok) {
         isNavigatingRef.current = false;
@@ -1639,6 +1669,7 @@ export default function WritingScreen() {
     const prepared = await prepareAutosaveTransition({
       title: resolvedTitle,
       content: thoughtBody,
+      documentSnapshot: thoughtSnapshot ?? undefined,
       serverUpdatedAt:
         (canRetryPromotion ? previousPromotion.expectedUpdatedAt : undefined)
         ?? persistedThought?.updatedAt
@@ -1659,6 +1690,10 @@ export default function WritingScreen() {
         entityId: thoughtId,
         title: resolvedTitle,
         content: thoughtBody,
+        titleMarkdown: thoughtSnapshot?.titleMarkdown ?? "",
+        markdown: thoughtSnapshot?.markdown ?? cur,
+        docVersion: thoughtSnapshot?.docVersion ?? 0,
+        editorSessionId: thoughtSnapshot?.editorSessionId ?? "",
         expectedUpdatedAt: prepared.expectedServerUpdatedAt,
         requestId: createThoughtClientId(),
       };

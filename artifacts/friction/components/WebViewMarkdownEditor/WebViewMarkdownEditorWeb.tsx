@@ -29,7 +29,7 @@ import {
   waitForWebBodyFonts,
   type BodyFontLoadStatus,
 } from "@/lib/bodyTypographyDiagnostics";
-import { splitLeadingH1Markdown } from "@/utils/leadingH1";
+import { splitLeadingThoughtH1 } from "@workspace/api-zod";
 import { normalizePageDividersForMarkdownParser } from "@/lib/pageDividerMarkdown";
 import { normalizeMarkdownEmphasisDelimiters } from "@/lib/markdownEmphasis";
 import { handleTitleEnter, insertTitleSoftBreak } from "./titleKeyboardContract";
@@ -68,8 +68,8 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
         ),
       ),
     );
-    const leadingH1 = splitLeadingH1Markdown(normalized);
-    const result = marked.parse(leadingH1?.body ?? normalized);
+    const leadingH1 = splitLeadingThoughtH1(normalized);
+    const result = marked.parse(leadingH1?.bodyMarkdown ?? normalized);
     let html = leadingH1
       ? `<h1>${marked.parseInline(leadingH1.titleMarkdown)}</h1>${typeof result === "string" ? result : ""}`
       : typeof result === "string" ? result : "";

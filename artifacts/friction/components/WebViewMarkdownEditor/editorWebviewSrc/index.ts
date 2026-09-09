@@ -22,7 +22,7 @@ import { shouldApplyBodyTypographyGeneration } from "../../../lib/bodyTypography
 import { BODY_FONT_FALLBACK_PROBE_TEXT } from "../../shared/bodyTypographyFonts";
 import { normalizePageDividersForMarkdownParser } from "../../../lib/pageDividerMarkdown";
 import { normalizeMarkdownEmphasisDelimiters } from "../../../lib/markdownEmphasis";
-import { splitLeadingH1Markdown } from "../../../utils/leadingH1";
+import { splitLeadingThoughtH1 } from "@workspace/api-zod";
 import {
   CARET_PARAGRAPH_ATTRIBUTE,
   CARET_PARAGRAPH_HTML,
@@ -596,8 +596,8 @@ function markdownToHtml(md: string, ensureTrailingParagraph = true): string {
         ),
       ),
     );
-    const leadingH1 = splitLeadingH1Markdown(text);
-    const lines = (leadingH1?.body ?? text).split("\n");
+    const leadingH1 = splitLeadingThoughtH1(text);
+    const lines = (leadingH1?.bodyMarkdown ?? text).split("\n");
     const blocks: string[] = [];
     if (leadingH1) {
       const titleHtml = leadingH1.titleMarkdown

@@ -1,5 +1,6 @@
 import { marked, type Token, type Tokens } from "marked";
 import { splitLeadingH1Markdown } from "./leadingH1";
+import { thoughtTitleMarkdownToText } from "@workspace/api-zod";
 
 export type InlineToken =
   | { kind: "text"; value: string }
@@ -136,12 +137,7 @@ export interface ParsedLeadingH1Markdown {
 export function parseLeadingH1Markdown(markdown: string): ParsedLeadingH1Markdown | null {
   const split = splitLeadingH1Markdown(markdown);
   if (!split) return null;
-  const title = tokensToPlainText(inlineTokensFromText(split.titleMarkdown))
-    .replace(/[ \t]*\n[ \t]*/g, "\n")
-    .split("\n")
-    .map((line) => line.trim())
-    .join("\n")
-    .trim();
+  const title = thoughtTitleMarkdownToText(split.titleMarkdown);
   return { ...split, title };
 }
 

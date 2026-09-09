@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { ThoughtDocumentSnapshot } from "@workspace/api-zod";
 
 export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -8,6 +9,7 @@ export type AutoSaveEntityMode = "draft" | "dividing";
 export interface PendingPayload {
   title: string;
   content: string;
+  documentSnapshot?: ThoughtDocumentSnapshot;
   operation?: "save" | "delete";
   cleanupId?: string;
   entityId?: string;
@@ -33,6 +35,7 @@ export interface AutoSaveRestoreContext {
 export interface AutoSaveTransitionSnapshot {
   title: string;
   content: string;
+  documentSnapshot?: ThoughtDocumentSnapshot;
   serverUpdatedAt?: string;
   serverContent?: string;
 }
@@ -43,6 +46,7 @@ export interface AutoSaveTransitionCommit {
   entityMode: AutoSaveEntityMode;
   title: string;
   content: string;
+  documentSnapshot?: ThoughtDocumentSnapshot;
   serverUpdatedAt: string;
   serverContent: string;
 }
@@ -612,11 +616,12 @@ export function useAutoSave({
   ]);
 
   const markDirty = useCallback(
-    (title: string, content: string) => {
+    (title: string, content: string, documentSnapshot?: ThoughtDocumentSnapshot) => {
       latestDataRef.current = {
         ...latestDataRef.current,
         title,
         content,
+        documentSnapshot,
         operation: "save",
         cleanupId: undefined,
         ...nextRecoveryMetadata(),
@@ -713,6 +718,7 @@ export function useAutoSave({
       ...latestDataRef.current,
       title: snapshot.title,
       content: snapshot.content,
+      documentSnapshot: snapshot.documentSnapshot,
       operation: "save",
       cleanupId: undefined,
       serverUpdatedAt: expectedServerUpdatedAt,
@@ -752,6 +758,7 @@ export function useAutoSave({
     latestDataRef.current = {
       title: commit.title,
       content: commit.content,
+      documentSnapshot: commit.documentSnapshot,
       entityId: commit.entityId,
       entityMode: commit.entityMode,
       operation: "save",
