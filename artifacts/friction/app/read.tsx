@@ -250,6 +250,10 @@ export default function ReadScreen() {
   // completeScreenVisible: true = 읽기 완료 화면이 슬롯으로 열려 있음
   // (visualPage 계산보다 먼저 선언해야 참조 오류가 생기지 않는다)
   const [completeScreenVisible, setCompleteScreenVisible] = useState(false);
+  // `mode` describes how this screen was entered. A reread started from the
+  // completion screen stays in the original mode so completion persistence
+  // semantics do not change, and uses this local flag only for reread UI.
+  const [isInScreenReread, setIsInScreenReread] = useState(false);
   // Backward 커밋 직후 1커밋 동안 prev 슬롯을 감춘다.
   // 리매핑 시점에 prevSlotSV가 아직 0(중앙)인 채로 새로 들어온 페이지가
   // 그려지면 한 프레임 동안 현재 페이지를 덮어 번쩍임이 생기기 때문 —
@@ -741,14 +745,17 @@ export default function ReadScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleLoading, reading.isRestoring, reading.isSessionHydrated]);
 
-  // Last-page [ < ] button: fade in only on the last LETTER page; re_read always shows
+  const isRereadUI = mode === "re_read" || isInScreenReread;
+  const showFloatingBackButton = isOnLastLetterPage || isRereadUI;
+
+  // Last-page [ < ] button: fade in only on the last LETTER page; rereads always show
   useEffect(() => {
-    if (mode === "re_read") {
+    if (isRereadUI) {
       lastPageBtnOpacity.value = 1;
       return;
     }
     lastPageBtnOpacity.value = withTiming(isOnLastLetterPage ? 1 : 0, { duration: 300, easing: Easing.out(Easing.ease) });
-  }, [isOnLastLetterPage, mode]);
+  }, [isOnLastLetterPage, isRereadUI]);
 
   useEffect(() => {
     if (mode === "basic" && articleId) {
@@ -1093,6 +1100,7 @@ export default function ReadScreen() {
     // article or mode. Do not carry completion, memo, analytics, or pager
     // guards from the previous reading identity into the new session.
     setCompleteScreenVisible(false);
+    setIsInScreenReread(false);
     setReadingCompleteCaseType("read");
     setIsThoughtsOpen(false);
     setIsThoughtsVisible(false);
@@ -1118,6 +1126,26 @@ export default function ReadScreen() {
     isCommittingRef.current = false;
     activeSwipeRef.current = null;
   }, [totalPages]);
+
+  const handleRestartReading = useCallback(() => {
+    // Retire every callback owned by the completed/Q-card pager before moving
+    // the session back to page zero. Directly parking all slots also cancels
+    // any still-running timing/spring animation before the render commits.
+    pageTurnGenerationRef.current += 1;
+    isCommittingRef.current = false;
+    activeSwipeRef.current = null;
+    gestureState.current.isCommitting = false;
+    currentSlotSV.value = 0;
+    prevSlotSV.value = -(layout.containerWidth + PARK_EXTRA);
+    nextSlotSV.value = 0;
+    isCarouselForwardSV.value = 0;
+    isCarouselBackwardSV.value = 0;
+    qCardOpacitySV.value = 0;
+    setDeferPrevMount(false);
+    setCompleteScreenVisible(false);
+    setIsInScreenReread(true);
+    reading.restartReading();
+  }, [layout.containerWidth, reading.restartReading]);
 
   // Callbacks invoked via runOnJS after UI-thread animation completes
   const finishPageTurnRef = useRef((
@@ -1211,16 +1239,16 @@ export default function ReadScreen() {
   });
 
   // Floating [ < ] button handler:
-  //   - re_read mode → go back
+  //   - external or in-screen reread → go back
   //   - normal read mode, last letter page → slide Q-card in (programmatic)
   //   - otherwise → go back
   const handleFloatingBackBtn = useCallback(() => {
-    if (mode !== "re_read" && reading.session.state === "READING" && isOnLastLetterPage) {
+    if (!isRereadUI && reading.session.state === "READING" && isOnLastLetterPage) {
       triggerProgrammaticForwardRef.current();
       return;
     }
     handleBack();
-  }, [mode, reading.session.state, isOnLastLetterPage, handleBack]);
+  }, [isRereadUI, reading.session.state, isOnLastLetterPage, handleBack]);
 
   const snapConfig = { damping: 18, stiffness: 280, mass: 0.8 };
 
@@ -1928,9 +1956,7 @@ export default function ReadScreen() {
                               isAlreadySaved={isAlreadySaved}
                               onSave={handleCommitAndSave}
                               onSkip={mode === "re_read" ? handleRereadExit : handleCommitAndSkip}
-                              onReread={() => {
-                                setCompleteScreenVisible(false);
-                              }}
+                              onReread={handleRestartReading}
                             />
                           );
                         }
@@ -2039,7 +2065,7 @@ export default function ReadScreen() {
       {/* ── Floating chevron-left button — top left ──────────────────────── */}
       <Animated.View
         style={[styles.floatingBackBtn, { top: insets.top + 12 }, lastPageBtnAnimStyle]}
-        pointerEvents={isOnLastLetterPage || mode === "re_read" ? "auto" : "none"}
+        pointerEvents={showFloatingBackButton ? "auto" : "none"}
       >
         <HeaderButton
           variant="back"

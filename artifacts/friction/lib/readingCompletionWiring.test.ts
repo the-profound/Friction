@@ -50,6 +50,45 @@ describe("rereceived inbox completion wiring", () => {
   });
 });
 
+describe("in-screen reread reset wiring", () => {
+  it("restarts the reading session at the cover and retires the completed pager", () => {
+    const handler = sourceBetween(
+      "const handleRestartReading = useCallback",
+      "const finishPageTurnRef = useRef",
+    );
+
+    expect(handler).toContain("pageTurnGenerationRef.current += 1");
+    expect(handler).toContain("isCommittingRef.current = false");
+    expect(handler).toContain("activeSwipeRef.current = null");
+    expect(handler).toContain("setCompleteScreenVisible(false)");
+    expect(handler).toContain("setIsInScreenReread(true)");
+    expect(handler).toContain("reading.restartReading()");
+    expect(readScreen).toContain("onReread={handleRestartReading}");
+  });
+
+  it("shows an exiting back button throughout rereads without changing basic first-read behavior", () => {
+    expect(readScreen).toContain(
+      'const isRereadUI = mode === "re_read" || isInScreenReread',
+    );
+    expect(readScreen).toContain(
+      "const showFloatingBackButton = isOnLastLetterPage || isRereadUI",
+    );
+    expect(readScreen).toContain(
+      'pointerEvents={showFloatingBackButton ? "auto" : "none"}',
+    );
+
+    const handler = sourceBetween(
+      "const handleFloatingBackBtn = useCallback",
+      "const snapConfig =",
+    );
+    expect(handler).toContain(
+      'if (!isRereadUI && reading.session.state === "READING" && isOnLastLetterPage)',
+    );
+    expect(handler).toContain("triggerProgrammaticForwardRef.current()");
+    expect(handler).toContain("handleBack()");
+  });
+});
+
 describe("non-blocking completion save", () => {
   it("starts persistence in the background and navigates without awaiting it", () => {
     const handler = sourceBetween(
