@@ -588,7 +588,7 @@ export function SendInline({
                   <Feather
                     name={icon}
                     size={17}
-                    color={active ? Colors.white : Colors.zinc600}
+                    color={active ? Colors.primaryAction : Colors.zinc600}
                   />
                   <Text
                     style={[styles.modeText, active && styles.modeTextActive]}
@@ -897,11 +897,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   modeButtonActive: {
-    borderColor: Colors.noticeAccent,
-    backgroundColor: Colors.noticeAccent,
+    borderColor: Colors.primaryAction,
+    backgroundColor: Colors.noticeAccentSoft,
   },
   modeText: { ...Typography.bodySemiBold, fontSize: 14, color: Colors.zinc600 },
-  modeTextActive: { color: Colors.white },
+  modeTextActive: { color: Colors.primaryAction },
   targetButtonOuter: { minHeight: 58 },
   targetButton: {
     minHeight: 58,
@@ -1027,7 +1027,7 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.zinc100,
   },
   sendButton: {
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.primaryAction,
     paddingVertical: 16,
     borderRadius: 12,
   },
@@ -1036,7 +1036,7 @@ const styles = StyleSheet.create({
   sendButtonText: {
     ...Typography.bodySemiBold,
     fontSize: 16,
-    color: Colors.white,
+    color: Colors.primaryActionForeground,
   },
   sendButtonTextDisabled: { color: Colors.zinc400 },
 });
