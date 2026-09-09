@@ -32,8 +32,19 @@ describe("editor blank paragraph ownership", () => {
       "components/WebViewMarkdownEditor/editorWebviewSrc/index.ts",
     );
 
-    expect(native).toContain('md.replace(/\\n\\n$/, "")');
+    expect(native).toContain("removeTrailingBlockSeparator: true");
     expect(native).not.toContain("md.trimEnd()");
+  });
+
+  it("routes marker-only documents through the shared boundary restorer", () => {
+    const shared = read("lib/markdownBlankLines.ts");
+    const web = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
+    const native = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
+
+    expect(shared).toContain("markerOnlyDocument");
+    expect(web).toContain("restoreSerializedEmptyParagraphMarkers(");
+    expect(native).toContain("restoreSerializedEmptyParagraphMarkers(");
+    expect(native).toContain("removeTrailingBlockSeparator: true");
   });
 
   it("ships the paragraph ownership markers in the generated native editor", () => {

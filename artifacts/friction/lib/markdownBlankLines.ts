@@ -71,6 +71,16 @@ export function restoreEmptyParagraphMarkers(markdown: string, marker: string): 
     return "\n".repeat(count + 2);
   };
 
+  // A serializer may remove the final block separator, leaving a document
+  // made only of empty paragraphs as a bare marker run. Handle that complete
+  // document before the boundary rules that depend on an adjacent separator.
+  const markerOnlyDocument = new RegExp(
+    `^(?:${escaped}(?:\\n\\n|$))+$`,
+  );
+  if (markerOnlyDocument.test(markdown)) {
+    return restoreRun(markdown);
+  }
+
   // Restore boundary runs first because serializers trim the block separator
   // on one side of the document. Then restore body-internal runs.
   const withLeadingRunRestored = markdown.replace(
@@ -88,6 +98,17 @@ export function restoreEmptyParagraphMarkers(markdown: string, marker: string): 
   );
 }
 
+export function restoreSerializedEmptyParagraphMarkers(
+  markdown: string,
+  marker: string,
+  options: { removeTrailingBlockSeparator?: boolean } = {},
+): string {
+  const serialized = options.removeTrailingBlockSeparator
+    ? markdown.replace(/\n\n$/, "")
+    : markdown;
+  return restoreEmptyParagraphMarkers(serialized, marker);
+}
+
 /**
  * Repairs documents saved by the former serializer bug. Only standalone
  * marker-family lines are treated as internal data; the same text embedded in
@@ -97,6 +118,12 @@ export function restoreLeakedEmptyParagraphMarkers(markdown: string): string {
   const countMarkers = (match: string) =>
     match.match(new RegExp(LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN, "g"))?.length ?? 0;
   const restoreRun = (match: string) => "\n".repeat(countMarkers(match) + 2);
+  const markerOnlyDocument = new RegExp(
+    `^(?:${LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN}(?:\\n\\n|$))+$`,
+  );
+  if (markerOnlyDocument.test(markdown)) {
+    return restoreRun(markdown);
+  }
   const leading = markdown.replace(
     new RegExp(`^(?:${LEAKED_EMPTY_PARAGRAPH_MARKER_PATTERN}\\n\\n)+`),
     restoreRun,

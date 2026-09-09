@@ -14,6 +14,7 @@ import {
   preserveMarkdownBlankLinesForEditor,
   restoreEmptyParagraphMarkers,
   restoreLeakedEmptyParagraphMarkers,
+  restoreSerializedEmptyParagraphMarkers,
 } from "../markdownBlankLines";
 import { normalizePageDividersForMarkdownParser } from "../pageDividerMarkdown";
 import { markdownToHtml } from "../markdownRenderer";
@@ -192,6 +193,26 @@ describe("editor blank-line round trips", () => {
     expect(
       restoreEmptyParagraphMarkers(`${marker}\n\n${marker}\n\n시작`, marker),
     ).toBe("\n\n\n\n시작");
+    expect(restoreEmptyParagraphMarkers(marker, marker)).toBe("\n\n\n");
+    expect(
+      restoreEmptyParagraphMarkers(`${marker}\n\n${marker}`, marker),
+    ).toBe("\n\n\n\n");
+  });
+
+  it("shares boundary cleanup while preserving each platform's serializer contract", () => {
+    const marker = createEmptyParagraphMarker("본문");
+
+    expect(
+      restoreSerializedEmptyParagraphMarkers(`${marker}\n\n`, marker, {
+        removeTrailingBlockSeparator: true,
+      }),
+    ).toBe("\n\n\n");
+    expect(
+      restoreSerializedEmptyParagraphMarkers(`${marker}\n\n시작`, marker),
+    ).toBe("\n\n\n시작");
+    expect(
+      restoreSerializedEmptyParagraphMarkers(`끝\n\n${marker}`, marker),
+    ).toBe("끝\n\n\n");
   });
 
   it("never mistakes authored marker-like text for an empty paragraph", () => {
@@ -215,6 +236,14 @@ describe("editor blank-line round trips", () => {
         "문장 속 FRICTIONEMPTYBLANKPARAGRAPH 표식은 그대로",
       ),
     ).toBe("문장 속 FRICTIONEMPTYBLANKPARAGRAPH 표식은 그대로");
+    expect(
+      restoreLeakedEmptyParagraphMarkers("FRICTIONEMPTYBLANKPARAGRAPH"),
+    ).toBe("\n\n\n");
+    expect(
+      restoreLeakedEmptyParagraphMarkers(
+        "FRICTIONEMPTYBLANKPARAGRAPH\n\nFRICTIONEMPTYBLANKPARAGRAPHX",
+      ),
+    ).toBe("\n\n\n\n");
   });
 });
 

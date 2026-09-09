@@ -30,8 +30,8 @@ import {
   isPreservedBlankParagraphLine,
   preserveMarkdownBlankLinesForEditor,
   PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE,
-  restoreEmptyParagraphMarkers,
   restoreLeakedEmptyParagraphMarkers,
+  restoreSerializedEmptyParagraphMarkers,
 } from "../../../lib/markdownBlankLines";
 import { BlankAwareParagraph } from "../blankAwareParagraph";
 import { handleTitleEnter, insertTitleSoftBreak } from "../titleKeyboardContract";
@@ -883,9 +883,10 @@ function htmlToMarkdown(html: string, onError?: (error: unknown) => void): strin
       md += blockMd(child as HTMLElement, 0);
     }
     return normalizeMarkdownEmphasisDelimiters(
-      restoreEmptyParagraphMarkers(
-        md.replace(/\n\n$/, ""),
+      restoreSerializedEmptyParagraphMarkers(
+        md,
         emptyParagraphMarker,
+        { removeTrailingBlockSeparator: true },
       ),
     );
   } catch (error) {

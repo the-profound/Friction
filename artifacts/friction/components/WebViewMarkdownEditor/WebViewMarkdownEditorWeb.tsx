@@ -40,8 +40,8 @@ import {
   CARET_PARAGRAPH_HTML,
   createEmptyParagraphMarker,
   preserveMarkdownBlankLinesForEditor,
-  restoreEmptyParagraphMarkers,
   restoreLeakedEmptyParagraphMarkers,
+  restoreSerializedEmptyParagraphMarkers,
 } from "@/lib/markdownBlankLines";
 import { BlankAwareParagraph } from "./blankAwareParagraph";
 import {
@@ -114,7 +114,7 @@ function htmlToMarkdown(html: string): string {
         paragraph.textContent = emptyParagraphMarker;
       }
     });
-    const markdown = restoreEmptyParagraphMarkers(
+    const markdown = restoreSerializedEmptyParagraphMarkers(
       td.turndown(root.innerHTML),
       emptyParagraphMarker,
     ).replace(
