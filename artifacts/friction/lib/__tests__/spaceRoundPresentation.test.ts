@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   doesSpaceLetterOccupyRoundSlot,
   findWithdrawnCenterLetterForSlot,
@@ -23,6 +24,11 @@ import {
 } from "../spaceRecruitment";
 
 describe("space round presentation", () => {
+  const detailScreenSource = readFileSync(
+    new URL("../../app/of-space-detail.tsx", import.meta.url),
+    "utf8",
+  );
+
   it("keeps the operator out of recruitment capacity regardless of round participation", () => {
     const approvedMembers = [
       { role: "OPERATOR" },
@@ -493,19 +499,64 @@ describe("space round presentation", () => {
       isPastEmptySlot: true,
       isWithdrawn: false,
       isScheduled: false,
-    })).toBe("아직 공개된 글 없음");
+      hasActiveReservation: false,
+    })).toBe("예약 대기");
     expect(getSpaceRoundSlotAvailabilityLabel({
       isMySlot: true,
       isPastEmptySlot: true,
       isWithdrawn: false,
       isScheduled: false,
+      hasActiveReservation: false,
     })).toBe("글 없음");
     expect(getSpaceRoundSlotAvailabilityLabel({
       isMySlot: true,
       isPastEmptySlot: true,
       isWithdrawn: false,
       isScheduled: true,
+      hasActiveReservation: false,
     })).toBe("발신 예정");
+  });
+
+  it("distinguishes another participant's reserved slot without changing my-slot labels", () => {
+    expect(getSpaceRoundSlotAvailabilityLabel({
+      isMySlot: false,
+      isPastEmptySlot: false,
+      isWithdrawn: false,
+      isScheduled: false,
+      hasActiveReservation: true,
+    })).toBe("공개 예정");
+    expect(getSpaceRoundSlotAvailabilityLabel({
+      isMySlot: false,
+      isPastEmptySlot: false,
+      isWithdrawn: false,
+      isScheduled: false,
+      hasActiveReservation: false,
+    })).toBe("예약 대기");
+    expect(getSpaceRoundSlotAvailabilityLabel({
+      isMySlot: true,
+      isPastEmptySlot: false,
+      isWithdrawn: false,
+      isScheduled: false,
+      hasActiveReservation: true,
+    })).toBe("내 차례");
+  });
+
+  it("uses the cross-platform brand treatment only for another participant's reserved slot", () => {
+    expect(detailScreenSource).toContain(
+      "const isOtherReserved = !isMySlot && slot.hasActiveReservation;",
+    );
+    expect(detailScreenSource).toContain(
+      "backgroundColor: Colors.primaryAction,\n    borderColor: Colors.primaryAction,",
+    );
+    expect(detailScreenSource).toContain(
+      "...Typography.bodySemiBold,\n    fontSize: 13,\n    color: Colors.primaryActionForeground,",
+    );
+    expect(detailScreenSource).toContain(
+      "isOtherReserved && styles.slotCardOtherReservedMetaText",
+    );
+    expect(detailScreenSource).toContain(
+      "slotCardOtherReservedMetaText: {\n    color: Colors.primaryActionForeground,",
+    );
   });
 
   it("replaces an upcoming scheduled slot with a readable card only after SENT", () => {

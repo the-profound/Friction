@@ -46,6 +46,7 @@ import {
   isRecruitmentFull,
   startsConsumingRecruitmentPlace,
 } from "../lib/spaceRecruitment";
+import { getActivelyReservedSlotIds } from "../lib/spaceSlotReservationState";
 import {
   db,
   spacesTable,
@@ -1551,6 +1552,18 @@ async function requireRoundInSpace(
 
 async function enrichSlots(slots: (typeof spaceRoundSlotsTable.$inferSelect)[]) {
   if (slots.length === 0) return [];
+  const slotIds = slots.map((slot) => slot.id);
+  const activeReservations = await db
+    .select({
+      slotId: spaceScheduledSendsTable.slotId,
+      status: spaceScheduledSendsTable.status,
+    })
+    .from(spaceScheduledSendsTable)
+    .where(and(
+      inArray(spaceScheduledSendsTable.slotId, slotIds),
+      eq(spaceScheduledSendsTable.status, "PENDING"),
+    ));
+  const activelyReservedSlotIds = getActivelyReservedSlotIds(activeReservations);
   const roundIds = [...new Set(slots.map((slot) => slot.spaceRoundId))];
   const rounds = await db
     .select({ id: spaceRoundsTable.id, spaceId: spaceRoundsTable.spaceId })
@@ -1570,6 +1583,7 @@ async function enrichSlots(slots: (typeof spaceRoundSlotsTable.$inferSelect)[]) 
   }));
   return slots.map((slot) => ({
     ...slot,
+    hasActiveReservation: activelyReservedSlotIds.has(slot.id),
     assignedUserNickname: displayNamesBySpaceId
       .get(spaceByRoundId.get(slot.spaceRoundId) ?? "")
       ?.get(slot.assignedUserId) ?? null,

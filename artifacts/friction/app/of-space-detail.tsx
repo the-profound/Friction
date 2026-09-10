@@ -464,18 +464,24 @@ function SpaceRoundSlotCard({
   const isPastEmptySlot =
     !!slot.scheduledDate && !isKstSlotReservable(slot.scheduledDate, now);
   const isWithdrawn = isMySlot && !!withdrawnLetter;
+  const isOtherReserved = !isMySlot && slot.hasActiveReservation;
   const availabilityLabel = getSpaceRoundSlotAvailabilityLabel({
     isMySlot,
     isPastEmptySlot,
     isWithdrawn,
     isScheduled,
+    hasActiveReservation: slot.hasActiveReservation,
   });
 
   return (
     <View
       style={[
         styles.slotCard,
-        isMySlot ? styles.slotCardMine : styles.slotCardOther,
+        isMySlot
+          ? styles.slotCardMine
+          : isOtherReserved
+            ? styles.slotCardOtherReserved
+            : styles.slotCardOther,
       ]}
     >
       <View style={styles.slotCardTop}>
@@ -488,11 +494,23 @@ function SpaceRoundSlotCard({
         ) : isMySlot ? (
           <Feather name="edit-3" size={18} color={Colors.zinc500} />
         ) : (
-          <Feather name="lock" size={18} color={Colors.zinc300} />
+          <Feather
+            name="lock"
+            size={18}
+            color={isOtherReserved ? Colors.primaryActionForeground : Colors.zinc300}
+          />
         )}
       </View>
       <View style={styles.slotCardMiddle}>
-        <Text style={isMySlot ? styles.slotCardMyText : styles.slotCardOtherText}>
+        <Text
+          style={
+            isMySlot
+              ? styles.slotCardMyText
+              : isOtherReserved
+                ? styles.slotCardOtherReservedText
+                : styles.slotCardOtherText
+          }
+        >
           {availabilityLabel}
         </Text>
         {isWithdrawn && withdrawnLetter?.articleTitle ? (
@@ -515,11 +533,24 @@ function SpaceRoundSlotCard({
         </ScalePressable>
       )}
       <View style={styles.slotCardFooter}>
-        <Text style={styles.slotNickname} numberOfLines={1}>
+        <Text
+          style={[
+            styles.slotNickname,
+            isOtherReserved && styles.slotCardOtherReservedMetaText,
+          ]}
+          numberOfLines={1}
+        >
           {isMySlot ? "나" : (slot.assignedUserNickname ?? "참여자")}
         </Text>
         {slot.scheduledDate ? (
-          <Text style={styles.slotDate}>{formatSlotDate(slot.scheduledDate)}</Text>
+          <Text
+            style={[
+              styles.slotDate,
+              isOtherReserved && styles.slotCardOtherReservedMetaText,
+            ]}
+          >
+            {formatSlotDate(slot.scheduledDate)}
+          </Text>
         ) : null}
       </View>
     </View>
@@ -2310,6 +2341,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.zinc50,
     borderColor: Colors.zinc200,
   },
+  slotCardOtherReserved: {
+    backgroundColor: Colors.primaryAction,
+    borderColor: Colors.primaryAction,
+  },
   slotCardTop: {
     alignItems: "flex-start",
   },
@@ -2325,9 +2360,14 @@ const styles = StyleSheet.create({
     color: Colors.zinc700,
   },
   slotCardOtherText: {
-    ...Typography.body,
+    ...Typography.bodySemiBold,
     fontSize: 13,
     color: Colors.zinc500,
+  },
+  slotCardOtherReservedText: {
+    ...Typography.bodySemiBold,
+    fontSize: 13,
+    color: Colors.primaryActionForeground,
   },
   slotCardWithdrawnTitle: {
     ...Typography.body,
@@ -2368,6 +2408,9 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     fontSize: 12,
     color: Colors.zinc500,
+  },
+  slotCardOtherReservedMetaText: {
+    color: Colors.primaryActionForeground,
   },
 
   preparingArea: {

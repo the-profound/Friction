@@ -15,6 +15,8 @@ export interface SpaceRoundSlotWithUser {
   scheduledDate?: string | null;
   /** 배정된 사용자의 안전한 표시명. 익명 공간에서 계정 닉네임은 제공하지 않음. */
   assignedUserNickname?: string | null;
+  /** 이 슬롯을 점유한 유효한 발신 예약이 있는지 여부. 예약된 글의 제목·본문·표지 등 비공개 콘텐츠는 포함하지 않음. */
+  hasActiveReservation: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

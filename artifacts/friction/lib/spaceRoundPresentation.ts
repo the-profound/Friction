@@ -83,17 +83,19 @@ export function getSpaceRoundSlotAvailabilityLabel({
   isPastEmptySlot,
   isWithdrawn,
   isScheduled,
+  hasActiveReservation,
 }: {
   isMySlot: boolean;
   isPastEmptySlot: boolean;
   isWithdrawn: boolean;
   isScheduled: boolean;
+  hasActiveReservation: boolean;
 }): string {
   if (isScheduled) return "발신 예정";
   if (isWithdrawn) return "예약을 취소했어요";
   if (isPastEmptySlot && isMySlot) return "글 없음";
   if (isMySlot) return "내 차례";
-  return isPastEmptySlot ? "아직 공개된 글 없음" : "추후 공개";
+  return hasActiveReservation ? "공개 예정" : "예약 대기";
 }
 
 type SpaceRoundSlotAssignment = {
