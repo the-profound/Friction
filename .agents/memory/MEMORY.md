@@ -77,6 +77,7 @@
 - [Date carousel vertical paging](friction-date-carousel-snap-geometry.md) — one gesture moves one adjacent date header; measured anchors and deterministic estimates share a generation guard.
 - [Native virtualized special groups](friction-native-special-list-groups.md) — interactive first groups belong in FlatList data, not conditional headers, so native measurement and anchors stay stable.
 - [Signed upload verification](signed-upload-verification.md) — pin the staged object generation, recheck exact bytes, and publish only those verified bytes.
+- [Expo native signed uploads](expo-native-signed-uploads.md) — preserve picker file URIs and use binary File.upload; do not fetch native URIs into Blob first.
 - [Serialized final-state saves](serialized-final-state-saves.md) — debounce and explicit commits that write the same field must share one ordered save queue.
 - [Autosave deletion tombstones](autosave-deletion-tombstones.md) — non-blocking delete-on-exit needs a durable identity and generation guard so restart recovery works without erasing newer drafts.
 - [Native editor viewport ownership](friction-native-editor-viewport.md) — screen owns keyboard/toolbar geometry; WebView owns document scroll and clamps caret after large reflow.

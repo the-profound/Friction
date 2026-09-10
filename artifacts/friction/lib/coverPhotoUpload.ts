@@ -11,10 +11,18 @@ import {
   MAX_COVER_PHOTO_BYTES,
   type SelectedCoverPhoto,
 } from "./coverPhotoTypes";
+import type {
+  UploadOptions,
+  UploadResult,
+  UploadType,
+} from "expo-file-system";
 
 export type CoverPhotoUploadErrorCode =
   | "auth-expired"
   | "too-large"
+  | "invalid-image"
+  | "staged-missing"
+  | "server-failed"
   | "request-failed"
   | "upload-failed";
 
@@ -39,7 +47,39 @@ interface CoverPhotoUploadDependencies {
     objectPath: string,
   ) => Promise<ArticleCoverVerificationResponse>;
   put: typeof fetch;
+  putNativeFile: (
+    uploadUrl: string,
+    photo: Extract<SelectedCoverPhoto, { source: "native" }>,
+  ) => Promise<{ status: number }>;
   apiBaseUrl: string | null;
+}
+
+interface NativeFileUploadAdapter {
+  createFile: (uri: string) => {
+    upload: (url: string, options?: UploadOptions) => Promise<UploadResult>;
+  };
+  binaryUploadType: UploadType;
+}
+
+export async function uploadNativeCoverFile(
+  uploadUrl: string,
+  photo: Extract<SelectedCoverPhoto, { source: "native" }>,
+  loadAdapter: () => Promise<NativeFileUploadAdapter> = async () => {
+    const { File, UploadType } = await import("expo-file-system");
+    return {
+      createFile: (uri) => new File(uri),
+      binaryUploadType: UploadType.BINARY_CONTENT,
+    };
+  },
+): Promise<{ status: number }> {
+  const adapter = await loadAdapter();
+  return adapter.createFile(photo.uri).upload(uploadUrl, {
+    httpMethod: "PUT",
+    uploadType: adapter.binaryUploadType,
+    headers: { "Content-Type": photo.contentType },
+    mimeType: photo.contentType,
+    sessionType: "foreground",
+  });
 }
 
 const defaultDependencies: CoverPhotoUploadDependencies = {
@@ -53,8 +93,15 @@ const defaultDependencies: CoverPhotoUploadDependencies = {
   verifyUpload: (articleId, objectPath) =>
     verifyArticleCoverUpload(articleId, { objectPath }),
   put: fetch,
+  putNativeFile: uploadNativeCoverFile,
   apiBaseUrl: runtimeConfig.apiBaseUrl,
 };
+
+function apiErrorCode(error: ApiError): string | null {
+  if (!error.data || typeof error.data !== "object") return null;
+  const code = (error.data as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
 
 function absoluteImageUrl(imageUrl: string, apiBaseUrl: string | null): string {
   if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
@@ -95,26 +142,46 @@ export async function uploadCoverPhoto(
         "로그인이 만료되었어요. 다시 로그인한 뒤 시도해주세요.",
       );
     }
+    if (error instanceof ApiError && error.status >= 500) {
+      throw new CoverPhotoUploadError(
+        "server-failed",
+        "서버에서 사진 업로드를 준비하지 못했어요. 잠시 후 다시 시도해주세요.",
+      );
+    }
     throw new CoverPhotoUploadError(
       "request-failed",
       "사진 업로드를 준비하지 못했어요. 네트워크를 확인하고 다시 시도해주세요.",
     );
   }
 
-  let response: Response;
+  let uploadStatus: number;
   try {
-    response = await dependencies.put(uploadTarget.uploadURL, {
-      method: "PUT",
-      headers: { "Content-Type": photo.contentType },
-      body: photo.blob,
-    });
+    if (photo.source === "native") {
+      uploadStatus = (
+        await dependencies.putNativeFile(uploadTarget.uploadURL, photo)
+      ).status;
+    } else {
+      uploadStatus = (
+        await dependencies.put(uploadTarget.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": photo.contentType },
+          body: photo.blob,
+        })
+      ).status;
+    }
   } catch {
     throw new CoverPhotoUploadError(
-      "upload-failed",
+      "request-failed",
       "사진 업로드에 실패했어요. 네트워크를 확인하고 다시 시도해주세요.",
     );
   }
-  if (!response.ok) {
+  if (uploadStatus < 200 || uploadStatus >= 300) {
+    if (uploadStatus >= 500) {
+      throw new CoverPhotoUploadError(
+        "server-failed",
+        "사진 저장소가 응답하지 않아요. 잠시 후 다시 시도해주세요.",
+      );
+    }
     throw new CoverPhotoUploadError(
       "upload-failed",
       "사진 업로드에 실패했어요. 잠시 후 다시 시도해주세요.",
@@ -131,9 +198,33 @@ export async function uploadCoverPhoto(
         "로그인이 만료되었어요. 다시 로그인한 뒤 시도해주세요.",
       );
     }
+    if (
+      error instanceof ApiError &&
+      apiErrorCode(error) === "COVER_IMAGE_INVALID"
+    ) {
+      throw new CoverPhotoUploadError(
+        "invalid-image",
+        "지원하지 않거나 손상된 이미지예요. JPG, PNG 등 다른 이미지를 선택해주세요.",
+      );
+    }
+    if (
+      error instanceof ApiError &&
+      apiErrorCode(error) === "COVER_IMAGE_STAGING_NOT_FOUND"
+    ) {
+      throw new CoverPhotoUploadError(
+        "staged-missing",
+        "업로드한 사진을 찾지 못했어요. 다시 업로드해주세요.",
+      );
+    }
+    if (error instanceof ApiError && error.status >= 500) {
+      throw new CoverPhotoUploadError(
+        "server-failed",
+        "서버에서 사진을 확인하지 못했어요. 잠시 후 다시 시도해주세요.",
+      );
+    }
     throw new CoverPhotoUploadError(
-      "upload-failed",
-      "사진을 확인하지 못했어요. 지원되는 이미지인지 확인하고 다시 시도해주세요.",
+      "request-failed",
+      "사진을 확인하지 못했어요. 네트워크를 확인하고 다시 시도해주세요.",
     );
   }
 

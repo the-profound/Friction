@@ -23,6 +23,38 @@ export class CoverPhotoPickerError extends Error {
   }
 }
 
+interface NativeCoverPhotoAsset {
+  uri: string;
+  fileName?: string | null;
+  fileSize?: number | null;
+  mimeType?: string | null;
+}
+
+export async function selectedNativeCoverPhoto(
+  asset: NativeCoverPhotoAsset,
+  readFileSize: (uri: string) => Promise<number | undefined> = async (uri) => {
+    const { File } = await import("expo-file-system");
+    return new File(uri).info().size;
+  },
+): Promise<SelectedCoverPhoto> {
+  const contentType = asset.mimeType || "image/jpeg";
+  const size = asset.fileSize || (await readFileSize(asset.uri));
+  if (!size) {
+    throw new CoverPhotoPickerError(
+      "read-failed",
+      "선택한 사진을 읽을 수 없어요. 다른 사진을 선택해주세요.",
+    );
+  }
+  ensureImageFile(contentType, size);
+  return {
+    source: "native",
+    uri: asset.uri,
+    name: asset.fileName || `cover-image.${contentType.split("/")[1] || "jpg"}`,
+    size,
+    contentType,
+  };
+}
+
 function ensureImageFile(contentType: string, size: number): void {
   if (!contentType.startsWith("image/")) {
     throw new CoverPhotoPickerError(
@@ -89,6 +121,7 @@ function pickWebPhoto(): Promise<SelectedCoverPhoto | null> {
         try {
           ensureImageFile(file.type, file.size);
           finish({
+            source: "web",
             uri: file.name,
             name: file.name || "cover-image",
             size: file.size,
@@ -137,33 +170,12 @@ async function pickNativePhoto(): Promise<SelectedCoverPhoto | null> {
     if (result.canceled || !result.assets[0]) return null;
 
     const asset = result.assets[0];
-    if (asset.fileSize && asset.fileSize > MAX_COVER_PHOTO_BYTES) {
-      ensureImageFile(asset.mimeType ?? "image/jpeg", asset.fileSize);
-    }
-
-    const response = await fetch(asset.uri);
-    if (!response.ok) {
-      throw new CoverPhotoPickerError(
-        "read-failed",
-        "선택한 사진을 읽을 수 없어요. 다른 사진을 선택해주세요.",
-      );
-    }
-    const blob = await response.blob();
-    const contentType = asset.mimeType || blob.type || "image/jpeg";
-    const size = asset.fileSize || blob.size;
-    ensureImageFile(contentType, size);
-    return {
-      uri: asset.uri,
-      name: asset.fileName || `cover-image.${contentType.split("/")[1] || "jpg"}`,
-      size,
-      contentType,
-      blob,
-    };
+    return selectedNativeCoverPhoto(asset);
   } catch (error) {
     if (error instanceof CoverPhotoPickerError) throw error;
     throw new CoverPhotoPickerError(
-      "module-unavailable",
-      "사진 선택 기능을 사용할 수 없어요. 개발 앱을 새로 빌드한 뒤 다시 시도해주세요.",
+      "read-failed",
+      "선택한 사진을 읽을 수 없어요. 다른 사진을 선택해주세요.",
     );
   }
 }

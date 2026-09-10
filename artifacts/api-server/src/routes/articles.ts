@@ -683,15 +683,24 @@ router.post(
       );
     } catch (error) {
       if (error instanceof ObjectNotFoundError) {
-        res.status(404).json({ error: "Staged cover image not found" });
+        res.status(404).json({
+          error: "Staged cover image not found",
+          code: "COVER_IMAGE_STAGING_NOT_FOUND",
+        });
         return;
       }
       if (error instanceof InvalidCoverImageError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({
+          error: error.message,
+          code: "COVER_IMAGE_INVALID",
+        });
         return;
       }
       req.log.error({ err: error }, "Error verifying cover image upload");
-      res.status(500).json({ error: "Failed to verify cover image" });
+      res.status(500).json({
+        error: "Failed to verify cover image",
+        code: "COVER_IMAGE_VERIFY_FAILED",
+      });
     }
   },
 );
