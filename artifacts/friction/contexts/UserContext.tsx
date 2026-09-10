@@ -7,6 +7,7 @@ import { isSpaceJoinContextQueryKey } from "@/lib/spaceJoinContextQuery";
 import { customFetch } from "@workspace/api-client-react";
 import { ApiError } from "@workspace/api-client-react";
 import { createAuthFlowId, reportAuthDiagnostic } from "@/lib/authDiagnostics";
+import { prefetchOtherTabsFirstLayerData, shouldTriggerTabPrefetch } from "@/lib/prefetchTabData";
 
 interface UserContextValue {
   userId: string;
@@ -48,6 +49,26 @@ export function UserProvider({
       previousUserIdRef.current = resolvedUserId;
     }
   }, [queryClient, resolvedUserId]);
+
+  // Warm the cache for 수신/공간/보관/마이 tabs' first-render data as soon as
+  // the session is confirmed for this user — around the same moment 기록(on),
+  // the initial tab, starts loading its own data. ProtectedRouteStack always
+  // passes the real session's userId as the `userId` prop (see app/_layout.tsx),
+  // so `overrideUserId` being set does NOT distinguish production from a test
+  // harness here — checking that `session.user.id` itself resolves to this
+  // same userId does: a real, authenticated session backs it, while a test
+  // harness rendering UserProvider with a bare `userId` prop and no matching
+  // AuthContext session correctly stays silent (no network calls in tests).
+  // Every query key here already carries this userId, so re-running per
+  // UserProvider mount (itself keyed by userId in ProtectedRouteStack) never
+  // exposes a previous user's cached data to the next session.
+  const prefetchedForUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!shouldTriggerTabPrefetch({ sessionUserId: session?.user?.id, resolvedUserId })) return;
+    if (prefetchedForUserIdRef.current === resolvedUserId) return;
+    prefetchedForUserIdRef.current = resolvedUserId;
+    void prefetchOtherTabsFirstLayerData(queryClient, resolvedUserId);
+  }, [session, queryClient, resolvedUserId]);
 
   useEffect(() => {
     if (overrideUserId) return;
