@@ -1746,7 +1746,7 @@ export default function SpaceDetailScreen() {
             </View>
           ) : null}
 
-          {isCapacityFull && !isOperator && (
+          {isCapacityFull && !isOperator && isRecruiting && (
             <View style={[styles.recruitmentClosedBanner, { marginTop: 12, marginHorizontal: 0 }]}>
               <Feather name="slash" size={13} color={Colors.zinc500} />
               <Text style={styles.recruitmentClosedText}>모집이 마감됐어요</Text>
