@@ -65,6 +65,17 @@ type SpaceRoundCenterLetterMatch = {
   lastReservation?: SpaceReservationMetadataPresentation | null;
 };
 
+type SpaceRoundLetterPresentationOrder = {
+  id: string;
+  letterType: string | null | undefined;
+  createdAt: string | Date;
+  everScheduled?: boolean;
+  reservation?: {
+    status: string;
+    scheduledAt: string | Date;
+    sentAt?: string | Date | null;
+  } | null;
+};
 export function isReadableSpaceDetailLetter(
   letter: SpaceRoundCenterLetterMatch,
 ): boolean {
@@ -383,4 +394,44 @@ export function sortSpaceRoundsForDetail<T extends DatedSpaceRoundPresentation>(
 
     return b.roundNumber - a.roundNumber;
   });
+}
+
+/**
+ * Keeps the opening letter fixed first, then orders publicly readable letters
+ * by their effective publication time. SENT letters use their real send time,
+ * with scheduledAt retained as the compatibility fallback for older records;
+ * true legacy letters use createdAt. Unsent entries remain behind both groups.
+ */
+export function sortSpaceRoundLettersForPresentation<
+  T extends SpaceRoundLetterPresentationOrder,
+>(letters: readonly T[]): T[] {
+  return [...letters].sort((a, b) => {
+    const aOpening = a.letterType === "OPENING";
+    const bOpening = b.letterType === "OPENING";
+    if (aOpening !== bOpening) return aOpening ? -1 : 1;
+
+    const aSent = a.reservation?.status === "SENT";
+    const bSent = b.reservation?.status === "SENT";
+    const aLegacy = !a.reservation && !a.everScheduled;
+    const bLegacy = !b.reservation && !b.everScheduled;
+    const aPublished = aSent || aLegacy;
+    const bPublished = bSent || bLegacy;
+    if (aPublished !== bPublished) return aPublished ? -1 : 1;
+
+    const aTimestamp = aSent
+      ? getSortableTimestamp(a.reservation?.sentAt ?? a.reservation?.scheduledAt)
+      : getSortableTimestamp(a.createdAt);
+    const bTimestamp = bSent
+      ? getSortableTimestamp(b.reservation?.sentAt ?? b.reservation?.scheduledAt)
+      : getSortableTimestamp(b.createdAt);
+    if (aTimestamp !== bTimestamp) return bTimestamp - aTimestamp;
+
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function getSortableTimestamp(value: string | Date | null | undefined): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }

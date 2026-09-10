@@ -69,6 +69,7 @@ import {
   isOpeningSlotReservable,
   roundStatusLabel,
   sortSpaceRoundSlotsForPresentation,
+  sortSpaceRoundLettersForPresentation,
   sortSpaceRoundsForDetail,
   resolveUpcomingRoundCenterCards,
   doesSpaceLetterOccupyRoundSlot,
@@ -1314,11 +1315,7 @@ export default function SpaceDetailScreen() {
       (map[key] ??= []).push(letter);
     }
     for (const key of Object.keys(map)) {
-      map[key] = map[key].sort((a, b) => {
-        if (a.letterType === "OPENING" && b.letterType !== "OPENING") return -1;
-        if (b.letterType === "OPENING" && a.letterType !== "OPENING") return 1;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      });
+      map[key] = sortSpaceRoundLettersForPresentation(map[key]);
     }
     return map;
   }, [letters, firstRoundId]);
