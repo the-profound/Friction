@@ -142,3 +142,4 @@
 - [Notion workflow boundary](notion-workflow-boundary.md) — active Replit-to-Notion flow is file publishing; Queue ingestion and legacy Quick Writeback are not supported.
 - [Filter-scoped scroll events](filter-scoped-scroll-events.md) — delayed FlatList events must carry the render-time filter identity, never read a next-render ref.
 - [Body typography measurement](friction-body-typography-measurement.md) — pagination must measure composed CSS prefixes and remeasure final recomposed pages before accepting boundaries.
+- [One-time forced-redirect guard](friction-one-time-forced-redirect-guard.md) — flip the "done" ref on the hydration signal, not the redirect outcome, or a later real nav to the same route gets falsely bounced.

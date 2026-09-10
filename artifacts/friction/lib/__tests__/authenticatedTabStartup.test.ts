@@ -21,6 +21,23 @@ describe("authenticated native tab startup", () => {
     expect(rootLayout).toContain("!hasRedirectedRef.current");
   });
 
+  it("only forces the record tab once per session, then lets a deliberate inbox tap stay on inbox", () => {
+    // The forced-records redirect must be gated by a ref that only allows
+    // the very first post-hydration navigation check to redirect away from
+    // the inbox route.
+    expect(rootLayout).toContain("const hasRedirectedRef = useRef(false);");
+    expect(rootLayout).toContain("!hasRedirectedRef.current),");
+
+    // The ref must flip to true after the first hydrated check regardless of
+    // which way that check decided (not only when it actually redirected),
+    // and it must not reset on every segment change — otherwise a user who
+    // starts on the record tab and later taps the inbox tab for the first
+    // time would still get bounced back to records.
+    expect(rootLayout).toContain("if (!isHydrated) return;");
+    expect(rootLayout).toContain("hasRedirectedRef.current = true;");
+    expect(rootLayout).toContain("}, [isHydrated]);");
+  });
+
   it("passes the authenticated identity through the protected provider boundary", () => {
     const boundaryStart = rootLayout.indexOf("<QueryClientBoundary>");
     const userProviderStart = rootLayout.indexOf(

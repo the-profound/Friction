@@ -104,6 +104,14 @@ function ActiveReadingGuard({
   const router = useRouter();
   const pathname = usePathname();
   const segments = useSegments();
+  // The native app must open on the record tab exactly once per
+  // authenticated session (cold start, or the URL happening to resolve to
+  // the inbox route before the first paint). This ref flips true right after
+  // the first post-hydration navigation check, whether or not it actually
+  // redirected, so any later, deliberate tap on the inbox tab is respected
+  // instead of being bounced back to records on every render. It resets
+  // naturally because ActiveReadingGuard remounts per userId.
+  const hasRedirectedRef = useRef(false);
   const navigationDecision = getProtectedNavigationDecision({
     isActiveReadingHydrated: isHydrated,
     activeSession,
@@ -114,13 +122,19 @@ function ActiveReadingGuard({
       segments[0] === "login-callback" ||
       (Platform.OS !== "web" &&
         segments[0] === "(tabs)" &&
-        (segments[1] == null || (segments[1] as string) === "index")),
+        (segments[1] == null || (segments[1] as string) === "index") &&
+        !hasRedirectedRef.current),
   });
   const protectedNavigationKind = navigationDecision.kind;
   const readingToRestore =
     navigationDecision.kind === "restore-reading"
       ? navigationDecision.activeSession
       : null;
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    hasRedirectedRef.current = true;
+  }, [isHydrated]);
 
   useEffect(() => {
     if (protectedNavigationKind === "restore-reading" && readingToRestore) {
