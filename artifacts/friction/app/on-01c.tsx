@@ -60,18 +60,6 @@ export default function ClosingScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
-  // 헤더(위쪽)와 페이지 안내 바(아래쪽)의 실제 높이가 서로 달라, 그 사이에서
-  // 단순히 중앙 정렬된 미리보기 카드는 화면 전체 기준으로 아래로 치우쳐
-  // 보인다. 페이지 안내 바의 실제 렌더 높이를 측정해 그 차이의 절반만큼
-  // 미리보기를 위로 보정한다.
-  const [pageNavHeight, setPageNavHeight] = useState(0);
-  const handlePageNavLayout = useCallback((event: { nativeEvent: { layout: { height: number } } }) => {
-    const { height } = event.nativeEvent.layout;
-    setPageNavHeight((previous) => (previous === height ? previous : height));
-  }, []);
-  const previewVerticalOffset = pageNavHeight > 0
-    ? (topInset + WRITING_HEADER_HEIGHT - pageNavHeight) / 2
-    : 0;
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -618,7 +606,7 @@ export default function ClosingScreen() {
       </View>
 
       <View style={styles.previewArea}>
-        <View style={[styles.previewInner, { transform: [{ translateY: -previewVerticalOffset }] }]}>
+        <View style={styles.previewInner}>
           {totalVirtualPages === 0 ? (
               <View style={styles.emptyContainer}>
                 <Feather name="eye" size={36} color={Colors.zinc300} />
@@ -701,7 +689,6 @@ export default function ClosingScreen() {
       {totalVirtualPages > 1 && (
         <View
           style={[styles.pageNav, { paddingBottom: bottomInset + 16 }]}
-          onLayout={handlePageNavLayout}
         >
           <Text style={styles.pageNavText}>
             {isCoverPage ? "표지" : `${Math.max(0, contentPageIndex) + 1} / ${pages.length}`}

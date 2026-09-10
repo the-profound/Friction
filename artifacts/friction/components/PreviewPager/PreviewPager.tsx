@@ -16,6 +16,7 @@ import {
   PREVIEW_PAGER_VERTICAL_FAILURE,
   getPreviewPagerTurn,
 } from "./gesturePolicy";
+import { fitPreviewPagerDimensions } from "./previewGeometry";
 
 type PagerSlotRole = "prev" | "current" | "next";
 
@@ -52,14 +53,10 @@ export default function PreviewPager({
   renderPage,
 }: PreviewPagerProps) {
   const [availableSize, setAvailableSize] = useState<PagerDimensions>({ width: 0, height: 0 });
-  const dimensions = useMemo(() => {
-    const maxHeight = Math.min(availableSize.height, 480);
-    const width = Math.min(availableSize.width, maxHeight * ReaderTokens.aspectRatio);
-    return {
-      width,
-      height: width > 0 ? width / ReaderTokens.aspectRatio : 0,
-    };
-  }, [availableSize.height, availableSize.width]);
+  const dimensions = useMemo(
+    () => fitPreviewPagerDimensions(availableSize, ReaderTokens.aspectRatio),
+    [availableSize],
+  );
   const currentSlotSV = useSharedValue(0);
   const prevSlotSV = useSharedValue(0);
   const nextSlotSV = useSharedValue(0);

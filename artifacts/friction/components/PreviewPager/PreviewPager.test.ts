@@ -5,6 +5,7 @@ import {
   classifyPreviewPagerGesture,
   getPreviewPagerTurn,
 } from "./gesturePolicy";
+import { fitPreviewPagerDimensions } from "./previewGeometry";
 
 const source = readFileSync(join(__dirname, "PreviewPager.tsx"), "utf8");
 const closingSource = readFileSync(join(__dirname, "../../app/on-01c.tsx"), "utf8");
@@ -97,9 +98,32 @@ describe("PreviewPager reader parity", () => {
     expect(source).toContain("sourcePage !== pageIndexRef.current");
   });
 
-  it("fits short viewports and reserves touch gestures on web", () => {
-    expect(source).toContain("Math.min(availableSize.height, 480)");
-    expect(source).toContain("Math.min(availableSize.width, maxHeight * ReaderTokens.aspectRatio)");
+  it("uses all available phone space instead of imposing the old 480px cap", () => {
+    expect(fitPreviewPagerDimensions(
+      { width: 342, height: 634 },
+      5 / 8,
+    )).toEqual({ width: 342, height: 547.2 });
+    expect(fitPreviewPagerDimensions(
+      { width: 327, height: 490 },
+      5 / 8,
+    )).toEqual({ width: 306.25, height: 490 });
+    expect(fitPreviewPagerDimensions(
+      { width: 382, height: 700 },
+      5 / 8,
+    )).toEqual({ width: 382, height: 611.2 });
+    expect(source).toContain("fitPreviewPagerDimensions(availableSize, ReaderTokens.aspectRatio)");
+    expect(source).not.toContain("480");
+    expect(closingSource).not.toContain("previewVerticalOffset");
+  });
+
+  it("returns no frame until both measured axes are usable", () => {
+    expect(fitPreviewPagerDimensions({ width: 0, height: 600 }, 5 / 8))
+      .toEqual({ width: 0, height: 0 });
+    expect(fitPreviewPagerDimensions({ width: 360, height: 0 }, 5 / 8))
+      .toEqual({ width: 0, height: 0 });
+  });
+
+  it("reserves touch gestures on web and expands the Android hit target", () => {
     expect(source).toContain('{ touchAction: "none" }');
     expect(source).toContain('Platform.OS === "android"');
     expect(source).toContain("{ left: -24, right: -24 }");
