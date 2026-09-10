@@ -99,6 +99,7 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { useIsOnline } from "@/lib/useIsOnline";
+import type { RecordKindIntent } from "@/types/navigation";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
 const FILTER_BAR_HEIGHT = VIEW_BUTTON_SIZE + 32;
@@ -345,7 +346,13 @@ function RecordSourceCard({
 }
 function OnScreenContent() {
   const router = useRouter();
-  const { tabReselectVersion, recordKindIntent: kind, setRecordKindIntent: setKind } = useNavigation();
+  const {
+    tabReselectVersion,
+    recordKindIntent: kind,
+    recordScrollToTopIntent,
+    setRecordKindIntent: setKind,
+    consumeRecordScrollToTopIntent,
+  } = useNavigation();
   const queryClient = useQueryClient();
   const { startFadeToBlack } = useReaderTransition();
   const { userId } = useUser();
@@ -629,6 +636,12 @@ function OnScreenContent() {
   );
   const scrollPressGuard = useScrollPressGuard();
   const recordListRef = useRef<FlatList<RecordDateGroup<CardRecord>>>(null);
+  const contentListRef = useRef<FlatList<CardRecord>>(null);
+  const contentScrollOffsetsRef = useRef<Record<RecordKindIntent, number>>({
+    thought: 0,
+    editing: 0,
+    letter: 0,
+  });
   const cardGroupKeys = useMemo(
     () => cardGroups.map((group) => group.dateKey),
     [cardGroups],
@@ -657,6 +670,7 @@ function OnScreenContent() {
     listRef: recordListRef,
     enabled: view === "card",
     resetKey: recordResetVersion,
+    positionKey: kind,
     estimatedGroupHeight,
     onPageGestureStart: scrollPressGuard.onScroll,
   });
@@ -667,6 +681,39 @@ function OnScreenContent() {
     },
     [scrollPressGuard, verticalDateSnap.onScroll],
   );
+  const handleContentRecordScroll = useCallback((
+    eventKind: RecordKindIntent,
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    // eventKind is captured by the render that installed the handler. Some
+    // FlatList implementations emit one final event after their data changed;
+    // that delayed event still belongs to the outgoing filter.
+    contentScrollOffsetsRef.current[eventKind] = Math.max(
+      0,
+      event.nativeEvent.contentOffset.y,
+    );
+    scrollPressGuard.onScroll();
+  }, [scrollPressGuard]);
+
+  useEffect(() => {
+    if (!recordScrollToTopIntent || recordScrollToTopIntent.kind !== kind) return;
+    contentScrollOffsetsRef.current[kind] = 0;
+    setRecordResetVersion((previous) => previous + 1);
+    consumeRecordScrollToTopIntent(recordScrollToTopIntent.token);
+    requestAnimationFrame(() => {
+      recordListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      contentListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
+  }, [consumeRecordScrollToTopIntent, kind, recordScrollToTopIntent]);
+
+  useEffect(() => {
+    if (view !== "content") return;
+    const offset = contentScrollOffsetsRef.current[kind];
+    const frame = requestAnimationFrame(() => {
+      contentListRef.current?.scrollToOffset({ offset, animated: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [kind, view, visibleRecords.length]);
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
     .sort((a, b) => Number(Boolean(b.isImpression)) - Number(Boolean(a.isImpression)) || (b.articleCount ?? 0) - (a.articleCount ?? 0)), [collectionsQuery.data]);
@@ -1046,6 +1093,7 @@ function OnScreenContent() {
         ) : visibleRecords.length > 0 ? (
           <View style={styles.recordListViewport}>
             <FlatList
+              ref={contentListRef}
               data={visibleRecords}
               keyExtractor={(record) => `${record.kind}-${record.id}`}
               renderItem={({ item }) => {
@@ -1093,7 +1141,7 @@ function OnScreenContent() {
                 );
               }}
               refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
-              onScroll={handleRecordScroll}
+              onScroll={(event) => handleContentRecordScroll(kind, event)}
               onScrollBeginDrag={closeOpenRecordRow}
               scrollEventThrottle={16}
               scrollEnabled={recordListScrollEnabled}

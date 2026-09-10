@@ -140,3 +140,4 @@
 - [Send prefill snapshot safety](send-prefill-snapshot-safety.md) — a cached route-entry letter may render immediately, but sending stays locked until the current server list verifies it.
 - [Notion connector proxy versioning](notion-connector-proxy-versioning.md) — Replit's Notion proxy injects its compatible API version header; callers must not set it themselves.
 - [Notion workflow boundary](notion-workflow-boundary.md) — active Replit-to-Notion flow is file publishing; Queue ingestion and legacy Quick Writeback are not supported.
+- [Filter-scoped scroll events](filter-scoped-scroll-events.md) — delayed FlatList events must carry the render-time filter identity, never read a next-render ref.

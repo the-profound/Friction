@@ -43,6 +43,44 @@ describe("record filter UI regression", () => {
     expect(recordsScreen).toContain("setRecordResetVersion(tabReselectVersion.ON)");
   });
 
+  it("keeps card and list scroll positions separate per filter and honors one-time top intents", () => {
+    const recordsScreen = readFileSync(
+      join(__dirname, "../../app/(tabs)/on.tsx"),
+      "utf8",
+    );
+    const verticalSnap = readFileSync(
+      join(__dirname, "../../hooks/useDateGroupVerticalSnap.ts"),
+      "utf8",
+    );
+    const navigationTypes = readFileSync(
+      join(__dirname, "../../types/navigation.ts"),
+      "utf8",
+    );
+
+    expect(navigationTypes).toContain("scrollToTop?: boolean");
+    expect(navigationTypes).toContain("recordScrollToTopIntent: RecordScrollToTopIntent | null");
+    expect(navigationTypes).toContain("consumeRecordScrollToTopIntent");
+    expect(recordsScreen).toContain("contentScrollOffsetsRef");
+    expect(recordsScreen).toContain("contentScrollOffsetsRef.current[kind]");
+    expect(recordsScreen).toContain("contentScrollOffsetsRef.current[eventKind]");
+    expect(recordsScreen).toContain("handleContentRecordScroll(kind, event)");
+    expect(recordsScreen).toMatch(
+      /ref={recordListRef}[\s\S]*?onScroll={handleRecordScroll}/,
+    );
+    expect(recordsScreen).toMatch(
+      /ref={contentListRef}[\s\S]*?onScroll={\(event\) => handleContentRecordScroll\(kind, event\)}/,
+    );
+    expect(recordsScreen).toContain("recordScrollToTopIntent.kind !== kind");
+    expect(recordsScreen).toContain("consumeRecordScrollToTopIntent(recordScrollToTopIntent.token)");
+    expect(recordsScreen).toContain('positionKey: kind');
+    expect(verticalSnap).toContain("currentKeyByPositionRef");
+    expect(verticalSnap).toContain("previousKeysByPositionRef");
+    expect(verticalSnap).toContain("currentKeyByPositionRef.current.set(positionKey, key)");
+    expect(verticalSnap).not.toContain(
+      "currentKeyByPositionRef.current.set(positionKeyRef.current, currentKeyRef.current)",
+    );
+  });
+
   it("routes letter list rows through the shared action-menu flow", () => {
     const recordsScreen = readFileSync(
       join(__dirname, "../../app/(tabs)/on.tsx"),

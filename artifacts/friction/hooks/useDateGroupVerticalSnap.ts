@@ -39,6 +39,8 @@ interface UseDateGroupVerticalSnapOptions {
   onPageGestureStart?: () => void;
   /** Moves back to the first date group when the owning tab is reselected. */
   resetKey?: string | number;
+  /** Separates remembered vertical anchors for each record filter. */
+  positionKey?: string;
 }
 
 const FLING_VELOCITY = 0.5;
@@ -67,12 +69,14 @@ export function useDateGroupVerticalSnap({
   estimatedGroupHeight,
   onPageGestureStart,
   resetKey,
+  positionKey = "default",
 }: UseDateGroupVerticalSnapOptions) {
   const [viewportHeight, setViewportHeight] = useState(0);
   // Layout map computed purely from estimatedGroupHeight — no node measurement.
   const layoutsRef = useRef(new Map<string, DateGroupLayout>());
   const groupKeysRef = useRef<string[]>([...groupKeys]);
-  const previousKeysRef = useRef<string[]>([]);
+  const previousKeysByPositionRef = useRef(new Map<string, string[]>());
+  const currentKeyByPositionRef = useRef(new Map<string, string | null>());
   const currentOffsetRef = useRef(0);
   const currentKeyRef = useRef<string | null>(groupKeys[0] ?? null);
   const currentIndexRef = useRef(0);
@@ -90,6 +94,7 @@ export function useDateGroupVerticalSnap({
     _forceLock: boolean,
   ) => {});
   const beginGestureRef = useRef(() => {});
+  const renderedGroupKeys = [...groupKeys];
 
   groupKeysRef.current = [...groupKeys];
 
@@ -153,8 +158,8 @@ export function useDateGroupVerticalSnap({
 
   useEffect(() => {
     const nextKeys = [...groupKeys];
-    const previousKeys = previousKeysRef.current;
-    const previousKey = currentKeyRef.current;
+    const previousKeys = previousKeysByPositionRef.current.get(positionKey) ?? [];
+    const previousKey = currentKeyByPositionRef.current.get(positionKey) ?? nextKeys[0] ?? null;
     const shouldReset = resetKeyRef.current !== resetKey;
     resetKeyRef.current = resetKey;
 
@@ -164,6 +169,7 @@ export function useDateGroupVerticalSnap({
       ? resolveDateGroupAnchor(previousKey, previousKeys, nextKeys, shouldReset)
       : nextKeys[0] ?? null;
     currentKeyRef.current = nextAnchor;
+    currentKeyByPositionRef.current.set(positionKey, nextAnchor);
     pendingRestoreKeyRef.current = nextAnchor;
     pendingRestoreAnimatedRef.current = shouldReset && nextAnchor !== null;
 
@@ -175,7 +181,7 @@ export function useDateGroupVerticalSnap({
     } else {
       currentOffsetRef.current = layoutsRef.current.get(nextAnchor ?? "")?.offset ?? 0;
     }
-    previousKeysRef.current = nextKeys;
+    previousKeysByPositionRef.current.set(positionKey, nextKeys);
 
     scheduleAnchorRestore();
   }, [
@@ -183,6 +189,7 @@ export function useDateGroupVerticalSnap({
     estimatedGroupHeight,
     groupKeys,
     groupSignature,
+    positionKey,
     rebuildLayouts,
     resetKey,
     scheduleAnchorRestore,
@@ -288,18 +295,17 @@ export function useDateGroupVerticalSnap({
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = Math.max(0, event.nativeEvent.contentOffset.y);
-    if (Platform.OS !== "web") {
-      // Native: snapToInterval drives snapping; only track the current index.
-      const groupH = estimatedGroupHeight ?? 0;
-      const index = groupH > 0 ? Math.round(offset / groupH) : 0;
-      currentIndexRef.current = index;
-      currentKeyRef.current = groupKeysRef.current[index] ?? null;
-    } else {
-      currentOffsetRef.current = offset;
-      const current = findDateGroupAtOffset(offset, [...layoutsRef.current.values()]);
-      if (current) currentKeyRef.current = current.dateKey;
-    }
-  }, [estimatedGroupHeight]);
+    const groupH = estimatedGroupHeight ?? 0;
+    const index = groupH > 0 ? Math.round(offset / groupH) : 0;
+    const key = renderedGroupKeys[index] ?? renderedGroupKeys[0] ?? null;
+    currentIndexRef.current = index;
+    currentKeyRef.current = key;
+    currentOffsetRef.current = offset;
+    // positionKey and renderedGroupKeys belong to the render that installed
+    // this handler. A delayed outgoing FlatList event must never be attributed
+    // to the next filter merely because refs were already updated by its render.
+    currentKeyByPositionRef.current.set(positionKey, key);
+  }, [estimatedGroupHeight, groupSignature, positionKey]);
 
   const onScrollBeginDrag = useCallback(() => {
     if (!enabled || Platform.OS === "web") return;

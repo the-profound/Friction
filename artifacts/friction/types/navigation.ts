@@ -2,6 +2,13 @@ import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
 
 export type NavLayer = "main" | "sub";
 export type RecordKindIntent = "thought" | "editing" | "letter";
+export type RecordKindIntentOptions = {
+  scrollToTop?: boolean;
+};
+export type RecordScrollToTopIntent = {
+  kind: RecordKindIntent;
+  token: number;
+};
 
 export interface NavState {
   activeTab: MainTabKey;
@@ -12,6 +19,7 @@ export interface NavState {
   headerScrolled: boolean;
   tabReselectVersion: Record<MainTabKey, number>;
   recordKindIntent: RecordKindIntent;
+  recordScrollToTopIntent: RecordScrollToTopIntent | null;
 }
 
 export interface NavActions {
@@ -20,7 +28,8 @@ export interface NavActions {
   setToSubTab: (subTab: ToSubTabKey) => void;
   goBackToMainLayer: () => void;
   setHeaderScrolled: (scrolled: boolean) => void;
-  setRecordKindIntent: (kind: RecordKindIntent) => void;
+  setRecordKindIntent: (kind: RecordKindIntent, options?: RecordKindIntentOptions) => void;
+  consumeRecordScrollToTopIntent: (token: number) => void;
 }
 
 export interface NavContextValue extends NavState, NavActions {}

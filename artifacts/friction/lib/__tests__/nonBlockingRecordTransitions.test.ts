@@ -138,6 +138,24 @@ describe("non-blocking editor transitions", () => {
     expect(closingBack.match(/setRecordKindIntent\("editing"\)/g)).toHaveLength(2);
   });
 
+  it("moves newly promoted edits and ordinary exported letters to the top of their filters", () => {
+    const writing = readScreen("app/on-01a.tsx");
+    const closing = readScreen("app/on-01c.tsx");
+    const promotion = writing.slice(
+      writing.indexOf("upsertArticleInRecordCaches(queryClient"),
+      writing.indexOf("// Update editor without remounting"),
+    );
+    const exportDestination = closing.slice(
+      closing.indexOf("if (effectiveSpaceId)"),
+      closing.indexOf("const handleConfirmExport"),
+    );
+
+    expect(promotion).toContain('setRecordKindIntent("editing", { scrollToTop: true })');
+    expect(exportDestination).toContain('setRecordKindIntent("letter", { scrollToTop: true })');
+    expect(exportDestination.indexOf('setRecordKindIntent("letter", { scrollToTop: true })'))
+      .toBeGreaterThan(exportDestination.indexOf("} else {"));
+  });
+
   it("keeps the review editor free of reply-link actions during and after promotion", () => {
     const screen = readScreen("app/on-01a.tsx");
     const editorTypes = readScreen("components/WebViewMarkdownEditor/types.ts");

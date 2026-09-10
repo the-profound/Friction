@@ -2,7 +2,13 @@ import { type Href, router, useGlobalSearchParams, usePathname, useSegments } fr
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MainTabKey, OfSubTabKey, ToSubTabKey } from "@/constants/tokens";
-import type { NavContextValue, NavLayer, RecordKindIntent } from "@/types/navigation";
+import type {
+  NavContextValue,
+  NavLayer,
+  RecordKindIntent,
+  RecordKindIntentOptions,
+  RecordScrollToTopIntent,
+} from "@/types/navigation";
 
 const TAB_ROUTES: Record<MainTabKey, Href> = {
   IN: "/(tabs)/" as Href,
@@ -53,6 +59,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [toSubTab, setToSubTabState] = useState<ToSubTabKey>("neighbors");
   const [headerScrolled, setHeaderScrolled] = useState(false);
   const [recordKindIntent, setRecordKindIntent] = useState<RecordKindIntent>("thought");
+  const [recordScrollToTopIntent, setRecordScrollToTopIntent] =
+    useState<RecordScrollToTopIntent | null>(null);
+  const recordScrollToTopTokenRef = useRef(0);
   const [tabReselectVersion, setTabReselectVersion] = useState<Record<MainTabKey, number>>({
     IN: 0,
     OF: 0,
@@ -167,6 +176,24 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
     router.navigate(TAB_ROUTES[prevMainTab]);
   }, [prevMainTab]);
 
+  const setRecordKind = useCallback((
+    kind: RecordKindIntent,
+    options?: RecordKindIntentOptions,
+  ) => {
+    setRecordKindIntent(kind);
+    if (options?.scrollToTop) {
+      recordScrollToTopTokenRef.current += 1;
+      setRecordScrollToTopIntent({
+        kind,
+        token: recordScrollToTopTokenRef.current,
+      });
+    }
+  }, []);
+
+  const consumeRecordScrollToTopIntent = useCallback((token: number) => {
+    setRecordScrollToTopIntent((current) => current?.token === token ? null : current);
+  }, []);
+
   const value = useMemo<NavContextValue>(
     () => ({
       activeTab,
@@ -177,12 +204,14 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       headerScrolled,
       tabReselectVersion,
       recordKindIntent,
+      recordScrollToTopIntent,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
       goBackToMainLayer,
       setHeaderScrolled,
-      setRecordKindIntent,
+      setRecordKindIntent: setRecordKind,
+      consumeRecordScrollToTopIntent,
     }),
     [
       activeTab,
@@ -193,12 +222,14 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       headerScrolled,
       tabReselectVersion,
       recordKindIntent,
+      recordScrollToTopIntent,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
       goBackToMainLayer,
       setHeaderScrolled,
-      setRecordKindIntent,
+      setRecordKind,
+      consumeRecordScrollToTopIntent,
     ]
   );
 

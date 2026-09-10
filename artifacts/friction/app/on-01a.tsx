@@ -1779,6 +1779,7 @@ export default function WritingScreen() {
       status: "DIVIDING",
       pages: promoted.pages ?? [],
     });
+    setRecordKindIntent("editing", { scrollToTop: true });
 
     // Update editor without remounting. The response is authoritative, but
     // normally matches the submitted snapshot exactly.
