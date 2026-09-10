@@ -2,13 +2,13 @@
  * WebViewMeasureLayer 웹 플랫폼 폴백.
  *
  * 네이티브 WebView를 사용할 수 없는 웹 환경에서 DOM 숨김 컨테이너로
- * 동일한 측정 계약을 구현한다. getBoundingClientRect().height + blockGap
- * 방식으로 네이티브 구현과 동일한 결과를 반환한다.
+ * 동일한 측정 계약을 구현한다. 표시 렌더러와 같은 블록 CSS를 적용하고
+ * flow-root로 margin collapse를 가둔 실효 높이를 반환한다.
  */
 import React, { useRef, useLayoutEffect, useCallback, useEffect, useState } from "react";
 import { PixelRatio } from "react-native";
 import { buildBodyTypographyCss } from "@/components/shared/bodyTypographyCss";
-import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
+import { blocksToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
 import {
   BODY_REGULAR_FONT_FAMILY,
@@ -38,8 +38,8 @@ const CONTAINER_STYLE: React.CSSProperties = {
 const measureTypographyCss = buildBodyTypographyCss({
   rootSelector: ".webview-measure-layer",
   blockSelector: ".webview-measure-layer",
-  blockMargins: "zero",
-  hrStyle: "measure",
+  blockMargins: "spaced",
+  hrStyle: "spaced",
 });
 
 export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
@@ -73,7 +73,6 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
 
     prevRequestRef.current = request;
     const containerWidth = request.typography.textColumnWidth;
-    const blockGap = request.typography.paragraphGapPx;
     const wrapper = containerRef.current;
 
     wrapper.style.width = containerWidth + "px";
@@ -90,9 +89,9 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
     const els: { key: string; el: HTMLDivElement }[] = [];
     for (const c of request.candidates) {
       const el = document.createElement("div");
-      el.style.cssText = "width:100%;margin:0;padding:0";
+      el.style.cssText = "width:100%;margin:0;padding:0;display:flow-root";
       el.innerHTML = c.blocks
-        ? c.blocks.map(blockToHtml).join("")
+        ? blocksToHtml(c.blocks)
         : markdownToHtml(c.content ?? "", PixelRatio.get());
       wrapper.appendChild(el);
       els.push({ key: c.key, el });
@@ -103,7 +102,7 @@ export default function WebViewMeasureLayerWeb({ request, onMeasured }: Props) {
       if (seq !== latestMeasureSeqRef.current) return;
       const heights: Record<string, number> = {};
       for (const { key, el } of els) {
-        heights[key] = el.getBoundingClientRect().height + blockGap;
+        heights[key] = el.getBoundingClientRect().height;
       }
       logWebBodyTypographyDiagnostic(
         "measure",

@@ -1,11 +1,37 @@
 import { MarkdownPolicy } from "./policies";
 import { isPageDividerLine } from "./pageDividerMarkdown";
 import { balanceMarkdownEmphasisAcrossChunks } from "./markdownEmphasis";
+import {
+  PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE,
+  preserveMarkdownBlankLinesForEditor,
+} from "./markdownBlankLines";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 const HEADING_REGEX = /^#{1,6}\s+/;
 const SECTION_BOUNDARY_RE = /^(#{1,3}\s)/;
 const DEFAULT_MAX_CHARS_PER_PAGE = 2000;
+const DIVISION_EMPTY_PARAGRAPH =
+  `<p ${PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE}="true"></p>`;
+
+function restoreDivisionEmptyParagraphs(page: string): string {
+  const parts = page.split("\n\n");
+  let output = "";
+  for (let index = 0; index < parts.length; index++) {
+    if (parts[index] === DIVISION_EMPTY_PARAGRAPH) {
+      let count = 0;
+      while (parts[index] === DIVISION_EMPTY_PARAGRAPH) {
+        count += 1;
+        index += 1;
+      }
+      index -= 1;
+      output += "\n".repeat(count + 2);
+      continue;
+    }
+    if (output && !output.endsWith("\n")) output += "\n\n";
+    output += parts[index];
+  }
+  return output;
+}
 
 export interface PageBlock {
   pageIndex: number;
@@ -159,7 +185,8 @@ export function countPages(content: string): number {
  * 누적 블록 높이가 가용 높이를 처음 초과하는 블록의 인덱스를 반환한다.
  * 모든 블록이 가용 높이 안에 들어오면 -1.
  *
- * blockHeights[i] 는 i번째 블록 단독 측정값이며 marginBottom(=blockGap) 포함.
+ * blockHeights[i] 는 i번째 블록이 앞선 블록들과 함께 구성될 때 늘어난
+ * 실효 높이다. 인접 CSS margin collapse를 반영한 prefix 높이의 차분을 쓴다.
  *
  * tolerance: 한 줄 정도의 여유분(=bodyLineHeight)을 허용하기 위한 슬랙.
  *  cumulative > availableHeight + tolerance 일 때 비로소 초과로 판단한다.
@@ -251,7 +278,11 @@ export function splitContentForDivision(content: string): string[] {
 
 /** 단일 페이지 내용을 엔진 입력용 단락 배열로 분해한다. */
 export function splitPageContentForDivision(pageContent: string): string[] {
-  const rawParas = pageContent.split("\n\n");
+  // Preserve every authored blank paragraph before splitting on the structural
+  // double-newline boundary. `&nbsp;` is the existing canonical empty block
+  // understood by the editor, parser, reader, and measurement renderer.
+  const preserved = preserveMarkdownBlankLinesForEditor(pageContent);
+  const rawParas = preserved.split("\n\n");
   return rawParas.flatMap((paragraph) =>
     paragraph.trim() ? splitAtSectionBoundaries(paragraph) : [paragraph],
   );
@@ -270,6 +301,15 @@ export function isImagePara(para: string): boolean {
 /** `> ` 으로 시작하는 인용문(blockquote) 단락인지 판별한다. */
 export function isBlockquotePara(para: string): boolean {
   return /^>\s/.test(para.trimStart());
+}
+
+/** 여러 목록 항목을 한 단어 흐름처럼 잘라 Markdown 구조를 손상시키지 않는다. */
+export function canWordSplitPara(para: string): boolean {
+  const listItemCount = para
+    .split("\n")
+    .filter((line) => /^(?:-\s|\d+\.\s)/.test(line.trimStart()))
+    .length;
+  return listItemCount <= 1;
 }
 
 /**
@@ -335,7 +375,7 @@ export function simulateGreedyJobs(
         const allWords = isBlockquote
           ? paraToWords(para.replace(/^>\s*/, ""))
           : paraToWords(para);
-        if (allWords.length > 1 && remainingH > 0) {
+        if (canWordSplitPara(para) && allWords.length > 1 && remainingH > 0) {
           bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, targetH: remainingH });
         }
         simParaIdxs = [i];
@@ -349,7 +389,7 @@ export function simulateGreedyJobs(
           const allWords = isBlockquote
             ? paraToWords(para.replace(/^>\s*/, ""))
             : paraToWords(para);
-          if (allWords.length > 1) {
+          if (canWordSplitPara(para) && allWords.length > 1) {
             bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, targetH: threshold });
             simH = paraH * 0.5;
           }
@@ -360,7 +400,7 @@ export function simulateGreedyJobs(
       const allWords = isBlockquote
         ? paraToWords(para.replace(/^>\s*/, ""))
         : paraToWords(para);
-      if (allWords.length > 1) {
+      if (canWordSplitPara(para) && allWords.length > 1) {
         bsJobs.push({ paraIdx: i, allWords, wordOffset: 0, targetH: threshold });
       }
       simParaIdxs = [i];
@@ -415,6 +455,23 @@ export function bsCandidateKey(paraIdx: number, wordOffset: number, count: numbe
 /** BS 측정용 후보 텍스트 — 측정 시에는 들여쓰기 prefix를 붙이지 않는다. */
 export function bsCandidateText(allWords: string[], wordOffset: number, count: number): string {
   return allWords.slice(wordOffset, wordOffset + count).join(" ");
+}
+
+/**
+ * BS 후보를 실제 분할 결과와 같은 블록 형태로 측정한다.
+ * 첫 목록 청크는 목록 들여쓰기를, 인용문 청크는 blockquote 폭/여백을 유지한다.
+ * 목록의 후속 청크는 runGreedy와 동일하게 전각 공백으로 시작하는 일반 문단이다.
+ */
+export function formatBsCandidateForMeasurement(
+  originalParagraph: string,
+  wordOffset: number,
+  content: string,
+): string {
+  if (isBlockquotePara(originalParagraph)) return `> ${content}`;
+  if (/^-\s/.test(originalParagraph)) {
+    return wordOffset === 0 ? content : `　${content}`;
+  }
+  return content;
 }
 
 /**
@@ -560,5 +617,7 @@ export function runGreedy(
   }
 
   if (currentParas.length > 0) pages.push(currentParas.join("\n\n"));
-  return pages.filter((p) => p.trim());
+  return pages
+    .filter((p) => p.trim())
+    .map(restoreDivisionEmptyParagraphs);
 }

@@ -141,3 +141,4 @@
 - [Notion connector proxy versioning](notion-connector-proxy-versioning.md) — Replit's Notion proxy injects its compatible API version header; callers must not set it themselves.
 - [Notion workflow boundary](notion-workflow-boundary.md) — active Replit-to-Notion flow is file publishing; Queue ingestion and legacy Quick Writeback are not supported.
 - [Filter-scoped scroll events](filter-scoped-scroll-events.md) — delayed FlatList events must carry the render-time filter identity, never read a next-render ref.
+- [Body typography measurement](friction-body-typography-measurement.md) — pagination must measure composed CSS prefixes and remeasure final recomposed pages before accepting boundaries.

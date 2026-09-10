@@ -6,7 +6,11 @@ import {
 } from "./inlineImages";
 import { normalizePageDividersForMarkdownParser } from "./pageDividerMarkdown";
 import { normalizeMarkdownEmphasisDelimiters } from "./markdownEmphasis";
-import { restoreLeakedEmptyParagraphMarkers } from "./markdownBlankLines";
+import {
+  PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE,
+  preserveMarkdownBlankLinesForEditor,
+  restoreLeakedEmptyParagraphMarkers,
+} from "./markdownBlankLines";
 
 function escapeHtml(s: string): string {
   return s
@@ -38,6 +42,8 @@ export function inlineTokensToHtml(tokens: InlineToken[]): string {
       switch (t.kind) {
         case "text":
           return escapeHtml(t.value);
+        case "break":
+          return "<br>";
         case "bold":
           return `<strong>${escapeHtml(t.value)}</strong>`;
         case "italic":
@@ -55,8 +61,8 @@ export function inlineTokensToHtml(tokens: InlineToken[]): string {
 
 /**
  * 사전 파싱된 MarkdownBlockType 하나를 HTML 문자열로 변환한다.
- * 마진은 모두 제거된 상태(margin:0)로 반환되므로 WebViewMeasureLayer에서
- * blockGap을 별도로 더해 PretextMeasureLayer와 동일한 높이 계약을 유지한다.
+ * 간격은 이 문자열이 아니라 WebViewMeasureLayer의 공통 본문 CSS가 결정한다.
+ * 측정 레이어는 표시 렌더러와 동일한 블록별 margin을 적용한다.
  */
 export function blockToHtml(block: MarkdownBlockType): string {
   // 빈 단락(엔터로 만든 빈 줄)은 한 줄 높이를 차지하도록 NBSP 로 렌더한다.
@@ -88,7 +94,57 @@ export function blockToHtml(block: MarkdownBlockType): string {
  * MarkdownBlockType 배열을 순서대로 HTML 문자열로 이어 붙인다.
  */
 export function blocksToHtml(blocks: MarkdownBlockType[]): string {
-  return blocks.map(blockToHtml).join("");
+  const out: string[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (block.type === "ul_item" || block.type === "ol_item") {
+      const ordered = block.type === "ol_item";
+      const items: string[] = [];
+      const start = ordered ? block.index : undefined;
+      let expectedOrderedIndex = start;
+      while (i < blocks.length) {
+        const item = blocks[i];
+        if (item.type !== block.type) break;
+        if (
+          ordered
+          && (item.type !== "ol_item" || item.index !== expectedOrderedIndex)
+        ) {
+          break;
+        }
+        const inner = item.tokens.length === 0
+          ? "&nbsp;"
+          : inlineTokensToHtml(item.tokens);
+        items.push(`<li><p>${inner}</p></li>`);
+        if (ordered) expectedOrderedIndex = (expectedOrderedIndex ?? 0) + 1;
+        i += 1;
+      }
+      i -= 1;
+      out.push(
+        ordered
+          ? `<ol start="${start}">${items.join("")}</ol>`
+          : `<ul>${items.join("")}</ul>`,
+      );
+      continue;
+    }
+    if (block.type === "blockquote" && block.quoteGroup !== undefined) {
+      const paragraphs: string[] = [];
+      const quoteGroup = block.quoteGroup;
+      while (i < blocks.length) {
+        const quote = blocks[i];
+        if (quote.type !== "blockquote" || quote.quoteGroup !== quoteGroup) break;
+        const inner = quote.tokens.length === 0
+          ? "&nbsp;"
+          : inlineTokensToHtml(quote.tokens);
+        paragraphs.push(`<p>${inner}</p>`);
+        i += 1;
+      }
+      i -= 1;
+      out.push(`<blockquote>${paragraphs.join("")}</blockquote>`);
+      continue;
+    }
+    out.push(blockToHtml(block));
+  }
+  return out.join("");
 }
 
 function renderInline(text: string): string {
@@ -118,9 +174,11 @@ function renderImageLine(line: string, imagePixelRatio = 1): string | null {
 
 export function markdownToHtml(md: string, imagePixelRatio = 1): string {
   try {
-    const text = normalizePageDividersForMarkdownParser(
-      normalizeMarkdownEmphasisDelimiters(
-        restoreLeakedEmptyParagraphMarkers(md || ""),
+    const text = preserveMarkdownBlankLinesForEditor(
+      normalizePageDividersForMarkdownParser(
+        normalizeMarkdownEmphasisDelimiters(
+          restoreLeakedEmptyParagraphMarkers(md || ""),
+        ),
       ),
     );
     const lines = text.split("\n");
@@ -130,6 +188,15 @@ export function markdownToHtml(md: string, imagePixelRatio = 1): string {
     while (i < lines.length) {
       const line = lines[i];
       if (line.trim() === "") { i++; continue; }
+      if (
+        line.includes(`${PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE}="true"`)
+      ) {
+        blocks.push(
+          `<p ${PRESERVED_BLANK_PARAGRAPH_ATTRIBUTE}="true">&nbsp;</p>`,
+        );
+        i++;
+        continue;
+      }
       if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { blocks.push("<hr>"); i++; continue; }
 
       const heading = /^(#{1,3})\s+(.*)$/.exec(line);
@@ -145,10 +212,17 @@ export function markdownToHtml(md: string, imagePixelRatio = 1): string {
         const inner: string[] = [];
         let para: string[] = [];
         for (const q of quoteLines) {
-          if (q.trim() === "") { if (para.length) { inner.push(`<p>${renderInline(para.join(" "))}</p>`); para = []; } }
+          if (q.trim() === "") {
+            if (para.length) {
+              inner.push(`<p>${para.map(renderInline).join("<br>")}</p>`);
+              para = [];
+            }
+          }
           else { para.push(q); }
         }
-        if (para.length) inner.push(`<p>${renderInline(para.join(" "))}</p>`);
+        if (para.length) {
+          inner.push(`<p>${para.map(renderInline).join("<br>")}</p>`);
+        }
         // 내용 없는 ">" 라인은 빈 blockquote(회색 세로줄 잔상) 대신 빈 단락으로.
         if (inner.length > 0) {
           blocks.push(`<blockquote>${inner.join("")}</blockquote>`);

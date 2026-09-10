@@ -29,7 +29,7 @@ import {
 } from "../../components/shared/bodyTypographyFonts";
 import { buildBodyTypographyCss } from "../../components/shared/bodyTypographyCss";
 import { bodyTypographyMetrics, computeBodyLayout } from "../bodyLayout";
-import { markdownToHtml } from "../markdownRenderer";
+import { blocksToHtml, markdownToHtml } from "../markdownRenderer";
 import { splitContentToPages } from "../pageDivision";
 import { parseMarkdownBlocks } from "../../utils/markdownParser";
 import { ReaderTokens } from "../../constants/tokens";
@@ -40,30 +40,30 @@ const read = (relativePath: string) =>
   readFileSync(join(appRoot, relativePath), "utf8");
 
 function createFontTestContext() {
-  let renderedText = "";
-  const context = {
-    font: "",
-    fillStyle: "",
-    textBaseline: "",
-    clearRect: vi.fn(),
-    fillText: (text: string) => {
-      renderedText = text;
-    },
-    getImageData: () => {
-      const data = new Uint8ClampedArray(8);
-      const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
-      const isSemiBold = context.font.startsWith("600");
-      data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
-      return { data };
-    },
-    measureText: () => ({
-      width:
-        renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
-          ? context.font.startsWith("600") ? 61 : 59
-          : context.font.startsWith("600") ? 57 : 55,
-    }),
-  };
-  return context;
+    let renderedText = "";
+    const context = {
+      font: "",
+      fillStyle: "",
+      textBaseline: "",
+      clearRect: vi.fn(),
+      fillText: (text: string) => {
+        renderedText = text;
+      },
+      getImageData: () => {
+        const data = new Uint8ClampedArray(8);
+        const isFallback = renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT;
+        const isSemiBold = context.font.startsWith("600");
+        data[3] = isFallback ? (isSemiBold ? 193 : 157) : isSemiBold ? 113 : 79;
+        return { data };
+      },
+      measureText: () => ({
+        width:
+          renderedText === BODY_FONT_FALLBACK_ONLY_PROBE_TEXT
+            ? context.font.startsWith("600") ? 61 : 59
+            : context.font.startsWith("600") ? 57 : 55,
+      }),
+    };
+    return context;
 }
 
 describe("letter body font fallback contract", () => {
@@ -416,7 +416,7 @@ describe("shared letter page geometry", () => {
     expect(metrics.textScalePercent).toBe(100);
   });
 
-  it("uses the shared paragraph-gap variable in visible body CSS only", () => {
+  it("can apply the visible block-spacing contract to measurement CSS", () => {
     const visibleCss = buildBodyTypographyCss({
       rootSelector: ".reader",
       blockSelector: ".reader",
@@ -430,12 +430,22 @@ describe("shared letter page geometry", () => {
       hrStyle: "measure",
     });
 
+    const effectiveMeasureCss = buildBodyTypographyCss({
+      rootSelector: ".effective-measure",
+      blockSelector: ".effective-measure",
+      blockMargins: "spaced",
+      hrStyle: "spaced",
+    });
+
     expect(visibleCss).toContain(
       ".reader p{margin-bottom:var(--body-paragraph-gap)",
     );
     expect(measureCss).toContain(".measure p{margin:0");
     expect(measureCss).not.toContain(
       "margin-bottom:var(--body-paragraph-gap)",
+    );
+    expect(effectiveMeasureCss).toContain(
+      ".effective-measure p{margin-bottom:var(--body-paragraph-gap)",
     );
   });
 
@@ -526,7 +536,11 @@ describe("reader title typography", () => {
     expect(readerHtml).toContain('setProperty("--title-font-size",m.titleFontSizePx+"px")');
     expect(measureHtml).toContain('setProperty("--title-font-size",m.titleFontSizePx+"px")');
     expect(readerHtml).toContain('setProperty("--body-paragraph-gap",m.paragraphGapPx+"px")');
-    expect(measureHtml).toContain('var gap=m.paragraphGapPx');
+    expect(measureHtml).toContain('blockMargins: "spaced"');
+    expect(measureHtml).toContain("getBoundingClientRect().height;");
+    expect(measureHtml).not.toMatch(
+      /getBoundingClientRect\(\)\.height\s*\+\s*gap/,
+    );
     expect(webMeasure).toContain("buildBodyTypographyCss");
     expect(webMeasure).toContain('rootSelector: ".webview-measure-layer"');
     expect(webEditor).toContain('"--title-font-size": `${typography.titleFontSizePx}px`');
@@ -563,6 +577,7 @@ describe("reader title typography", () => {
     const nativeEditorSource = read("components/WebViewMarkdownEditor/editorWebviewSrc/index.ts");
     const webEditor = read("components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx");
     const writingScreen = read("app/on-01a.tsx");
+
     const css = buildBodyTypographyCss({
       rootSelector: "#editor-content",
       blockSelector: ".ProseMirror",
@@ -594,6 +609,28 @@ describe("reader title typography", () => {
     expect(html).toContain("<u>밑줄</u>");
     expect(html).toContain("<blockquote>");
     expect(html).toContain("<hr>");
+
+    const multiParagraphQuote = "> 첫 문단\n>\n> 둘째 문단\n>\n> 셋째 문단";
+    const quoteBlocks = parseMarkdownBlocks(multiParagraphQuote);
+    const measuredQuoteHtml = blocksToHtml(quoteBlocks);
+    const visibleQuoteHtml = markdownToHtml(multiParagraphQuote);
+    expect(quoteBlocks).toHaveLength(3);
+    expect(new Set(quoteBlocks.map((block) =>
+      block.type === "blockquote" ? block.quoteGroup : undefined
+    )).size).toBe(1);
+    expect(measuredQuoteHtml.match(/<blockquote>/g)).toHaveLength(1);
+    expect(measuredQuoteHtml.match(/<p>/g)).toHaveLength(3);
+    expect(visibleQuoteHtml.match(/<blockquote>/g)).toHaveLength(1);
+    expect(visibleQuoteHtml.match(/<p>/g)).toHaveLength(3);
+
+    const multilineQuote = "> 첫 줄\n> 둘째 줄\n> 셋째 줄";
+    const measuredMultilineQuote = blocksToHtml(
+      parseMarkdownBlocks(multilineQuote),
+    );
+    const divisionCandidateQuote = markdownToHtml(multilineQuote);
+    expect(measuredMultilineQuote.match(/<br>/g)).toHaveLength(2);
+    expect(divisionCandidateQuote.match(/<br>/g)).toHaveLength(2);
+    expect(divisionCandidateQuote).toBe(measuredMultilineQuote);
 
     const pages = splitContentToPages("첫 페이지\n---\n두 번째 페이지");
     expect(pages.map((page) => parseMarkdownBlocks(page.content))).toEqual([
@@ -636,6 +673,7 @@ describe("reader title typography", () => {
 
   it("ties measurement callbacks to the request that produced them", () => {
     const writingScreen = read("app/on-01a.tsx");
+
     const nativeMeasure = read("components/WebViewMeasureLayer/WebViewMeasureLayer.tsx");
     const webMeasure = read("components/WebViewMeasureLayer/WebViewMeasureLayerWeb.tsx");
 
@@ -658,13 +696,18 @@ describe("reader title typography", () => {
     expect(writingScreen).toContain(
       "pending.request !== measuredRequest",
     );
-    expect(writingScreen).toContain("fontMode: nativeBodyFontMode");
     expect(writingScreen).toContain(
-      "pending.request.fontMode === nativeBodyFontMode",
+      "engineMeasurementContextRef.current",
+    );
+    expect(writingScreen).toContain(
+      'pending.reject(new Error("DIVISION_MEASUREMENT_CONTEXT_CHANGED"))',
     );
     expect(writingScreen).toContain(
       "measuredRequest.fontMode !== getNativeBodyFontMode()",
     );
+    expect(writingScreen).toContain("editorRef.current?.setEditable(false)");
+    expect(writingScreen).toContain("editable={!isNavigating && !splitting}");
+    expect(writingScreen).toContain("if (latest !== cur)");
     const nativeFontMode = read("lib/nativeBodyFontMode.ts");
     expect(nativeFontMode).toContain("if (!ok && mode !== \"fallback\")");
     expect(nativeFontMode).toContain("for (const listener of listeners)");

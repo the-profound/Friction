@@ -49,7 +49,7 @@ import {
   runGreedy,
   bsCandidateKey,
   bsCandidatesForJob,
-  findOverflowBlockIndex,
+  formatBsCandidateForMeasurement,
   type BSJob,
   type BSResult,
   type DivisionWarning,
@@ -1354,7 +1354,10 @@ export default function WritingScreen() {
       blocks.forEach((b, bi) => {
         candidates.push({
           key: `${PAGE_KEY_PREFIX}${p.pageIndex}_b_${bi}`,
-          blocks: [b],
+          // Prefix measurements preserve the browser's real adjacent-margin
+          // collapse and grouped list/quote DOM. Independent block boxes cannot
+          // be summed to reproduce the visible document.
+          blocks: blocks.slice(0, bi + 1),
         });
       });
     }
@@ -1400,7 +1403,7 @@ export default function WritingScreen() {
     const currentPageIndices = new Set(measurePages.map((p) => p.pageIndex));
     for (const p of measurePages) {
       const blocks = pageBlockMap[p.pageIndex] ?? [];
-      const heights: number[] = [];
+      const prefixHeights: number[] = [];
       let allMeasured = true;
       for (let bi = 0; bi < blocks.length; bi++) {
         const h = blockHeights[`${PAGE_KEY_PREFIX}${p.pageIndex}_b_${bi}`];
@@ -1408,15 +1411,17 @@ export default function WritingScreen() {
           allMeasured = false;
           break;
         }
-        heights.push(h);
+        prefixHeights.push(h);
       }
       if (!allMeasured) {
         anyPending = true;
         continue;
       }
-      const blockSum = heights.reduce((a, b) => a + b, 0);
-      const totalHeight = blockSum + pageContentHeight - availableContentHeight;
-      const overflowBlockIdx = findOverflowBlockIndex(heights, availableContentHeight, bodyLineHeight);
+      const renderedHeight = prefixHeights.at(-1) ?? 0;
+      const totalHeight = renderedHeight + pageContentHeight - availableContentHeight;
+      const overflowBlockIdx = prefixHeights.findIndex(
+        (height) => height > availableContentHeight + bodyLineHeight,
+      );
       info[p.pageIndex] = { totalHeight, overflowBlockIdx };
     }
     if (anyPending) {
@@ -1449,39 +1454,49 @@ export default function WritingScreen() {
   }, [pageOverflowInfo]);
 
   const [engineRequest, setEngineRequest] = useState<MeasureRequest | null>(null);
+  const engineMeasurementContextRef = useRef({
+    typography,
+    fontMode: nativeBodyFontMode,
+  });
+  engineMeasurementContextRef.current = {
+    typography,
+    fontMode: nativeBodyFontMode,
+  };
   const engineResolveRef = useRef<{
     request: MeasureRequest;
     resolve: (heights: Record<string, number>) => void;
+    reject: (error: Error) => void;
   } | null>(null);
 
   const measureEngine = useCallback(
     (candidates: MeasureCandidate[]): Promise<Record<string, number>> => {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
+        const context = engineMeasurementContextRef.current;
         const request: MeasureRequest = {
           candidates,
-          typography,
-          fontMode: nativeBodyFontMode,
+          typography: context.typography,
+          fontMode: context.fontMode,
         };
-        engineResolveRef.current = { request, resolve };
+        engineResolveRef.current = { request, resolve, reject };
         setEngineRequest(request);
       });
     },
-    [typography, nativeBodyFontMode],
+    [],
   );
 
   useEffect(() => {
     const pending = engineResolveRef.current;
-    if (!pending || pending.request.fontMode === nativeBodyFontMode) return;
-    const replacement: MeasureRequest = {
-      ...pending.request,
-      fontMode: nativeBodyFontMode,
-    };
-    engineResolveRef.current = {
-      request: replacement,
-      resolve: pending.resolve,
-    };
-    setEngineRequest(replacement);
-  }, [nativeBodyFontMode]);
+    if (
+      !pending
+      || (
+        pending.request.fontMode === nativeBodyFontMode
+        && pending.request.typography === typography
+      )
+    ) return;
+    engineResolveRef.current = null;
+    setEngineRequest(null);
+    pending.reject(new Error("DIVISION_MEASUREMENT_CONTEXT_CHANGED"));
+  }, [nativeBodyFontMode, typography]);
 
   const handleEngineMeasured = useCallback((
     heights: Record<string, number>,
@@ -1492,7 +1507,14 @@ export default function WritingScreen() {
       !pending ||
       pending.request !== measuredRequest ||
       measuredRequest.fontMode !== getNativeBodyFontMode()
-    ) return;
+    ) {
+      if (pending?.request === measuredRequest) {
+        engineResolveRef.current = null;
+        setEngineRequest(null);
+        pending.reject(new Error("DIVISION_MEASUREMENT_CONTEXT_CHANGED"));
+      }
+      return;
+    }
     engineResolveRef.current = null;
     setEngineRequest(null);
     pending.resolve(heights);
@@ -2554,55 +2576,106 @@ export default function WritingScreen() {
     async (paragraphs: string[]): Promise<string[] | null> => {
       if (paragraphs.length < 1) return null;
 
-      const paraCandidates: MeasureCandidate[] = paragraphs.map((p, i) => ({
-        key: `para_${i}`,
-        content: p,
-      }));
-      const paraHeightMap = await measureEngine(paraCandidates);
-      const paraHeights: Record<number, number> = {};
-      paragraphs.forEach((_, i) => {
-        paraHeights[i] = paraHeightMap[`para_${i}`] ?? 0;
-      });
+      const divideAndVerify = async (
+        units: string[],
+        threshold: number,
+        correctionDepth: number,
+      ): Promise<string[]> => {
+        // Division units preserve an entire list/quote block and every authored
+        // blank paragraph. Ordinary paragraphs have zero top margin, while
+        // headings and blockquotes are force-started on a new page by runGreedy.
+        const paraCandidates: MeasureCandidate[] = units.map((p, i) => ({
+          key: `para_${correctionDepth}_${i}`,
+          content: p,
+        }));
+        const paraHeightMap = await measureEngine(paraCandidates);
+        const paraHeights: Record<number, number> = {};
+        units.forEach((_, i) => {
+          paraHeights[i] = paraHeightMap[`para_${correctionDepth}_${i}`] ?? 0;
+        });
 
-      const initialJobs = simulateGreedyJobs(paragraphs, paraHeights, splitThreshold);
-      const splitResults: Record<number, BSResult[]> = {};
-      let pendingJobs: BSJob[] = initialJobs;
+        const initialJobs = simulateGreedyJobs(units, paraHeights, threshold);
+        const splitResults: Record<number, BSResult[]> = {};
+        let pendingJobs: BSJob[] = initialJobs;
 
-      while (pendingJobs.length > 0) {
-        const candidates: MeasureCandidate[] = [];
-        for (const job of pendingJobs) {
-          for (const c of bsCandidatesForJob(job)) {
-            candidates.push({
-              key: bsCandidateKey(job.paraIdx, job.wordOffset, c.count),
-              content: c.content,
-            });
+        while (pendingJobs.length > 0) {
+          const candidates: MeasureCandidate[] = [];
+          for (const job of pendingJobs) {
+            for (const c of bsCandidatesForJob(job)) {
+              candidates.push({
+                key: bsCandidateKey(job.paraIdx, job.wordOffset, c.count),
+                content: formatBsCandidateForMeasurement(
+                  units[job.paraIdx] ?? "",
+                  job.wordOffset,
+                  c.content,
+                ),
+              });
+            }
           }
-        }
-        if (candidates.length === 0) break;
+          if (candidates.length === 0) break;
 
-        const heights = await measureEngine(candidates);
+          const heights = await measureEngine(candidates);
 
-        const nextPending: BSJob[] = [];
-        for (const job of pendingJobs) {
-          const bsResult = resolveBSJob(job, heights);
-          if (!splitResults[job.paraIdx]) splitResults[job.paraIdx] = [];
-          splitResults[job.paraIdx].push({
-            wordOffset: job.wordOffset,
-            wordCount: bsResult.wordCount,
-          });
-          if (bsResult.hasRemaining) {
-            nextPending.push({
-              paraIdx: job.paraIdx,
-              allWords: job.allWords,
-              wordOffset: bsResult.nextOffset,
-              targetH: splitThreshold,
+          const nextPending: BSJob[] = [];
+          for (const job of pendingJobs) {
+            const bsResult = resolveBSJob(job, heights);
+            if (!splitResults[job.paraIdx]) splitResults[job.paraIdx] = [];
+            splitResults[job.paraIdx].push({
+              wordOffset: job.wordOffset,
+              wordCount: bsResult.wordCount,
             });
+            if (bsResult.hasRemaining) {
+              nextPending.push({
+                paraIdx: job.paraIdx,
+                allWords: job.allWords,
+                wordOffset: bsResult.nextOffset,
+                targetH: threshold,
+              });
+            }
           }
+          pendingJobs = nextPending;
         }
-        pendingJobs = nextPending;
-      }
 
-      return runGreedy(paragraphs, paraHeights, splitResults, splitThreshold);
+        const output = runGreedy(units, paraHeights, splitResults, threshold);
+        const finalCandidates = output.map((content, index) => ({
+          key: `final_${correctionDepth}_${index}`,
+          content,
+        }));
+        const finalHeights = await measureEngine(finalCandidates);
+        const corrected: string[] = [];
+
+        for (let index = 0; index < output.length; index++) {
+          const page = output[index];
+          const actualHeight =
+            finalHeights[`final_${correctionDepth}_${index}`] ?? 0;
+          if (actualHeight <= splitThreshold + 0.5) {
+            corrected.push(page);
+            continue;
+          }
+          if (correctionDepth >= 4) {
+            throw new Error("DIVISION_UNSPLITTABLE_OVERFLOW");
+          }
+
+          // Candidate chunks can change height after emphasis balancing and
+          // final Markdown recomposition. Re-run only the overflowing page with
+          // a reduced budget based on its measured excess, then verify again.
+          const excess = actualHeight - splitThreshold;
+          const nextThreshold = Math.max(
+            splitThreshold * 0.5,
+            threshold - Math.max(excess + 1, threshold * 0.05),
+          );
+          const pageUnits = splitPageContentForDivision(page);
+          const splitPages = await divideAndVerify(
+            pageUnits,
+            nextThreshold,
+            correctionDepth + 1,
+          );
+          corrected.push(...splitPages);
+        }
+        return corrected;
+      };
+
+      return divideAndVerify(paragraphs, splitThreshold, 0);
     },
     [measureEngine, splitThreshold],
   );
@@ -2628,6 +2701,7 @@ export default function WritingScreen() {
     if (splittingRef.current) return;
     splittingRef.current = true;
     setSplitting(true);
+    editorRef.current?.setEditable(false);
     try {
       const cur = await getEditorContent();
       const rawPages = splitPageContentsLosslessly(cur);
@@ -2660,7 +2734,32 @@ export default function WritingScreen() {
         });
         return;
       }
+      const latest = await getEditorContent();
+      if (latest !== cur) {
+        showToast({
+          message: "분할 중 본문이 바뀌어 결과를 적용하지 않았어요. 다시 시도해 주세요.",
+          type: "info",
+        });
+        return;
+      }
       applyEngineResult(next);
+    } catch (error) {
+      if (
+        error instanceof Error
+        && (
+          error.message === "DIVISION_UNSPLITTABLE_OVERFLOW"
+          || error.message === "DIVISION_MEASUREMENT_CONTEXT_CHANGED"
+        )
+      ) {
+        showToast({
+          message: error.message === "DIVISION_MEASUREMENT_CONTEXT_CHANGED"
+            ? "글꼴 준비 상태가 바뀌어 분할을 중단했어요. 다시 시도해 주세요."
+            : "이 페이지는 자동으로 안전하게 나눌 수 없어요. 본문을 직접 편집해 주세요.",
+          type: "info",
+        });
+        return;
+      }
+      throw error;
     } finally {
       splittingRef.current = false;
       setSplitting(false);
@@ -2669,29 +2768,57 @@ export default function WritingScreen() {
 
   const handleSplitPage = useCallback(
     async (pageIndex: number) => {
-      if (splitting) return;
-      const cur = await getEditorContent();
-      const rawPages = splitPageContentsLosslessly(cur);
-      if (pageIndex < 0 || pageIndex >= rawPages.length) return;
-      const paragraphs = splitPageContentForDivision(rawPages[pageIndex]);
-      if (paragraphs.length < 2) {
-        showToast({ message: "이 페이지에는 나눌 수 있는 단락이 부족해요.", type: "info" });
-        return;
-      }
+      if (splittingRef.current) return;
+      splittingRef.current = true;
       setSplitting(true);
+      editorRef.current?.setEditable(false);
       try {
+        const cur = await getEditorContent();
+        const rawPages = splitPageContentsLosslessly(cur);
+        if (pageIndex < 0 || pageIndex >= rawPages.length) return;
+        const paragraphs = splitPageContentForDivision(rawPages[pageIndex]);
+        if (paragraphs.length < 2) {
+          showToast({ message: "이 페이지에는 나눌 수 있는 단락이 부족해요.", type: "info" });
+          return;
+        }
         const out = await runDivisionEngine(paragraphs);
         if (out) {
+          const latest = await getEditorContent();
+          if (latest !== cur) {
+            showToast({
+              message: "분할 중 본문이 바뀌어 결과를 적용하지 않았어요. 다시 시도해 주세요.",
+              type: "info",
+            });
+            return;
+          }
           const before = rawPages.slice(0, pageIndex);
           const after = rawPages.slice(pageIndex + 1);
           const newPages = [...before, ...out, ...after];
           applyEngineResult(newPages);
         }
+      } catch (error) {
+        if (
+          error instanceof Error
+          && (
+            error.message === "DIVISION_UNSPLITTABLE_OVERFLOW"
+            || error.message === "DIVISION_MEASUREMENT_CONTEXT_CHANGED"
+          )
+        ) {
+          showToast({
+            message: error.message === "DIVISION_MEASUREMENT_CONTEXT_CHANGED"
+              ? "글꼴 준비 상태가 바뀌어 분할을 중단했어요. 다시 시도해 주세요."
+              : "이 페이지는 자동으로 안전하게 나눌 수 없어요. 본문을 직접 편집해 주세요.",
+            type: "info",
+          });
+          return;
+        }
+        throw error;
       } finally {
+        splittingRef.current = false;
         setSplitting(false);
       }
     },
-    [splitting, getEditorContent, runDivisionEngine, applyEngineResult, showToast],
+    [getEditorContent, runDivisionEngine, applyEngineResult, showToast],
   );
 
   const handleMergeWithPrevious = useCallback(
@@ -3177,7 +3304,7 @@ export default function WritingScreen() {
                 titleValue={title}
                 placeholder="떠오르는 생각을 자유롭게 적어보세요..."
                 ensureTrailingParagraph={!isLocalDirectDraft}
-                editable={!isNavigating}
+                editable={!isNavigating && !splitting}
                 onReload={handleEditorReload}
                 onReady={handleEditorReady}
                 onChange={handleEditorChange}

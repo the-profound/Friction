@@ -2,9 +2,9 @@
  * WebViewMeasureLayer가 사용하는 HTML 템플릿.
  *
  * readerHtml.ts와 동일한 폰트/타이포그래피를 사용하되
- * 모든 블록 요소의 margin을 0으로 초기화한다.
- * blockGap은 JS 측에서 getBoundingClientRect().height에 더해
- * PretextMeasureLayer의 (측정 높이 + marginBottom) 계약을 재현한다.
+ * 표시 렌더러와 같은 블록 margin을 그대로 적용한다. 측정 항목은
+ * `flow-root` formatting context로 감싸 위/아래 margin collapse를 항목 안에
+ * 가두므로 getBoundingClientRect().height가 실제 표시 높이와 일치한다.
  *
  * 폰트가 없는 초기 로딩 상태에서도 WebView 자체는 마운트되어 있어야 하므로
  * fontFaceCSS가 비어 있으면 시스템 serif로 fallback한다.
@@ -27,13 +27,13 @@ export interface MeasureFontOptions extends EmbeddedBodyFontOptions {
 }
 
 // 본문 타이포그래피는 편집기/리더와 동일한 모듈에서 받는다.
-// 측정 레이어는 블록 마진을 0으로 두고 blockGap을 외부에서 더하므로 blockMargins "zero",
-// hr은 1px 높이 + 마진 0(measure 모드)으로 받는다.
+// 측정도 리더와 같은 블록 간격/구분선 간격을 사용해야 혼합 본문의 페이지
+// 경계가 화면 전환 중 달라지지 않는다.
 const bodyTypographyCss = buildBodyTypographyCss({
   rootSelector: ".mb",
   blockSelector: ".mb",
-  blockMargins: "zero",
-  hrStyle: "measure",
+  blockMargins: "spaced",
+  hrStyle: "spaced",
 });
 
 export function getMeasureHtml(opts: MeasureFontOptions = {}): string {
@@ -53,7 +53,7 @@ ${bridgeHeadScript}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{background:transparent;overflow:hidden;visibility:hidden}
 ${bodyTypographyCss}
-.mb{position:absolute;left:0;top:0}
+.mb{position:absolute;left:0;top:0;display:flow-root}
 </style>
 ${fontReadyScript}
 </head>
@@ -71,7 +71,6 @@ var root=document.documentElement;
  root.style.setProperty("--body-letter-spacing",m.letterSpacingPx+"px");
  root.style.setProperty("--title-font-size",m.titleFontSizePx+"px");
  var w=m.textColumnWidth;
- var gap=m.paragraphGapPx;
 var items=cmd.items||[];
 var wrap=document.createElement("div");
 wrap.style.cssText="position:absolute;left:0;top:0;pointer-events:none;";
@@ -89,7 +88,7 @@ requestAnimationFrame(function(){
 requestAnimationFrame(function(){
 var heights={};
 els.forEach(function(b){
-heights[b.key]=b.el.getBoundingClientRect().height+gap;
+heights[b.key]=b.el.getBoundingClientRect().height;
 });
  var probe=els[0]&&els[0].el,cs=probe&&getComputedStyle(probe),fonts=document.fonts;
  if(probe&&cs)bridge.post({type:"onBodyTypographyDiagnostic",payload:{

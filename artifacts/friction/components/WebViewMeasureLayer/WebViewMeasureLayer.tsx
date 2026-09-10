@@ -15,7 +15,7 @@
  * 측정 흐름:
  *   1. 네 폰트 데이터 준비 후 WebView 마운트 → 내부 디코딩 완료 신호 → bridge.markReady()
  *   2. request props 변경 → candidates를 HTML 아이템으로 변환 → bridge.request("measure", ...)
- *   3. WebView JS('measure' 핸들러): 블록별 getBoundingClientRect().height + blockGap →
+ *   3. WebView JS('measure' 핸들러): 표시 CSS를 적용한 블록별 실효 높이 →
  *      Promise<heights>를 반환하면 공통 브릿지가 __rpcResponse 로 회신
  *   4. RN 측 bridge.request 가 Promise<heights> 로 resolve → onMeasured(heights)
  *
@@ -25,10 +25,9 @@
  *   이 처리 없이 폰트 로드 전 측정하면 시스템 serif 폰트로 한국어 높이를 재게 되어
  *   실제보다 큰 값이 산출되고 잘못된 오버플로 경고가 발생한다.
  *
- * blockGap 계약:
- *   반환하는 height[key] = 블록 콘텐츠 높이 + blockGap.
- *   PretextMeasureLayer의 <View marginBottom={blockGap}> 높이와 동일하게
- *   pageDivision.ts의 cumulativeHeight 계산에 그대로 사용할 수 있다.
+ * 블록 간격 계약:
+ *   반환하는 height[key]에는 문단/제목/목록/인용/구분선 각각의 실제 CSS
+ *   여백이 포함된다. 모든 블록에 paragraphGap을 일괄 가산하지 않는다.
  *
  * 레이아웃 은폐 전략:
  *   0×0 overflow:hidden 래퍼 View 안에 고정 크기 WebView를 배치한다.
@@ -40,7 +39,7 @@ import { View, StyleSheet, PixelRatio } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getMeasureHtml } from "./measureHtml";
 import { areEditorFontsReady, getEditorFonts, subscribeEditorFonts, type EditorFontState } from "@/lib/editorFontStore";
-import { blockToHtml, markdownToHtml } from "@/lib/markdownRenderer";
+import { blocksToHtml, markdownToHtml } from "@/lib/markdownRenderer";
 import type { MeasureRequest } from "../PretextMeasureLayer/PretextMeasureLayer";
 import {
   flushWebViewPerf,
@@ -149,7 +148,7 @@ export default function WebViewMeasureLayer({ request, onMeasured }: Props) {
     const items = req.candidates.map((c) => ({
       key: c.key,
       html: c.blocks
-        ? c.blocks.map(blockToHtml).join("")
+        ? blocksToHtml(c.blocks)
         : markdownToHtml(c.content ?? "", PixelRatio.get()),
     }));
     const seq = ++latestSeqRef.current;

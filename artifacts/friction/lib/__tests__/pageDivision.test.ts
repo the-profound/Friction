@@ -4,6 +4,8 @@ import {
   mergePagesToContent,
   isImagePara,
   isBlockquotePara,
+  canWordSplitPara,
+  formatBsCandidateForMeasurement,
   simulateGreedyJobs,
   runGreedy,
   splitPageContentForDivision,
@@ -20,6 +22,58 @@ import { normalizePageDividersForMarkdownParser } from "../pageDividerMarkdown";
 import { markdownToHtml } from "../markdownRenderer";
 import { marked } from "marked";
 import { computePageGeometry, getPageTextContentHeight } from "../pageGeometry";
+
+describe("split candidate typography", () => {
+  it("measures blockquotes and list chunks in the same block shape it emits", () => {
+    expect(formatBsCandidateForMeasurement("> 인용문", 0, "인용 일부")).toBe(
+      "> 인용 일부",
+    );
+    expect(formatBsCandidateForMeasurement("- 목록", 0, "- 첫 청크")).toBe(
+      "- 첫 청크",
+    );
+    expect(formatBsCandidateForMeasurement("- 목록", 3, "다음 청크")).toBe(
+      "　다음 청크",
+    );
+    expect(formatBsCandidateForMeasurement("일반 문단", 0, "본문")).toBe("본문");
+  });
+
+  it("keeps every authored blank paragraph in auto-split measurement input", () => {
+    expect(splitPageContentForDivision("A\n\n\nB")).toEqual([
+      "A",
+      '<p data-friction-preserved-blank="true"></p>',
+      "B",
+    ]);
+    expect(splitPageContentForDivision("A\n\n\n\nB")).toEqual([
+      "A",
+      '<p data-friction-preserved-blank="true"></p>',
+      '<p data-friction-preserved-blank="true"></p>',
+      "B",
+    ]);
+    expect(
+      markdownToHtml('<p data-friction-preserved-blank="true"></p>'),
+    ).toContain('<p data-friction-preserved-blank="true">&nbsp;</p>');
+  });
+
+  it("keeps each list or quote together as one additive division unit", () => {
+    expect(splitPageContentForDivision("- 하나\n- 둘\n\n본문")).toEqual([
+      "- 하나\n- 둘",
+      "본문",
+    ]);
+    expect(splitPageContentForDivision("> 첫 줄\n> 둘째 줄\n\n본문")).toEqual([
+      "> 첫 줄\n> 둘째 줄",
+      "본문",
+    ]);
+  });
+
+  it("never word-splits a multi-item Markdown list", () => {
+    expect(canWordSplitPara("- 하나\n- 둘")).toBe(false);
+    expect(canWordSplitPara("1. 하나\n2. 둘")).toBe(false);
+    expect(canWordSplitPara("- 한 항목 안의 긴 문장")).toBe(true);
+
+    const paragraphs = ["- 하나 둘 셋\n- 넷 다섯 여섯"];
+    expect(simulateGreedyJobs(paragraphs, { 0: 1000 }, 100)).toEqual([]);
+  });
+});
 
 describe("splitContentToPages", () => {
   it("splits content on --- dividers", () => {

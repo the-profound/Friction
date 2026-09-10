@@ -4,6 +4,7 @@ import { thoughtTitleMarkdownToText } from "@workspace/api-zod";
 
 export type InlineToken =
   | { kind: "text"; value: string }
+  | { kind: "break"; value: "\n" }
   | { kind: "bold"; value: string }
   | { kind: "italic"; value: string }
   | { kind: "bold_italic"; value: string }
@@ -14,7 +15,12 @@ export type MarkdownBlockType =
   | { type: "h2"; tokens: InlineToken[]; rawText: string }
   | { type: "h3"; tokens: InlineToken[]; rawText: string }
   | { type: "paragraph"; tokens: InlineToken[]; rawText: string }
-  | { type: "blockquote"; tokens: InlineToken[]; rawText: string }
+  | {
+      type: "blockquote";
+      tokens: InlineToken[];
+      rawText: string;
+      quoteGroup?: number;
+    }
   | { type: "ul_item"; tokens: InlineToken[]; rawText: string }
   | { type: "ol_item"; tokens: InlineToken[]; rawText: string; index: number };
 
@@ -97,6 +103,8 @@ function parseInlineMarkedTokens(markedTokens: Token[]): InlineToken[] {
           result.push({ kind: "italic", value: child.value });
         }
       }
+    } else if (token.type === "br") {
+      result.push({ kind: "break", value: "\n" });
     } else if (token.type === "link") {
       const t = token as Tokens.Link;
       // Card/list plain text must show a link's label, never its Markdown URL.
@@ -165,6 +173,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
   if (!markdown || !markdown.trim()) return [];
 
   const blocks: MarkdownBlockType[] = [];
+  let quoteGroup = 0;
   const leadingH1 = splitLeadingH1Markdown(markdown);
   const source = leadingH1?.body ?? markdown;
   if (leadingH1) {
@@ -201,6 +210,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
     } else if (token.type === "blockquote") {
       const t = token as Tokens.Blockquote;
       const rawText = t.text;
+      const currentQuoteGroup = quoteGroup++;
       // 내용 없는 ">"(빈 인용, 과거 데이터에 남아 있을 수 있음)는 회색
       // 세로줄만 남기는 잔상이 되므로 빈 단락으로 치환한다.
       if (rawText.trim() === "") {
@@ -209,10 +219,20 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlockType[] {
         const innerBlocks = parseMarkdownBlocks(rawText);
         if (innerBlocks.length > 0) {
           for (const inner of innerBlocks) {
-            blocks.push({ type: "blockquote", tokens: inner.tokens, rawText: inner.rawText });
+            blocks.push({
+              type: "blockquote",
+              tokens: inner.tokens,
+              rawText: inner.rawText,
+              quoteGroup: currentQuoteGroup,
+            });
           }
         } else {
-          blocks.push({ type: "blockquote", tokens: expandUnderlines([{ kind: "text", value: rawText }]), rawText });
+          blocks.push({
+            type: "blockquote",
+            tokens: expandUnderlines([{ kind: "text", value: rawText }]),
+            rawText,
+            quoteGroup: currentQuoteGroup,
+          });
         }
       }
     } else if (token.type === "list") {
