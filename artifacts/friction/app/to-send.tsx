@@ -1,9 +1,9 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { Colors, Spacing, Typography } from "@/constants/tokens";
 import { SendInline } from "@/components/ToInline/SendInline";
@@ -11,6 +11,7 @@ import { SendInline } from "@/components/ToInline/SendInline";
 export default function ToSendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const scheduleNavigationStartedRef = useRef(false);
   const params = useLocalSearchParams<{
     targetGroup?: string;
     targetGroupName?: string;
@@ -50,6 +51,28 @@ export default function ToSendScreen() {
     router.back();
   }, [router]);
 
+  useFocusEffect(
+    useCallback(() => {
+      scheduleNavigationStartedRef.current = false;
+    }, []),
+  );
+
+  const handleScheduleSpace = useCallback(
+    (spaceId: string, articleId: string) => {
+      if (scheduleNavigationStartedRef.current) return;
+      scheduleNavigationStartedRef.current = true;
+      router.push({
+        pathname: "/of-space-schedule-send",
+        params: {
+          id: spaceId,
+          startReservation: "1",
+          prefillArticleId: articleId,
+        },
+      });
+    },
+    [router],
+  );
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
@@ -80,6 +103,7 @@ export default function ToSendScreen() {
         returnToId={params.returnToId}
         prefillKey={prefillKey}
         onSent={handleSendComplete}
+        onScheduleSpace={handleScheduleSpace}
       />
     </View>
   );

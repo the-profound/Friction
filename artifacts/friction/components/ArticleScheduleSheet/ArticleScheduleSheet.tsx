@@ -92,6 +92,8 @@ export type ArticleScheduleSheetProps = {
   assignedCenterSlots?: { slotId: string; date: string; roundId: string }[];
   /** General (CENTER) mode only: true while assigned slot dates are being resolved. */
   isLoadingCenterDates?: boolean;
+  /** Already revalidated LETTER selection supplied by a route entry. */
+  initialArticleId?: string | null;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ export function ArticleScheduleSheet({
   openingRoundId = null,
   assignedCenterSlots,
   isLoadingCenterDates = false,
+  initialArticleId = null,
 }: ArticleScheduleSheetProps) {
   const isOpeningLetter = mode === "opening-letter";
   const isCatchUp = mode === "catch-up";
@@ -126,10 +129,14 @@ export function ArticleScheduleSheet({
 
   const maxDate = isOpeningLetter && maxScheduledAt ? maxScheduledAt : undefined;
 
-  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(
+    () => initialArticleId,
+  );
   // Open the picker immediately on mount so the user lands directly in the
   // OUT-style article list without an extra tap.
-  const [letterPickerVisible, setLetterPickerVisible] = useState(true);
+  const [letterPickerVisible, setLetterPickerVisible] = useState(
+    () => !initialArticleId,
+  );
   const [scheduledAt, setScheduledAt] = useState<Date>(() => {
     if (isOpeningLetter) return minDate;
     return new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -195,6 +202,17 @@ export function ArticleScheduleSheet({
   const handleSave = useCallback(async () => {
     if (!selectedArticleId) {
       showToast({ message: SpaceCopy.scheduledSend_selectArticleWarning, type: "error", duration: 5000, position: "top" });
+      return;
+    }
+    if (!articles.some((article) => article.id === selectedArticleId)) {
+      setSelectedArticleId(null);
+      setLetterPickerVisible(true);
+      showToast({
+        message: "선택한 편지가 삭제되었거나 더 이상 예약할 수 없어요. 편지를 다시 선택해주세요.",
+        type: "error",
+        duration: 5000,
+        position: "top",
+      });
       return;
     }
     if (!isOpeningLetter && !selectedCenterSlot) {
@@ -307,7 +325,7 @@ export function ArticleScheduleSheet({
   }, [
     selectedArticleId, selectedCenterSlot, scheduledAt, isOpeningLetter, isCatchUp, spaceId, letters, userId,
     slotId, createLetter, createSend, queryClient, onSaved, onClose,
-    openingRoundId, maxDate, minDate, showToast,
+    openingRoundId, maxDate, minDate, showToast, articles,
   ]);
 
   const title = isOpeningLetter ? "여는 편지 글 선택" : isCatchUp ? "지난 차례 보충 발신" : "글 예약 발신";

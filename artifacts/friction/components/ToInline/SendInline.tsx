@@ -81,6 +81,7 @@ interface SendInlineProps {
   returnToId?: string;
   prefillKey?: string | number;
   onSent?: () => void;
+  onScheduleSpace: (spaceId: string, articleId: string) => void;
 }
 
 function calendarDateKey(date: Date) {
@@ -111,6 +112,7 @@ export function SendInline({
   returnToId: _returnToId,
   prefillKey,
   onSent,
+  onScheduleSpace,
 }: SendInlineProps) {
   const navBottom = useNavBarBottomSafeArea();
   const queryClient = useQueryClient();
@@ -463,13 +465,23 @@ export function SendInline({
 
   const openSendConfirmation = useCallback(() => {
     if (!canSend) return;
+    if (mode === "space" && selectedSpace && displayedArticle) {
+      onScheduleSpace(selectedSpace.id, displayedArticle.id);
+      return;
+    }
     if (mode === "person") {
       setPendingIsEnvelope(false);
       setEnvelopePromptVisible(true);
     } else {
       setConfirmVisible(true);
     }
-  }, [canSend, mode]);
+  }, [
+    canSend,
+    displayedArticle,
+    mode,
+    onScheduleSpace,
+    selectedSpace,
+  ]);
 
   return (
     <View style={styles.container}>

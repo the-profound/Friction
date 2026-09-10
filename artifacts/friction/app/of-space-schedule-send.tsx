@@ -56,6 +56,7 @@ import {
 } from "@/lib/spaceRoundPresentation";
 import { canResendSpaceScheduledSend } from "@/lib/spaceScheduledSendPresentation";
 import { getOwnedSpaceScheduledSends } from "@/lib/spaceScheduledSendOwnership";
+import { resolveReservationIntentAction } from "@/lib/spaceReservationIntent";
 
 function dateToYmd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -570,13 +571,24 @@ function ChangeSheet({
 export default function SpaceScheduleSendScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { id, slotId, roundId, scheduledDate, openingRoundId, catchUp } = useLocalSearchParams<{
+  const {
+    id,
+    slotId,
+    roundId,
+    scheduledDate,
+    openingRoundId,
+    catchUp,
+    startReservation,
+    prefillArticleId,
+  } = useLocalSearchParams<{
     id: string;
     slotId?: string;
     roundId?: string;
     scheduledDate?: string;
     openingRoundId?: string;
     catchUp?: string;
+    startReservation?: string;
+    prefillArticleId?: string;
   }>();
   const { userId } = useUser();
   const queryClient = useQueryClient();
@@ -590,6 +602,7 @@ export default function SpaceScheduleSendScreen() {
   // "새 글 예약하기" flow: pick an empty slot first, then the article to fill it.
   const [showSlotPicker, setShowSlotPicker] = useState(false);
   const [pickedSlot, setPickedSlot] = useState<EmptySlot | null>(null);
+  const [initialArticleId, setInitialArticleId] = useState<string | null>(null);
 
   const joinContextQuery = useGetSpaceJoinContext(
     id,
@@ -927,6 +940,84 @@ export default function SpaceScheduleSendScreen() {
     setPickedSlot(slot);
   }, []);
 
+  // Consume the send-screen reservation intent once. The route's article ID is
+  // only trusted after the authenticated LETTER list confirms it is still
+  // eligible, so deleted or stale selections never reach the reservation API.
+  const consumedReservationIntentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (startReservation !== "1" || !prefillArticleId) return;
+    const intentKey = `${id}:${prefillArticleId}`;
+    if (consumedReservationIntentRef.current === intentKey) return;
+    const action = resolveReservationIntentAction({
+      articleQueryPending: articlesQuery.isLoading || articlesQuery.isFetching,
+      eligibilityPending:
+        emptySlots === undefined ||
+        roundsQuery.isLoading ||
+        sendsQuery.isLoading ||
+        joinContextQuery.isLoading,
+      isSchedulingBlocked,
+      slotCount: emptySlots?.length ?? 0,
+      hasUnresolvedCenterAssignment,
+    });
+    if (action === "wait") return;
+
+    consumedReservationIntentRef.current = intentKey;
+    const articleIsEligible =
+      !articlesQuery.isError &&
+      articles.some((article) => article.id === prefillArticleId);
+    setInitialArticleId(articleIsEligible ? prefillArticleId : null);
+    if (!articleIsEligible) {
+      showToast({
+        message: articlesQuery.isError
+          ? "선택한 편지를 확인하지 못했어요. 편지를 다시 선택해주세요."
+          : "선택한 편지가 삭제되었거나 더 이상 예약할 수 없어요. 편지를 다시 선택해주세요.",
+        type: "error",
+        duration: 5000,
+        position: "top",
+      });
+    }
+    if (action === "open-slot-picker") {
+      setShowSlotPicker(true);
+    } else if (action === "blocked") {
+      showToast({
+        message: schedulingBlockReason ?? "지금은 이 공간에 글을 예약할 수 없어요.",
+        type: "error",
+        duration: 5000,
+        position: "top",
+      });
+    } else if (action === "unresolved-slot") {
+      showToast({
+        message: "배정된 자리가 있지만 날짜가 아직 설정되지 않았어요. 공간장에게 문의해주세요.",
+        type: "error",
+        duration: 5000,
+        position: "top",
+      });
+    } else {
+      showToast({
+        message: "이미 글을 모두 올렸어요!",
+        type: "info",
+        duration: 5000,
+        position: "top",
+      });
+    }
+  }, [
+    articles,
+    articlesQuery.isError,
+    articlesQuery.isFetching,
+    articlesQuery.isLoading,
+    emptySlots,
+    hasUnresolvedCenterAssignment,
+    id,
+    isSchedulingBlocked,
+    joinContextQuery.isLoading,
+    prefillArticleId,
+    roundsQuery.isLoading,
+    schedulingBlockReason,
+    sendsQuery.isLoading,
+    showToast,
+    startReservation,
+  ]);
+
   // Deep-link from the round card's "여는 편지 작성" button: preselect that
   // round's opening slot and jump straight into article/date selection,
   // skipping the slot picker sheet entirely. Re-validated against the same
@@ -1195,12 +1286,16 @@ export default function SpaceScheduleSendScreen() {
           isArticlesLoading={articlesQuery.isLoading}
           isArticlesError={articlesQuery.isError}
           onRefetchArticles={() => articlesQuery.refetch()}
-          onClose={() => setPickedSlot(null)}
+          onClose={() => {
+            setPickedSlot(null);
+            setInitialArticleId(null);
+          }}
           onSaved={handleSaved}
           onGoToArchive={handleGoToArchive}
           assignedCenterSlots={pickedSlot.kind === "center" ? [pickedSlot] : undefined}
           initialScheduledDate={pickedSlot.kind === "center" ? pickedSlot.date : null}
           isLoadingCenterDates={false}
+          initialArticleId={initialArticleId}
           openingRoundId={pickedSlot.kind === "opening" ? pickedSlot.roundId : null}
           maxScheduledAt={
             pickedSlot.kind === "opening" && pickedSlot.maxDate
