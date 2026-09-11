@@ -151,25 +151,26 @@ export default function CoverEditScreen() {
   );
 
   const handlePhotoCoverCommit = useCallback(
-    async (nextCover: ArticleCover) => {
+    async (savedCover: ArticleCover) => {
       if (!id) throw new Error("편지 정보를 찾을 수 없어요.");
-      if (saveCoverTimerRef.current) {
-        clearTimeout(saveCoverTimerRef.current);
-        saveCoverTimerRef.current = null;
-      }
-      const pending = pendingCoverRef.current;
-      if (pending) {
-        await persistCover(pending);
-        if (pendingCoverRef.current === pending) {
-          pendingCoverRef.current = null;
-        }
-      }
-      await persistCover(nextCover);
-      setCover(nextCover);
+      // Verification already saved this exact cover with its inspected image
+      // bytes. Reconcile the live preview and every article cache from that
+      // server-owned value instead of issuing a second PATCH.
+      setCover(savedCover);
       pendingCoverRef.current = null;
+      patchArticleInRecordCaches(queryClient, id, { cover: savedCover });
+      stageArticleTransitionSnapshot(queryClient, id, { cover: savedCover }, article);
     },
-    [id, persistCover],
+    [id, queryClient, article],
   );
+
+  const preparePhotoCommit = useCallback(async () => {
+    if (saveCoverTimerRef.current) {
+      clearTimeout(saveCoverTimerRef.current);
+      saveCoverTimerRef.current = null;
+    }
+    await flushCoverSave();
+  }, [flushCoverSave]);
 
   const isCoverUploadingRef = useRef(false);
   const handleCoverUploadStateChange = useCallback(
@@ -299,6 +300,7 @@ export default function CoverEditScreen() {
             onChange={handleCoverChange}
             articleId={id}
             onPhotoOperationStateChange={handleCoverUploadStateChange}
+            onPreparePhotoCommit={preparePhotoCommit}
             onCommitPhotoCover={handlePhotoCoverCommit}
           />
         </View>

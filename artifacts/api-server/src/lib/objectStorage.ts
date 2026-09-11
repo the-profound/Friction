@@ -157,19 +157,40 @@ export class ObjectStorageService {
     const detected = inspectCoverImageBytes(bytes, maxBytes);
 
     const privateObjectDir = this.getPrivateObjectDir();
+    const stagingObjectId = stagedFile.name.split("/").pop();
+    if (!stagingObjectId) {
+      throw new InvalidCoverImageError("Invalid staged cover image path");
+    }
+    // A retry must target the same immutable object. Pair the unguessable
+    // staging object ID with its pinned generation so a later PUT to the
+    // short-lived staging URL can never replace the bytes we publish.
     const destinationPath =
-      `${privateObjectDir}/cover-images/${articleId}/${randomUUID()}.${detected.extension}`;
+      `${privateObjectDir}/cover-images/${articleId}/${stagingObjectId}-${generation}.${detected.extension}`;
     const { bucketName, objectName } = parseObjectPath(destinationPath);
     const destination = objectStorageClient.bucket(bucketName).file(objectName);
     // Publish the exact bytes we inspected to a new immutable-by-name object.
     // The staging PUT URL remains valid briefly, so moving the mutable source
     // would allow it to be overwritten between verification and publication.
-    await destination.save(bytes, {
-      resumable: false,
-      contentType: detected.contentType,
-      validation: "crc32c",
-      preconditionOpts: { ifGenerationMatch: 0 },
-    });
+    try {
+      await destination.save(bytes, {
+        resumable: false,
+        contentType: detected.contentType,
+        validation: "crc32c",
+        preconditionOpts: { ifGenerationMatch: 0 },
+      });
+    } catch (error: unknown) {
+      // `ifGenerationMatch: 0` intentionally rejects a second publication.
+      // It is only a successful retry when the existing immutable object has
+      // the exact bytes we just inspected; otherwise fail closed.
+      const statusCode = (error as { code?: unknown })?.code;
+      if (statusCode !== 412 && statusCode !== "412") throw error;
+      const [publishedBytes] = await destination.download();
+      if (!Buffer.from(publishedBytes).equals(Buffer.from(bytes))) {
+        throw new InvalidCoverImageError(
+          "Published cover image does not match the verified upload",
+        );
+      }
+    }
     return `/objects/cover-images/${articleId}/${destination.name.split("/").pop()}`;
   }
 

@@ -18,6 +18,7 @@ import {
   getArticleCardCoverFontFamily,
   getArticleCardSenderBottomOffset,
 } from "@/lib/articleCoverPresentation";
+import { resolveArticleCoverImageUrl } from "@/utils/articleCover";
 
 // expo-image's SDK typings currently use a React base type that conflicts with
 // this app's React 19 JSX types. Keep shared cover surfaces on expo-image while
@@ -106,7 +107,7 @@ export default function ArticleCardCover({
   const resolvedHeight =
     height ?? (measuredSize.height || resolvedWidth * Sizing.cardRatio);
   const coverType = cover?.type ?? "default";
-  const imageUrl = cover?.imageUrl;
+  const imageUrl = resolveArticleCoverImageUrl(cover?.imageUrl);
   const hasImage =
     coverType === "image" && !!imageUrl && failedImageUrl !== imageUrl;
   // Keep the native image request stable while an ancestor re-renders to hide

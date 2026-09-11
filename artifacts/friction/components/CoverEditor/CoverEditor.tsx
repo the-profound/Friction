@@ -11,7 +11,12 @@ import {
   pickCoverPhoto,
   type SelectedCoverPhoto,
 } from "@/lib/coverPhotoPicker";
-import { CoverPhotoUploadError, uploadCoverPhoto } from "@/lib/coverPhotoUpload";
+import {
+  CoverPhotoUploadError,
+  type CoverPhotoUploadErrorCode,
+  type CoverPhotoUploadAttempt,
+  uploadCoverPhoto,
+} from "@/lib/coverPhotoUpload";
 
 type Panel = "text" | "background" | null;
 
@@ -20,6 +25,7 @@ interface CoverEditorProps {
   onChange: (cover: ArticleCover) => void;
   articleId: string;
   onPhotoOperationStateChange?: (active: boolean) => void;
+  onPreparePhotoCommit: () => Promise<void>;
   onCommitPhotoCover: (cover: ArticleCover) => Promise<void>;
 }
 
@@ -36,6 +42,7 @@ export default function CoverEditor({
   onChange,
   articleId,
   onPhotoOperationStateChange,
+  onPreparePhotoCommit,
   onCommitPhotoCover,
 }: CoverEditorProps) {
   const [local, setLocal] = useState<ArticleCover>(() => resolveArticleCover(cover));
@@ -47,7 +54,8 @@ export default function CoverEditor({
   const [isUploading, setIsUploading] = useState(false);
   const photoOperationInProgressRef = useRef(false);
   const retryPhotoRef = useRef<SelectedCoverPhoto | null>(null);
-  const retryUploadedImageUrlRef = useRef<string | null>(null);
+  const retryAttemptRef = useRef<CoverPhotoUploadAttempt | null>(null);
+  const retryErrorCodeRef = useRef<CoverPhotoUploadErrorCode | null>(null);
 
   // The editor mounts fresh exactly once per visit to the dedicated cover-edit
   // page, so this is the equivalent of the old "re-sanitize on open" effect —
@@ -91,20 +99,26 @@ export default function CoverEditor({
       setPhotoError(null);
       setIsUploading(true);
       try {
-        const imageUrl =
-          retryUploadedImageUrlRef.current ?? (await uploadCoverPhoto(articleId, photo));
-        retryUploadedImageUrlRef.current = imageUrl;
-        const next = { ...localRef.current, type: "image" as const, imageUrl };
-        try {
-          await onCommitPhotoCover(next);
-        } catch {
-          throw new Error("사진 표지를 저장하지 못했어요. 다시 시도해주세요.");
-        }
-        localRef.current = next;
-        setLocal(next);
+        // A photo verification commits its presentation and verified image in
+        // one server operation. Flush the earlier color/font queue first so
+        // it cannot arrive afterward and overwrite the image cover.
+        await onPreparePhotoCommit();
+        const requestedCover = { ...localRef.current, type: "image" as const };
+        const savedCover = await uploadCoverPhoto(
+          articleId,
+          photo,
+          requestedCover,
+          retryAttemptRef.current ?? (retryAttemptRef.current = {}),
+        );
+        await onCommitPhotoCover(savedCover);
+        localRef.current = savedCover;
+        setLocal(savedCover);
         retryPhotoRef.current = null;
-        retryUploadedImageUrlRef.current = null;
+        retryAttemptRef.current = null;
+        retryErrorCodeRef.current = null;
       } catch (error) {
+        retryErrorCodeRef.current =
+          error instanceof CoverPhotoUploadError ? error.code : null;
         setPhotoError(
           error instanceof CoverPhotoUploadError || error instanceof Error
             ? error.message
@@ -114,7 +128,7 @@ export default function CoverEditor({
         setIsUploading(false);
       }
     },
-    [articleId, onCommitPhotoCover],
+    [articleId, onCommitPhotoCover, onPreparePhotoCommit],
   );
 
   const selectPhoto = useCallback(async () => {
@@ -126,7 +140,8 @@ export default function CoverEditor({
     try {
       const selection = await pickCoverPhoto();
       if (!selection) return;
-      retryUploadedImageUrlRef.current = null;
+      retryAttemptRef.current = {};
+      retryErrorCodeRef.current = null;
       await uploadSelectedPhoto(selection);
     } catch (error) {
       setPhotoError(
@@ -147,6 +162,19 @@ export default function CoverEditor({
     if (!photo) {
       await selectPhoto();
       return;
+    }
+    if (retryErrorCodeRef.current === "invalid-image") {
+      // The server inspected bytes and rejected this exact file, so repeating
+      // it cannot recover. Reopen the picker instead of silently resubmitting.
+      retryPhotoRef.current = null;
+      retryAttemptRef.current = null;
+      await selectPhoto();
+      return;
+    }
+    if (retryErrorCodeRef.current === "staged-missing") {
+      // The temporary object has expired or disappeared. Keep the selected
+      // file but allocate a fresh upload target before verifying it again.
+      retryAttemptRef.current = {};
     }
     photoOperationInProgressRef.current = true;
     onPhotoOperationStateChange?.(true);

@@ -23,7 +23,7 @@ describe("CoverEditor color picker integration", () => {
     expect(editor).not.toContain("COVER_TYPES");
     expect(editor).not.toContain("표지 타입");
     expect(editor).toContain("pickCoverPhoto()");
-    expect(editor).toContain("uploadCoverPhoto(articleId, photo)");
+    expect(editor).toContain("await uploadCoverPhoto(");
     expect(editor).toContain('"사진 추가"');
     expect(editor).not.toContain("useImageUpload");
     expect(editor).toContain("onPress={selectPhoto}");
@@ -83,16 +83,19 @@ describe("CoverEditor color picker integration", () => {
   it("only applies an image cover after upload succeeds and keeps a retryable error", () => {
     const editor = read("CoverEditor.tsx");
 
-    expect(editor.indexOf("await uploadCoverPhoto(articleId, photo)")).toBeLessThan(
-      editor.indexOf("await onCommitPhotoCover(next)"),
+    expect(editor.indexOf("await uploadCoverPhoto(")).toBeLessThan(
+      editor.indexOf("await onCommitPhotoCover(savedCover)"),
     );
-    const commitIndex = editor.indexOf("await onCommitPhotoCover(next)");
-    expect(editor.indexOf("await onCommitPhotoCover(next)")).toBeLessThan(
-      editor.indexOf("setLocal(next)", commitIndex),
+    const commitIndex = editor.indexOf("await onCommitPhotoCover(savedCover)");
+    expect(commitIndex).toBeLessThan(
+      editor.indexOf("setLocal(savedCover)", commitIndex),
     );
     expect(editor).toContain("photoOperationInProgressRef.current");
     expect(editor).toContain("retryPhotoRef.current");
-    expect(editor).toContain("retryUploadedImageUrlRef.current");
+    expect(editor).toContain("retryAttemptRef.current");
+    expect(editor).toContain("await onPreparePhotoCommit()");
+    expect(editor).toContain('retryErrorCodeRef.current === "invalid-image"');
+    expect(editor).toContain('retryErrorCodeRef.current === "staged-missing"');
     expect(editor).toContain("다시 시도");
     expect(editor).toContain("accessibilityState={{ disabled: isPhotoBusy, busy: isPhotoBusy }}");
   });

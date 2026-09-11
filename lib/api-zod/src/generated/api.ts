@@ -159,9 +159,10 @@ export const ListUserSpaceLettersResponseItem = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -332,9 +333,10 @@ export const ListArticlesResponseItem = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -404,9 +406,10 @@ export const GetArticleResponse = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -458,9 +461,10 @@ export const UpdateArticleBody = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -525,9 +529,10 @@ export const UpdateArticleResponse = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -557,7 +562,7 @@ export const DeleteArticleParams = zod.object({
 });
 
 /**
- * Returns a short-lived staging upload URL after validating the authenticated article owner, image MIME type, 10MB declared size limit, and editable article status. After uploading bytes to uploadURL, call the verification operation before persisting the cover.
+ * Returns a short-lived staging upload URL after validating the authenticated article owner, image MIME type, 10MB declared size limit, and editable article status. After uploading bytes to uploadURL, call the verification operation to verify, publish, and save the cover atomically.
  * @summary Request an upload URL for an article cover image
  */
 export const RequestArticleCoverUploadUrlParams = zod.object({
@@ -650,9 +655,10 @@ export const CloseArticleResponse = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -675,8 +681,8 @@ export const CloseArticleResponse = zod.object({
 });
 
 /**
- * Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and returns the final image URL.
- * @summary Verify and publish an uploaded article cover image
+ * Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and saves the resulting image cover on the editable article before responding. Retrying the same staged object is idempotent.
+ * @summary Verify, publish, and save an uploaded article cover image
  */
 export const VerifyArticleCoverUploadParams = zod.object({
   id: zod.coerce.string().uuid(),
@@ -685,13 +691,64 @@ export const VerifyArticleCoverUploadParams = zod.object({
 export const verifyArticleCoverUploadBodyObjectPathRegExp = new RegExp(
   "^\/objects\/cover-staging",
 );
+export const verifyArticleCoverUploadBodyCoverFontFamilyDefault = `sans`;
 
 export const VerifyArticleCoverUploadBody = zod.object({
   objectPath: zod.string().regex(verifyArticleCoverUploadBodyObjectPathRegExp),
+  cover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .optional()
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(verifyArticleCoverUploadBodyCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
+      align: zod.enum(["left", "center"]),
+    })
+    .describe(
+      "Cover text presentation to retain when the verified image becomes the article cover. imageUrl is ignored and derived by the server.",
+    ),
 });
+
+export const verifyArticleCoverUploadResponseCoverFontFamilyDefault = `sans`;
 
 export const VerifyArticleCoverUploadResponse = zod.object({
   imageUrl: zod.string().describe("Relative API URL for the verified image"),
+  cover: zod
+    .object({
+      type: zod.enum(["image", "color", "default"]),
+      imageUrl: zod
+        .string()
+        .optional()
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
+      bgColor: zod
+        .string()
+        .optional()
+        .describe("Background color hex (used when type=color)"),
+      textColor: zod.string().describe("Text color hex for title overlay"),
+      fontFamily: zod
+        .enum(["sans", "serif"])
+        .default(verifyArticleCoverUploadResponseCoverFontFamilyDefault)
+        .describe(
+          "Cover text font family. Existing covers without this value use sans.",
+        ),
+      align: zod.enum(["left", "center"]),
+    })
+    .describe("Authoritative cover saved on the article"),
 });
 
 /**
@@ -746,9 +803,10 @@ export const TransitionArticleStatusResponse = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -875,9 +933,10 @@ export const FinalizeArticleResponse = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -1018,9 +1077,10 @@ export const ListInboxResponseItem = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -1147,9 +1207,10 @@ export const GetInboxItemResponse = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -1282,9 +1343,10 @@ export const MarkInboxOpenedResponse = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -1411,9 +1473,10 @@ export const MarkInboxReadResponse = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -1663,9 +1726,10 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -2160,9 +2224,10 @@ export const ListTeamArticlesResponseItem = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -3271,9 +3336,10 @@ export const ListAllSpaceScheduledSendsResponseItem = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -3718,9 +3784,10 @@ export const ListSpaceLettersResponseItem = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -3869,9 +3936,10 @@ export const UpdateSpaceLetterVisibilityResponse = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()
@@ -4554,9 +4622,10 @@ export const ListSendRecordsResponseItem = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -4732,9 +4801,10 @@ export const GetSendRecordResponse = zod.object({
           type: zod.enum(["image", "color", "default"]),
           imageUrl: zod
             .string()
-            .url()
             .optional()
-            .describe("Cover image URL (used when type=image)"),
+            .describe(
+              "Cover image URL or server-relative API path (used when type=image)",
+            ),
           bgColor: zod
             .string()
             .optional()
@@ -5211,9 +5281,10 @@ export const PromoteThoughtResponse = zod.object({
       type: zod.enum(["image", "color", "default"]),
       imageUrl: zod
         .string()
-        .url()
         .optional()
-        .describe("Cover image URL (used when type=image)"),
+        .describe(
+          "Cover image URL or server-relative API path (used when type=image)",
+        ),
       bgColor: zod
         .string()
         .optional()

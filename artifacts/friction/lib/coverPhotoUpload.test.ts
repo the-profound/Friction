@@ -5,6 +5,7 @@ import {
   type ArticleCoverVerificationResponse,
 } from "@workspace/api-client-react";
 import {
+  type CoverPhotoUploadAttempt,
   CoverPhotoUploadError,
   uploadNativeCoverFile,
   uploadCoverPhoto,
@@ -13,6 +14,7 @@ import {
   MAX_COVER_PHOTO_BYTES,
   type SelectedCoverPhoto,
 } from "./coverPhotoTypes";
+import type { ArticleCover } from "@workspace/api-client-react";
 
 const photo: SelectedCoverPhoto = {
   source: "web",
@@ -21,6 +23,14 @@ const photo: SelectedCoverPhoto = {
   size: 4,
   contentType: "image/jpeg",
   blob: new Blob(["test"], { type: "image/jpeg" }),
+};
+
+const cover: ArticleCover = {
+  type: "color",
+  bgColor: "#FAFAFA",
+  textColor: "#18181B",
+  fontFamily: "sans",
+  align: "left",
 };
 
 function dependencies(overrides: {
@@ -44,6 +54,11 @@ function dependencies(overrides: {
     if (overrides.verifyError) throw overrides.verifyError;
     return overrides.verified ?? {
       imageUrl: "/api/storage/objects/cover-images/article-id/cover.jpg",
+      cover: {
+        ...cover,
+        type: "image" as const,
+        imageUrl: "/api/storage/objects/cover-images/article-id/cover.jpg",
+      },
     };
   });
   const put = vi.fn(
@@ -75,9 +90,11 @@ describe("uploadCoverPhoto", () => {
   it("requests an authenticated upload target, uploads bytes, and returns an absolute image URL", async () => {
     const { deps, requestUploadUrl, verifyUpload, put } = dependencies();
 
-    await expect(uploadCoverPhoto("article-id", photo, deps)).resolves.toBe(
-      "https://api.example.test/api/storage/objects/cover-images/article-id/cover.jpg",
-    );
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, deps)).resolves.toEqual({
+      ...cover,
+      type: "image",
+      imageUrl: "https://api.example.test/api/storage/objects/cover-images/article-id/cover.jpg",
+    });
     expect(requestUploadUrl).toHaveBeenCalledWith("article-id", photo);
     expect(put).toHaveBeenCalledTimes(1);
     expect(put.mock.calls[0]?.[1]).toMatchObject({
@@ -88,13 +105,14 @@ describe("uploadCoverPhoto", () => {
     expect(verifyUpload).toHaveBeenCalledWith(
       "article-id",
       "/objects/cover-staging/article-id/upload-id",
+      cover,
     );
   });
 
   it("does not request an upload target when the validated session is missing", async () => {
     const { deps, requestUploadUrl, put } = dependencies({ token: null });
 
-    await expect(uploadCoverPhoto("article-id", photo, deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, deps)).rejects.toMatchObject({
       code: "auth-expired",
     } satisfies Partial<CoverPhotoUploadError>);
     expect(requestUploadUrl).not.toHaveBeenCalled();
@@ -109,7 +127,7 @@ describe("uploadCoverPhoto", () => {
     );
     const { deps, put } = dependencies({ requestError: authError });
 
-    await expect(uploadCoverPhoto("article-id", photo, deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, deps)).rejects.toMatchObject({
       code: "auth-expired",
     });
     expect(put).not.toHaveBeenCalled();
@@ -124,10 +142,10 @@ describe("uploadCoverPhoto", () => {
     const server = dependencies({ requestError: serverError });
     const network = dependencies({ requestError: new TypeError("offline") });
 
-    await expect(uploadCoverPhoto("article-id", photo, server.deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, server.deps)).rejects.toMatchObject({
       code: "server-failed",
     });
-    await expect(uploadCoverPhoto("article-id", photo, network.deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, network.deps)).rejects.toMatchObject({
       code: "request-failed",
     });
   });
@@ -139,6 +157,8 @@ describe("uploadCoverPhoto", () => {
       uploadCoverPhoto(
         "article-id",
         { ...photo, size: MAX_COVER_PHOTO_BYTES + 1 },
+        cover,
+        {},
         deps,
       ),
     ).rejects.toMatchObject({ code: "too-large" });
@@ -150,7 +170,7 @@ describe("uploadCoverPhoto", () => {
       putResponse: new Response(null, { status: 403 }),
     });
 
-    await expect(uploadCoverPhoto("article-id", photo, deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, deps)).rejects.toMatchObject({
       code: "upload-failed",
     });
   });
@@ -161,10 +181,10 @@ describe("uploadCoverPhoto", () => {
     });
     const network = dependencies({ putError: new TypeError("offline") });
 
-    await expect(uploadCoverPhoto("article-id", photo, server.deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, server.deps)).rejects.toMatchObject({
       code: "server-failed",
     });
-    await expect(uploadCoverPhoto("article-id", photo, network.deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, network.deps)).rejects.toMatchObject({
       code: "request-failed",
     });
   });
@@ -179,9 +199,10 @@ describe("uploadCoverPhoto", () => {
     };
     const { deps, put, putNativeFile, verifyUpload } = dependencies();
 
-    await expect(uploadCoverPhoto("article-id", nativePhoto, deps)).resolves.toContain(
-      "/cover.jpg",
-    );
+    await expect(uploadCoverPhoto("article-id", nativePhoto, cover, {}, deps)).resolves.toMatchObject({
+      type: "image",
+      imageUrl: expect.stringContaining("/cover.jpg"),
+    });
     expect(put).not.toHaveBeenCalled();
     expect(putNativeFile).toHaveBeenCalledWith(
       "https://storage.example.test/upload",
@@ -204,7 +225,7 @@ describe("uploadCoverPhoto", () => {
       );
       const { deps } = dependencies({ verifyError: error });
 
-      await expect(uploadCoverPhoto("article-id", photo, deps)).rejects.toMatchObject({
+      await expect(uploadCoverPhoto("article-id", photo, cover, {}, deps)).rejects.toMatchObject({
         code: expectedCode,
       });
     },
@@ -213,8 +234,49 @@ describe("uploadCoverPhoto", () => {
   it("does not return an image URL unless the server verifies the uploaded bytes", async () => {
     const { deps } = dependencies({ verifyError: new Error("invalid image") });
 
-    await expect(uploadCoverPhoto("article-id", photo, deps)).rejects.toMatchObject({
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, deps)).rejects.toMatchObject({
       code: "request-failed",
+    });
+  });
+
+  it("retries a lost verification response with the same staged upload and without another PUT", async () => {
+    const responseLost = new TypeError("network disconnected after save");
+    const first = dependencies({ verifyError: responseLost });
+    const attempt: CoverPhotoUploadAttempt = {};
+
+    await expect(uploadCoverPhoto("article-id", photo, cover, attempt, first.deps)).rejects.toMatchObject({
+      code: "request-failed",
+    });
+    expect(first.requestUploadUrl).toHaveBeenCalledTimes(1);
+    expect(first.put).toHaveBeenCalledTimes(1);
+
+    const recovered = dependencies();
+    const changedPresentation = { ...cover, textColor: "#FFFFFF", fontFamily: "serif" as const };
+    await expect(uploadCoverPhoto("article-id", photo, changedPresentation, attempt, recovered.deps)).resolves.toMatchObject({
+      type: "image",
+    });
+    expect(recovered.requestUploadUrl).not.toHaveBeenCalled();
+    expect(recovered.put).not.toHaveBeenCalled();
+    expect(recovered.verifyUpload).toHaveBeenCalledWith(
+      "article-id",
+      "/objects/cover-staging/article-id/upload-id",
+      cover,
+    );
+    expect(attempt.cover).toEqual(cover);
+  });
+
+  it("identifies a final article-cover save failure separately from image verification", async () => {
+    const saveError = new ApiError(
+      new Response(JSON.stringify({ error: "save failed", code: "COVER_IMAGE_SAVE_FAILED" }), {
+        status: 500,
+      }),
+      { error: "save failed", code: "COVER_IMAGE_SAVE_FAILED" },
+      { method: "POST", url: "/api/articles/article-id/cover-image/verify" },
+    );
+    const { deps } = dependencies({ verifyError: saveError });
+
+    await expect(uploadCoverPhoto("article-id", photo, cover, {}, deps)).rejects.toMatchObject({
+      code: "cover-save-failed",
     });
   });
 });

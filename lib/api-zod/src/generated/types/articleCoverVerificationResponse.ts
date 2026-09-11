@@ -5,8 +5,11 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleCover } from "./articleCover";
 
 export interface ArticleCoverVerificationResponse {
   /** Relative API URL for the verified image */
   imageUrl: string;
+  /** Authoritative cover saved on the article */
+  cover: ArticleCover;
 }

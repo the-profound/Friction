@@ -14,7 +14,7 @@ import type { ArticleCoverType } from "./articleCoverType";
  */
 export interface ArticleCover {
   type: ArticleCoverType;
-  /** Cover image URL (used when type=image) */
+  /** Cover image URL or server-relative API path (used when type=image) */
   imageUrl?: string;
   /** Background color hex (used when type=color) */
   bgColor?: string;

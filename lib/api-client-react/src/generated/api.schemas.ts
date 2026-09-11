@@ -121,7 +121,7 @@ export const ArticleCoverAlign = {
  */
 export interface ArticleCover {
   type: ArticleCoverType;
-  /** Cover image URL (used when type=image) */
+  /** Cover image URL or server-relative API path (used when type=image) */
   imageUrl?: string;
   /** Background color hex (used when type=color) */
   bgColor?: string;
@@ -207,11 +207,15 @@ export interface ArticleCoverUploadResponse {
 export interface ArticleCoverVerificationInput {
   /** @pattern ^/objects/cover-staging/ */
   objectPath: string;
+  /** Cover text presentation to retain when the verified image becomes the article cover. imageUrl is ignored and derived by the server. */
+  cover: ArticleCover;
 }
 
 export interface ArticleCoverVerificationResponse {
   /** Relative API URL for the verified image */
   imageUrl: string;
+  /** Authoritative cover saved on the article */
+  cover: ArticleCover;
 }
 
 export type TransitionArticleBodyTargetStatus =

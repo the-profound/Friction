@@ -5,8 +5,11 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ArticleCover } from "./articleCover";
 
 export interface ArticleCoverVerificationInput {
   /** @pattern ^/objects/cover-staging/ */
   objectPath: string;
+  /** Cover text presentation to retain when the verified image becomes the article cover. imageUrl is ignored and derived by the server. */
+  cover: ArticleCover;
 }

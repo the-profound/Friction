@@ -83,6 +83,12 @@ const objectStorageService = new ObjectStorageService();
 const MAX_COVER_IMAGE_BYTES = 10 * 1024 * 1024;
 
 class ArticleMutationConflictError extends Error {}
+class CoverImageVerificationError extends Error {
+  constructor(readonly cause: unknown) {
+    super("Cover image verification failed");
+    this.name = "CoverImageVerificationError";
+  }
+}
 
 function getPostgresErrorCode(error: unknown): string | undefined {
   return (error as { cause?: { code?: string } })?.cause?.code;
@@ -602,7 +608,12 @@ router.post(
 );
 
 router.post("/articles/:id/cover-image", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const id =
+    typeof req.params.id === "string" ? req.params.id : req.params.id?.[0];
+  if (!id) {
+    res.status(400).json({ error: "Invalid article ID" });
+    return;
+  }
   const parsed = RequestArticleCoverUploadUrlBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
@@ -645,7 +656,12 @@ router.post(
   "/articles/:id/cover-image/verify",
   requireAuth,
   async (req, res) => {
-    const { id } = req.params;
+    const id =
+      typeof req.params.id === "string" ? req.params.id : req.params.id?.[0];
+    if (!id) {
+      res.status(400).json({ error: "Invalid article ID" });
+      return;
+    }
     const parsed = VerifyArticleCoverUploadBody.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -654,49 +670,103 @@ router.post(
       return;
     }
 
-    const article = await findEditableOwnedArticle(id, req.user!.id);
-    if (article === "not-found") {
-      res.status(404).json({ error: "Article not found" });
-      return;
-    }
-    if (article === "forbidden") {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    if (article.status === "LETTER") {
-      res
-        .status(400)
-        .json({ error: "Cannot change cover image of a finalized letter" });
-      return;
-    }
-
     try {
-      const objectPath = await objectStorageService.verifyAndPublishCoverImage(
-        id,
-        parsed.data.objectPath,
-        MAX_COVER_IMAGE_BYTES,
-      );
-      res.json(
-        VerifyArticleCoverUploadResponse.parse({
-          imageUrl: `/api/storage${objectPath}`,
-        }),
-      );
+      const result = await db.transaction(async (tx) => {
+        // A photo commit has an external publication step. Hold the row lock
+        // through it so a concurrent cover mutation cannot make a successfully
+        // verified image point at an outdated article snapshot.
+        const [article] = await tx
+          .select()
+          .from(articlesTable)
+          .where(eq(articlesTable.id, id))
+          .limit(1)
+          .for("update");
+        if (
+          !article ||
+          article.deletedAt ||
+          !["DIVIDING", "CLOSING", "LETTER"].includes(article.status)
+        ) {
+          return { status: 404, body: { error: "Article not found" } } as const;
+        }
+        if (article.authorId !== req.user!.id) {
+          return { status: 403, body: { error: "Forbidden" } } as const;
+        }
+        if (article.status === "LETTER") {
+          return {
+            status: 400,
+            body: { error: "Cannot change cover image of a finalized letter" },
+          } as const;
+        }
+
+        let objectPath: string;
+        try {
+          objectPath = await objectStorageService.verifyAndPublishCoverImage(
+            id,
+            parsed.data.objectPath,
+            MAX_COVER_IMAGE_BYTES,
+          );
+        } catch (error) {
+          throw new CoverImageVerificationError(error);
+        }
+        const imageUrl = `/api/storage${objectPath}`;
+        // The client can control presentation settings, but never the stored
+        // image path. It must come from the bytes that were verified above.
+        const cover = {
+          ...parsed.data.cover,
+          type: "image" as const,
+          imageUrl,
+        };
+        const [updated] = await tx
+          .update(articlesTable)
+          .set({ cover })
+          .where(
+            and(
+              eq(articlesTable.id, id),
+              eq(articlesTable.authorId, req.user!.id),
+              eq(articlesTable.status, article.status),
+              isNull(articlesTable.deletedAt),
+            ),
+          )
+          .returning();
+        if (!updated) throw new ArticleMutationConflictError();
+        return {
+          status: 200,
+          body: VerifyArticleCoverUploadResponse.parse({ imageUrl, cover }),
+        } as const;
+      });
+      res.status(result.status).json(result.body);
     } catch (error) {
-      if (error instanceof ObjectNotFoundError) {
+      if (error instanceof ArticleMutationConflictError) {
+        res.status(409).json({
+          error: "Article changed while its cover was being saved. Please retry.",
+          code: "COVER_IMAGE_SAVE_CONFLICT",
+        });
+        return;
+      }
+      if (!(error instanceof CoverImageVerificationError)) {
+        req.log.error({ err: error }, "Error saving verified cover image");
+        res.status(500).json({
+          error: "Failed to save verified cover image",
+          code: "COVER_IMAGE_SAVE_FAILED",
+        });
+        return;
+      }
+      const verificationError = error.cause;
+      if (verificationError instanceof ObjectNotFoundError) {
         res.status(404).json({
           error: "Staged cover image not found",
           code: "COVER_IMAGE_STAGING_NOT_FOUND",
         });
         return;
       }
-      if (error instanceof InvalidCoverImageError) {
+      if (verificationError instanceof InvalidCoverImageError) {
         res.status(400).json({
-          error: error.message,
+          error: verificationError.message,
           code: "COVER_IMAGE_INVALID",
         });
         return;
       }
-      req.log.error({ err: error }, "Error verifying cover image upload");
+      req.log.error({ err: verificationError }, "Error verifying cover image upload");
       res.status(500).json({
         error: "Failed to verify cover image",
         code: "COVER_IMAGE_VERIFY_FAILED",

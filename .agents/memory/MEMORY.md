@@ -145,3 +145,4 @@
 - [Body typography measurement](friction-body-typography-measurement.md) — pagination must measure composed CSS prefixes and remeasure final recomposed pages before accepting boundaries.
 - [One-time forced-redirect guard](friction-one-time-forced-redirect-guard.md) — flip the "done" ref on the hydration signal, not the redirect outcome, or a later real nav to the same route gets falsely bounced.
 - [Friction tab prefetch warm-up](friction-tab-prefetch-warmup.md) — reuse each screen's exact queryKey+fetcher; an optional "test-only" id prop can be truthy in every real session too — verify call sites before trusting it as a gate.
+- [Friction cover-photo commit](friction-cover-photo-commit.md) — a verified cover image and article cover must commit as one outcome; retries freeze the staged generation and presentation snapshot.

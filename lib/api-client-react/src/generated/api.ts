@@ -1418,7 +1418,7 @@ export const useDeleteArticle = <
 };
 
 /**
- * Returns a short-lived staging upload URL after validating the authenticated article owner, image MIME type, 10MB declared size limit, and editable article status. After uploading bytes to uploadURL, call the verification operation before persisting the cover.
+ * Returns a short-lived staging upload URL after validating the authenticated article owner, image MIME type, 10MB declared size limit, and editable article status. After uploading bytes to uploadURL, call the verification operation to verify, publish, and save the cover atomically.
  * @summary Request an upload URL for an article cover image
  */
 export const getRequestArticleCoverUploadUrlUrl = (id: string) => {
@@ -1599,8 +1599,8 @@ export const useCloseArticle = <
 };
 
 /**
- * Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and returns the final image URL.
- * @summary Verify and publish an uploaded article cover image
+ * Checks the staged object's actual byte length and raster image signature, publishes it under a readable cover path, and saves the resulting image cover on the editable article before responding. Retrying the same staged object is idempotent.
+ * @summary Verify, publish, and save an uploaded article cover image
  */
 export const getVerifyArticleCoverUploadUrl = (id: string) => {
   return `/api/articles/${id}/cover-image/verify`;
@@ -1668,7 +1668,7 @@ export type VerifyArticleCoverUploadMutationBody =
 export type VerifyArticleCoverUploadMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Verify and publish an uploaded article cover image
+ * @summary Verify, publish, and save an uploaded article cover image
  */
 export const useVerifyArticleCoverUpload = <
   TError = ErrorType<ErrorResponse>,
