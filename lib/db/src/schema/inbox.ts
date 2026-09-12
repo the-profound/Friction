@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, pgTable, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigserial, boolean, pgTable, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -30,6 +30,16 @@ export const inboxTable = pgTable("inbox", {
   isRead: boolean("is_read").notNull().default(false),
   isEnvelope: boolean("is_envelope").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * Global append-only ordering identity (Task #2192), independent of
+   * `created_at` (which is transaction-time and can tie across a bulk
+   * insert) and unaffected by later hard-deletion of any row — a row's
+   * `sequence` never gets reused or renumbered once assigned, so it is
+   * safe to use as a durable "has this inbox row already been accounted
+   * for" cursor (e.g. in the letter-arrived push notification ledger) even
+   * after other rows for the same recipient/slot are deleted.
+   */
+  sequence: bigserial("sequence", { mode: "number" }).notNull(),
 }, (t) => [
   unique("inbox_recipient_article_sources_unique")
     .on(

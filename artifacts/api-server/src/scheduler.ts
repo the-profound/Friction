@@ -8,20 +8,32 @@
  *
  * Letter-arrived push:
  *   Every recipient of a letter delivered at a given 06:00 KST slot gets a
- *   push for that slot exactly once. Two things can trigger a recheck of a
- *   given slot: the daily 06:00 KST timer, and — critically — the
- *   reservation-processing sweep below, right after it commits inbox rows
- *   for that slot. This closes the race where a slot's space-letter
- *   deliveries are still being committed (5-minute poll, not synced to
- *   06:00) at the moment the independent 06:00 timer fires: the push job no
- *   longer trusts "now" to mean "the sweep is done" — it is re-triggered by
- *   the sweep itself once the relevant rows actually land. `notifyLetterArrivalsForSlot`
- *   aggregates strictly by exact `visibleAt = slot` match (every inbox
- *   insert path pins visibleAt to a canonical 06:00 KST instant — see
- *   ./lib/deliverySlot.ts) and atomically claims each recipient in
- *   `letter_arrival_notifications` before pushing, so calling it more than
- *   once for the same slot — from the timer, from the sweep, or both —
- *   can never double-notify.
+ *   push for that slot exactly once. Three things can trigger a recheck of a
+ *   given slot: the daily 06:00 KST timer, the reservation-processing sweep
+ *   below right after it commits inbox rows for that slot, and the sweep's
+ *   own periodic retry recheck (see below). The sweep+timer pairing closes
+ *   the race where a slot's space-letter deliveries are still being
+ *   committed (5-minute poll, not synced to 06:00) at the moment the
+ *   independent 06:00 timer fires: the push job no longer trusts "now" to
+ *   mean "the sweep is done" — it is re-triggered by the sweep itself once
+ *   the relevant rows actually land. `notifyLetterArrivalsForSlot` aggregates
+ *   strictly by exact `visibleAt = slot` match (every inbox insert path pins
+ *   visibleAt to a canonical 06:00 KST instant — see ./lib/deliverySlot.ts)
+ *   and atomically claims each recipient in `letter_arrival_notifications`
+ *   before pushing, so calling it more than once for the same slot — from
+ *   the timer, from the sweep, or both — can never double-notify.
+ *
+ *   A push that genuinely fails to send releases its claim instead of
+ *   confirming it (see ../lib/letterNotificationQuery.ts), which makes that
+ *   recipient/slot re-claimable — but does not, by itself, guarantee any
+ *   future call actually happens for that exact slot again once neither the
+ *   06:00 timer nor new reservation activity ever revisits it. The sweep
+ *   below closes that gap too: every 5-minute tick, in addition to rechecking
+ *   slots with newly-committed reservation rows, it also asks
+ *   `findDeliverySlotsNeedingLetterPushRetry` for every slot with a released
+ *   or stale-locked (crashed mid-attempt) row and rechecks those as well —
+ *   so a failed push, or one whose process died mid-send, is always retried
+ *   within one sweep interval, never stranded indefinitely.
  *
  * Reservation processing:
  *   Polls every 5 minutes for PENDING `space_scheduled_sends` rows whose
@@ -49,7 +61,12 @@ import { db, spacesTable, spaceParticipationsTable } from "@workspace/db";
 import { eq, and, lt, isNotNull } from "drizzle-orm";
 import { logger } from "./lib/logger";
 import { dispatchNotification } from "./lib/notifications";
-import { claimNewLetterRecipientsForSlot } from "./lib/letterNotificationQuery";
+import {
+  claimNewLetterRecipientsForSlot,
+  confirmLetterNotificationSent,
+  findDeliverySlotsNeedingLetterPushRetry,
+  releaseLetterNotificationClaim,
+} from "./lib/letterNotificationQuery";
 import { buildLetterArrivedMessage, SEND_HOUR_KST } from "./lib/notificationMessages";
 import { normalizeToKst6 } from "./lib/deliverySlot";
 import { sendPush } from "./lib/pushSender";
@@ -221,6 +238,15 @@ export async function notifyLetterArrivalsForSlot(deliverySlot: Date): Promise<v
           { correlationId, tokenCount: 0 },
           "scheduler: no push tokens — skipping user",
         );
+        // Nothing to push, so there is nothing to retry either — confirm
+        // immediately so this recipient's claim doesn't linger unresolved
+        // and block a later trigger from claiming genuinely new letters.
+        await confirmLetterNotificationSent(
+          recipient.userId,
+          deliverySlot,
+          recipient.leaseId,
+          recipient.claimedThroughSequence,
+        );
         continue;
       }
 
@@ -245,6 +271,28 @@ export async function notifyLetterArrivalsForSlot(deliverySlot: Date): Promise<v
       const failCount = results.length - recipientSuccessCount;
       successCount += recipientSuccessCount;
       failureCount += failCount;
+
+      if (recipientSuccessCount > 0) {
+        // At least one device was actually notified — confirm so this
+        // recipient is never re-pushed for these same letters.
+        await confirmLetterNotificationSent(
+          recipient.userId,
+          deliverySlot,
+          recipient.leaseId,
+          recipient.claimedThroughSequence,
+        );
+      } else {
+        // The push genuinely failed to send (provider outage, transient
+        // network error, chunk_send_failed, ...) rather than merely
+        // finding zero recipients — release the claim so a later trigger
+        // for this same slot retries exactly these letters instead of
+        // permanently losing them.
+        await releaseLetterNotificationClaim(
+          recipient.userId,
+          deliverySlot,
+          recipient.leaseId,
+        );
+      }
 
       logger.info(
         {
@@ -321,7 +369,13 @@ export async function runScheduledSendSweep() {
       { err: scheduledSendResult.reason, correlationId },
       "scheduler: processDueScheduledSends failed",
     );
-    return;
+    // Deliberately does NOT return here: the periodic retry-discovery
+    // recheck below is the only guaranteed future trigger for a
+    // released/stale-locked claim, and it must not depend on reservation
+    // processing succeeding on the same tick — they are independent
+    // failure domains (see the allSettled above), and a persistent
+    // reservation-processing outage must never be able to strand a
+    // released letter-push claim indefinitely.
   }
 
   // Re-check the letter-arrived push job for every slot that just had inbox
@@ -329,7 +383,34 @@ export async function runScheduledSendSweep() {
   // race between the 5-minute delivery poll and the independent 06:00
   // timer. Each slot gets its own try/catch so one slot's failure never
   // blocks notifying the others.
-  for (const slot of scheduledSendResult.value.affectedSlots) {
+  const slotsToRecheck = new Map<number, Date>();
+  if (scheduledSendResult.status === "fulfilled") {
+    for (const slot of scheduledSendResult.value.affectedSlots) {
+      slotsToRecheck.set(slot.getTime(), slot);
+    }
+  }
+
+  // Also recheck every slot with a released or stale-locked (crashed
+  // mid-attempt) claim, regardless of whether any new reservation activity
+  // happened for it, and regardless of whether processDueScheduledSends
+  // itself just failed above — this is what actually retries a
+  // genuinely-failed push in production instead of leaving it merely
+  // "eligible" for a retry that no future trigger would otherwise cause.
+  // Runs every 5 minutes, so a release or a stale lock is never stranded
+  // for more than one interval.
+  try {
+    const retrySlots = await findDeliverySlotsNeedingLetterPushRetry();
+    for (const slot of retrySlots) {
+      slotsToRecheck.set(slot.getTime(), slot);
+    }
+  } catch (err) {
+    logger.error(
+      { err, correlationId },
+      "scheduler: findDeliverySlotsNeedingLetterPushRetry failed",
+    );
+  }
+
+  for (const slot of slotsToRecheck.values()) {
     try {
       await notifyLetterArrivalsForSlot(slot);
     } catch (err) {
