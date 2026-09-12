@@ -621,7 +621,7 @@ export default function ClosingScreen() {
               renderPage={(pageIndex, dimensions) => {
                 if (pageIndex === 0) {
                   return (
-                    <View style={styles.coverPreviewWrapper}>
+                    <View style={[styles.coverPreviewWrapper, dimensions]}>
                       <CoverPreview cover={cover} title={title} author={authorName} borderRadius={2} />
                     </View>
                   );

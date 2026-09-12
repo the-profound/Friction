@@ -13,6 +13,6 @@ export const modules: ModuleMap = {
   "./components/mockups/reading-complete/ReadingCompletePreview.tsx": () => import("../components/mockups/reading-complete/ReadingCompletePreview.tsx"),
   "./components/mockups/safe-area-layout/SafeAreaLayoutDiagram.tsx": () => import("../components/mockups/safe-area-layout/SafeAreaLayoutDiagram.tsx"),
   "./components/mockups/writing-screen/ActiveToolbar.tsx": () => import("../components/mockups/writing-screen/ActiveToolbar.tsx"),
-  "./components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx": () => import("../components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx"),
-  "./components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx": () => import("../components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx")
+  "./components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx": () => import("../components/mockups/templates/MissionControlBentoDashboard-kWBE4B/Dashboard.tsx"),
+  "./components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx": () => import("../components/mockups/templates/SwissGridCRMDashboard-S8kGXy/App.tsx")
 };

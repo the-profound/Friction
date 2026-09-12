@@ -45,15 +45,13 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 16,
     overflow: "hidden",
-    aspectRatio: ReaderTokens.aspectRatio,
     width: "100%",
-    maxHeight: 480,
+    height: "100%",
     position: "relative",
   },
   containerCompact: {
     width: COMPACT_PREVIEW_WIDTH,
     height: COMPACT_PREVIEW_HEIGHT,
-    maxHeight: COMPACT_PREVIEW_HEIGHT,
     aspectRatio: ReaderTokens.aspectRatio,
   },
 });

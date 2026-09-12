@@ -9,6 +9,10 @@ import { fitPreviewPagerDimensions } from "./previewGeometry";
 
 const source = readFileSync(join(__dirname, "PreviewPager.tsx"), "utf8");
 const closingSource = readFileSync(join(__dirname, "../../app/on-01c.tsx"), "utf8");
+const coverPreviewSource = readFileSync(
+  join(__dirname, "../CoverPreview/CoverPreview.tsx"),
+  "utf8",
+);
 
 describe("PreviewPager reader parity", () => {
   it("keeps three keyed page instances across role changes", () => {
@@ -113,7 +117,19 @@ describe("PreviewPager reader parity", () => {
     )).toEqual({ width: 382, height: 611.2 });
     expect(source).toContain("fitPreviewPagerDimensions(availableSize, ReaderTokens.aspectRatio)");
     expect(source).not.toContain("480");
+    expect(coverPreviewSource).not.toContain("maxHeight");
     expect(closingSource).not.toContain("previewVerticalOffset");
+  });
+
+  it("makes the closing cover fill the same calculated frame as body pages", () => {
+    expect(closingSource).toContain(
+      "<View style={[styles.coverPreviewWrapper, dimensions]}>",
+    );
+    expect(coverPreviewSource).toContain('width: "100%"');
+    expect(coverPreviewSource).toContain('height: "100%"');
+    expect(coverPreviewSource).toContain("compact && styles.containerCompact");
+    expect(coverPreviewSource).toContain("width: COMPACT_PREVIEW_WIDTH");
+    expect(coverPreviewSource).toContain("height: COMPACT_PREVIEW_HEIGHT");
   });
 
   it("returns no frame until both measured axes are usable", () => {
