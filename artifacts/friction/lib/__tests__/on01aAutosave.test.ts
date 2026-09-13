@@ -236,7 +236,10 @@ describe("on-01a editor hydration and initialization", () => {
     expect(webViewFocusHandler).toContain('type: "editorFocus"');
     expect(screen).not.toContain('Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true))');
     expect(screen).toContain(
-      "contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}",
+      "contentBottomPadding={editorBottomVisibility.contentBottomPadding}",
+    );
+    expect(screen).toContain(
+      "obscuredBottomPx={editorBottomVisibility.obscuredBottomPx}",
     );
   });
 
@@ -1245,7 +1248,9 @@ describe("on-01a guarded return navigation", () => {
       join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditorWeb.tsx"),
       "utf8",
     );
-    expect(screen).toContain("contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}");
+    expect(screen).toContain(
+      "contentBottomPadding={editorBottomVisibility.contentBottomPadding}",
+    );
     expect(webEditor).toContain("contentBottomPadding = 120");
     expect(webEditor).toContain('"--content-bottom-padding"');
     expect(webEditor).toContain("padding: 16px 0 var(--content-bottom-padding)");

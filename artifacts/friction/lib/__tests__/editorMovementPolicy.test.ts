@@ -95,7 +95,21 @@ describe("WebView blank-surface tap and swipe-down gesture contracts", () => {
     expect(source).toContain("let activeTouchCount = 0;");
     expect(source).toContain("let pendingViewportCorrectionAfterTouch = false;");
     expect(source).toMatch(
-      /function correctDocumentViewport[\s\S]{0,200}if \(activeTouchCount > 0\)/,
+      /function correctDocumentViewport[\s\S]{0,250}if \(activeTouchCount > 0/,
+    );
+  });
+
+  it("keeps correcting toward the active selection handle during its drag session", () => {
+    const source = readEditorSource();
+    expect(source).toContain("let activeSelectionEndpoint: SelectionEndpoint | null = null;");
+    expect(source).toContain("resolveActiveSelectionEndpoint({");
+    expect(source).toContain('activeSelectionEndpoint === "anchor"');
+    expect(source).toContain("activeTouchCount > 0 && !selectionHandleDragging");
+    expect(source).toMatch(
+      /onSelectionUpdate[\s\S]{0,180}selectionHandleDragging[\s\S]{0,80}scheduleViewportCorrection\(true\)/,
+    );
+    expect(source).toMatch(
+      /selectionHandleDragging = false;[\s\S]{0,120}onSelHandleDragEnd[\s\S]{0,300}viewportCorrectionGeneration\+\+;[\s\S]{0,80}activeSelectionEndpoint = null/,
     );
   });
 });

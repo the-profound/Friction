@@ -54,6 +54,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       hideTitle,
       scrollEnabled = true,
       contentBottomPadding = 120,
+      obscuredBottomPx = 0,
       onOverflowSplit,
       swipeDownToDismissKeyboard = true,
     },
@@ -320,8 +321,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
       sendCommand({
         type: "setContentBottomPadding",
         paddingPx: Math.max(0, contentBottomPadding),
+        obscuredBottomPx: Math.max(0, obscuredBottomPx),
       });
-    }, [contentBottomPadding, sendCommand]);
+    }, [contentBottomPadding, obscuredBottomPx, sendCommand]);
 
     const [fonts, setFonts] = useState<EditorFontState>(() => getEditorFonts());
     const [nativeBodyFontMode, setNativeBodyFontMode] = useState(getNativeBodyFontMode);

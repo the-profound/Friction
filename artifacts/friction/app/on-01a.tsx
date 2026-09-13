@@ -149,6 +149,10 @@ import {
   resolveMemoToolbarRenderContract,
 } from "@/lib/readingMemoToolbar";
 import { resolveFloatingChromeOffset } from "@/lib/floatingChromeOffset";
+import {
+  MEMO_TOOLBAR_OCCUPIED_HEIGHT,
+  resolveEditorBottomVisibility,
+} from "@/lib/editorViewport";
 
 const PAGE_DIVIDER = MarkdownPolicy.PAGE_DIVIDER;
 
@@ -3286,6 +3290,12 @@ export default function WritingScreen() {
     inlineMenuOpen: inlineMenuMode !== null,
     keyboardRestorePending,
   });
+  const editorBottomVisibility = resolveEditorBottomVisibility({
+    basePadding: WRITING_EDITOR_BOTTOM_PADDING,
+    toolbarVisible:
+      toolbarContract.visible && toolbarContract.placement === "floating",
+    toolbarOccupiedHeight: MEMO_TOOLBAR_OCCUPIED_HEIGHT,
+  });
 
   const memoToolbar = (
     <MemoToolbar
@@ -3357,7 +3367,8 @@ export default function WritingScreen() {
                 onSelectionUpdate={handleSelectionUpdate}
                 typography={typography}
                 hideTitle={isThoughtMode && !isDividing}
-                contentBottomPadding={WRITING_EDITOR_BOTTOM_PADDING}
+                contentBottomPadding={editorBottomVisibility.contentBottomPadding}
+                obscuredBottomPx={editorBottomVisibility.obscuredBottomPx}
               />
             </View>
           </View>

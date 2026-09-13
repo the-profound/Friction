@@ -389,7 +389,9 @@ describe("letter body font fallback contract", () => {
     expect(editorSource).toContain('window.addEventListener("resize"');
     expect(editorSource).toContain("scrollingElement.scrollHeight - viewportHeight");
     expect(editorSource).toContain("computeEditorViewportScrollTop({");
-    expect(editorSource).toContain("editor.view.coordsAtPos(selectionHead)");
+    expect(editorSource).toContain(
+      "editor.view.coordsAtPos(boundedSelectionPosition)",
+    );
     expect(nativeEditor).toContain("automaticallyAdjustContentInsets={false}");
     expect(nativeEditor).toContain(
       'contentInsetAdjustmentBehavior={Platform.OS === "ios" ? "never" : undefined}',

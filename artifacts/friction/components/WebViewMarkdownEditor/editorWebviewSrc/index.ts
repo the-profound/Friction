@@ -16,7 +16,11 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Node as PMNode } from "@tiptap/pm/model";
-import { computeEditorViewportScrollTop } from "../../../lib/editorViewport";
+import {
+  computeEditorViewportScrollTop,
+  resolveActiveSelectionEndpoint,
+  type SelectionEndpoint,
+} from "../../../lib/editorViewport";
 import type { BodyTypographyMetrics } from "../../../lib/bodyLayout";
 import { shouldApplyBodyTypographyGeneration } from "../../../lib/bodyTypographyDiagnostics";
 import {
@@ -958,6 +962,7 @@ interface Command {
   autoSplit?: boolean;
   mode?: "fallback";
   paddingPx?: number;
+  obscuredBottomPx?: number;
   text?: string;
   attribution?: string;
   metrics?: BodyTypographyMetrics;
@@ -1375,6 +1380,9 @@ function spellFindRange(
   // 재시도한다.
   let activeTouchCount = 0;
   let pendingViewportCorrectionAfterTouch = false;
+  let editorObscuredBottomPx = 0;
+  let selectionHandleDragging = false;
+  let activeSelectionEndpoint: SelectionEndpoint | null = null;
 
   function getDocumentScrollTop(): number {
     return (
@@ -1415,7 +1423,7 @@ function spellFindRange(
   }
 
   function correctDocumentViewport(keepEditorSelectionVisible: boolean) {
-    if (activeTouchCount > 0) {
+    if (activeTouchCount > 0 && !selectionHandleDragging) {
       // 사용자가 지금 화면을 만지고 있다 — 이번 보정은 건너뛰고, 손을 뗀
       // 직후 한 번 더 시도하도록 표시만 남긴다.
       pendingViewportCorrectionAfterTouch =
@@ -1436,11 +1444,15 @@ function spellFindRange(
       editor.isFocused
     ) {
       try {
-        const selectionHead = Math.min(
-          editor.state.selection.head,
+        const selectionPosition =
+          activeSelectionEndpoint === "anchor"
+            ? editor.state.selection.anchor
+            : editor.state.selection.head;
+        const boundedSelectionPosition = Math.min(
+          selectionPosition,
           editor.state.doc.content.size,
         );
-        const caretRect = editor.view.coordsAtPos(selectionHead);
+        const caretRect = editor.view.coordsAtPos(boundedSelectionPosition);
         caretTop = caretRect.top + currentScrollTop;
         caretBottom = caretRect.bottom + currentScrollTop;
       } catch {
@@ -1453,6 +1465,7 @@ function spellFindRange(
       maxScrollTop,
       viewportHeight,
       marginPx: CARET_VIEWPORT_MARGIN_PX,
+      obscuredBottomPx: editorObscuredBottomPx,
       caretTop,
       caretBottom,
     });
@@ -1681,13 +1694,16 @@ function spellFindRange(
         lastProbeRangesKey = null;
         // 강조 위치는 시각 레이아웃에 의존하므로 doc 변경 직후 재측정한다.
         scheduleOverflowProbe();
+        if (selectionHandleDragging) scheduleViewportCorrection(true);
       },
       onSelectionUpdate: ({ editor: ed }) => {
         postSelectionState(ed);
+        if (selectionHandleDragging) scheduleViewportCorrection(true);
       },
       onFocus: () => {
         editorFocused = true;
         syncKeyboardState();
+        scheduleViewportCorrection(true);
       },
       onBlur: () => {
         editorFocused = false;
@@ -2009,6 +2025,16 @@ function spellFindRange(
             "--editor-content-bottom-padding",
             paddingPx + "px",
           );
+          const rawObscuredBottomPx = cmd.obscuredBottomPx;
+          editorObscuredBottomPx =
+            typeof rawObscuredBottomPx === "number" &&
+            Number.isFinite(rawObscuredBottomPx)
+              ? Math.max(0, rawObscuredBottomPx)
+              : 0;
+          // Let browser/WebView-native caret and selection scrolling honor the
+          // same floating-toolbar exclusion used by app-triggered correction.
+          document.documentElement.style.scrollPaddingBottom =
+            editorObscuredBottomPx + CARET_VIEWPORT_MARGIN_PX + "px";
           scheduleViewportCorrection(false);
           break;
         }
@@ -2432,6 +2458,11 @@ function spellFindRange(
     window.addEventListener("resize", function () {
       scheduleViewportCorrection(editorFocused);
     });
+    document.addEventListener("keyup", function (event) {
+      if (event.key === "Enter" && editorFocused) {
+        scheduleViewportCorrection(true);
+      }
+    });
 
     titleInput = document.getElementById("title-input") as HTMLTextAreaElement | null;
     if (titleInput) {
@@ -2507,11 +2538,11 @@ function spellFindRange(
       } else {
         surfaceTouchSession = null;
       }
-      selHandleDragging = false;
+      selectionHandleDragging = false;
     }, { passive: true });
 
     document.addEventListener("touchmove", function (e) {
-      if (selHandleDragging) return;
+      if (selectionHandleDragging) return;
       if (!selHandleHasActiveSelection) return;
       var t = e.touches[0];
       if (surfaceTouchSession && t) {
@@ -2578,7 +2609,7 @@ function spellFindRange(
       if (swipeDismissed) return;
       if (!keyboardOpen) return;
       if (window.scrollY > 0) return;
-      if (selHandleHasActiveSelection || selHandleDragging) return;
+      if (selHandleHasActiveSelection || selectionHandleDragging) return;
       // 이전에는 정의되지 않은 `t`(다른 핸들러의 지역변수)와, 스와이프
       // 시작점이 아닌 selHandleDragStartY(선택 핸들 드래그 시작점)를
       // 참조해 매 touchmove마다 ReferenceError를 던졌다 — 스와이프-다운
@@ -2627,7 +2658,6 @@ function spellFindRange(
     var selHandleHasActiveSelection = false;
     var selHandleDragStartX = 0;
     var selHandleDragStartY = 0;
-    var selHandleDragging = false;
     var SEL_HANDLE_DRAG_THRESHOLD = 6;
 
     document.addEventListener("selectionchange", function () {
@@ -2640,35 +2670,57 @@ function spellFindRange(
       if (t) {
         selHandleDragStartX = t.clientX;
         selHandleDragStartY = t.clientY;
+        activeSelectionEndpoint = null;
+        if (editor && !editor.isDestroyed && !editor.state.selection.empty) {
+          try {
+            activeSelectionEndpoint = resolveActiveSelectionEndpoint({
+              touchX: t.clientX,
+              touchY: t.clientY,
+              anchorRect: editor.view.coordsAtPos(editor.state.selection.anchor),
+              headRect: editor.view.coordsAtPos(editor.state.selection.head),
+            });
+          } catch {}
+        }
       }
-      selHandleDragging = false;
+      selectionHandleDragging = false;
     }, { passive: true });
 
     document.addEventListener("touchmove", function (e) {
-      if (selHandleDragging) return;
+      if (selectionHandleDragging) {
+        scheduleViewportCorrection(true);
+        return;
+      }
       if (!selHandleHasActiveSelection) return;
       var t = e.touches[0];
       if (!t) return;
       var dx = t.clientX - selHandleDragStartX;
       var dy = t.clientY - selHandleDragStartY;
       if (Math.sqrt(dx * dx + dy * dy) > SEL_HANDLE_DRAG_THRESHOLD) {
-        selHandleDragging = true;
+        selectionHandleDragging = true;
         postToRN({ type: "onSelHandleDragStart" });
+        scheduleViewportCorrection(true);
       }
     }, { passive: true });
 
     document.addEventListener("touchend", function () {
-      if (selHandleDragging) {
-        selHandleDragging = false;
+      if (selectionHandleDragging) {
+        selectionHandleDragging = false;
         postToRN({ type: "onSelHandleDragEnd" });
       }
+      // Cancel the drag session's delayed rAF/180ms passes before forgetting
+      // which endpoint moved. Otherwise they fall back to selection.head and
+      // can jump to the stationary endpoint after an anchor-handle drag.
+      viewportCorrectionGeneration++;
+      activeSelectionEndpoint = null;
     }, { passive: true });
 
     document.addEventListener("touchcancel", function () {
-      if (selHandleDragging) {
-        selHandleDragging = false;
+      if (selectionHandleDragging) {
+        selectionHandleDragging = false;
         postToRN({ type: "onSelHandleDragEnd" });
       }
+      viewportCorrectionGeneration++;
+      activeSelectionEndpoint = null;
     }, { passive: true });
 
     // While an hr-control panel is active, intercept touches outside any

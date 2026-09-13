@@ -45,7 +45,11 @@ export type RNToWebViewCommand =
   | { type: "setOverflowProbeConfig"; availableContentHeightPx: number | null; autoSplit?: boolean }
   | { type: "setBodyMetrics"; metrics: BodyTypographyMetrics; layoutGeneration: number }
   | { type: "setBodyFontMode"; mode: "fallback" }
-  | { type: "setContentBottomPadding"; paddingPx: number }
+  | {
+      type: "setContentBottomPadding";
+      paddingPx: number;
+      obscuredBottomPx?: number;
+    }
   | { type: "setBlockType"; blockType: string }
   | { type: "toggleMark"; mark: string }
   | { type: "insertDivider" }
@@ -189,6 +193,8 @@ export interface WebViewMarkdownEditorProps {
    * 기본값은 기존 네이티브 편집기 동작과 같은 120px이다.
    */
   contentBottomPadding?: number;
+  /** Portion of the editor viewport covered by floating chrome. */
+  obscuredBottomPx?: number;
   /**
    * 오버플로 감지(runOverflowProbe)가 활성화된 상태에서 현재 페이지 내용이
    * 가용 높이를 넘으면 호출된다. `beforeMarkdown`은 잘라낸 앞부분(현재
