@@ -151,3 +151,4 @@
 - [Manual drizzle-kit push pty driving](drizzle-push-manual-pty-driving.md) — pull-schema step timing varies a lot; drive prompts via a pty + content-based state machine, not fixed delays.
 - [Claim ledger durable retry state](claim-ledger-durable-retry-state.md) — needs discoverable retry state (lockedAt), lease fencing on confirm/release, and a monotonic (not live-COUNT) progress cursor — all three, or it breaks under concurrency/crashes/deletion.
 - [Reading progress save ordering](friction-reading-progress-save-ordering.md) — lifecycle flushes need hydration gating, gesture cancellation, and server-enforced revision ordering.
+- [iOS writing suspension dedupe](friction-ios-writing-suspension-dedupe.md) — blur may precede AppState by a turn; dedupe pending and already-emitted flushes, then reset on focus/resume.

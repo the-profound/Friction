@@ -5,8 +5,30 @@ import {
   popReturnStack,
   replaceReturnStack,
 } from "../guardedReturnSession";
+import {
+  entersWritingSuspension,
+  resumesWritingFromSuspension,
+} from "../writingLifecycle";
 
 describe("GuardedReturnSession", () => {
+  it("keeps lifecycle suspension separate from repeated native removals", async () => {
+    const stack = createReturnStack(["(tabs)", "on-01a"]);
+    const session = new GuardedReturnSession<"POP">();
+    let flushCount = 0;
+
+    if (entersWritingSuspension("active", "inactive")) flushCount += 1;
+    if (entersWritingSuspension("inactive", "background")) flushCount += 1;
+    expect(flushCount).toBe(1);
+    expect(stack.dispatchCount).toBe(0);
+
+    expect(session.begin()).toBe(true);
+    expect(session.begin()).toBe(false);
+    expect(session.commitIntercepted("POP", () => popReturnStack(stack))).toBe(true);
+    expect(session.commitIntercepted("POP", () => popReturnStack(stack))).toBe(false);
+    expect(resumesWritingFromSuspension("background", "active")).toBe(true);
+    expect(stack.dispatchCount).toBe(1);
+  });
+
   it("replays one completed iOS or browser removal after a delayed snapshot without re-exposing the editor", async () => {
     const stack = createReturnStack(["(tabs)", "on-01a"]);
     stack.visibleHistory = ["(tabs)", "on-01a"];

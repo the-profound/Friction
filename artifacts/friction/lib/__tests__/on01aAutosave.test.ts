@@ -22,6 +22,11 @@ import {
   reduceEditorKeyboardState,
   resolveMemoToolbarRenderContract,
 } from "../readingMemoToolbar";
+import {
+  entersWritingSuspension,
+  resumesWritingFromSuspension,
+  WritingLifecycleFlushCoordinator,
+} from "../writingLifecycle";
 
 const appRoot = join(__dirname, "../..");
 const readScreen = () => readFileSync(join(appRoot, "app/on-01a.tsx"), "utf8");
@@ -318,6 +323,56 @@ describe("on-01a editor hydration and initialization", () => {
 });
 
 describe("on-01a latest-snapshot autosave boundary", () => {
+  it("treats an iOS inactive/background sequence as one writing suspension", () => {
+    expect(entersWritingSuspension("active", "inactive")).toBe(true);
+    expect(entersWritingSuspension("inactive", "background")).toBe(false);
+    expect(resumesWritingFromSuspension("background", "active")).toBe(true);
+    expect(entersWritingSuspension("active", "active")).toBe(false);
+  });
+
+  it("coalesces suspension blur with inactive/background into one flush", async () => {
+    const flushes: string[] = [];
+    const coordinator = new WritingLifecycleFlushCoordinator(
+      "active",
+      (reason) => flushes.push(reason),
+    );
+
+    coordinator.handleEditorBlur();
+    coordinator.handleAppStateChange("inactive");
+    coordinator.handleAppStateChange("background");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(flushes).toEqual(["suspend"]);
+    coordinator.handleAppStateChange("active");
+    coordinator.handleEditorBlur();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(flushes).toEqual(["suspend", "editor-blur"]);
+    coordinator.dispose();
+  });
+
+  it("uses an already-flushed blur as the snapshot for a later inactive event", async () => {
+    const flushes: string[] = [];
+    const coordinator = new WritingLifecycleFlushCoordinator(
+      "active",
+      (reason) => flushes.push(reason),
+    );
+
+    coordinator.handleEditorBlur();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(flushes).toEqual(["editor-blur"]);
+
+    coordinator.handleAppStateChange("inactive");
+    coordinator.handleAppStateChange("background");
+    expect(flushes).toEqual(["editor-blur"]);
+
+    coordinator.handleAppStateChange("active");
+    coordinator.handleEditorFocus();
+    coordinator.handleEditorBlur();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(flushes).toEqual(["editor-blur", "editor-blur"]);
+    coordinator.dispose();
+  });
+
   it("uses collision-free request ids for overlapping WebView exports", () => {
     const screen = readScreen();
 
@@ -433,6 +488,7 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(latestFlush).toContain("latest = await getEditorContent();");
     expect(latestFlush).toContain("createThoughtDocumentSnapshot(latest,");
     expect(latestFlush).toContain("const result = await flush();");
+    expect(latestFlush).toContain("await persistLatestAutosave();");
     expect(backHandler).toContain("cur = await getEditorContent()");
     expect(backHandler).toContain("await persistLatestAutosave()");
     expect(backHandler).toContain("void flush().then");
@@ -446,8 +502,15 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(autoSave).toContain("void runPendingCleanup(restored.entityId)");
     expect(autoSave).toContain("latestDataRef.current.cleanupId === cleanupId");
     expect(autoSave).toContain("cleanupId: undefined");
-    expect(lifecycle).toContain("await flushLatestEditorSnapshot();");
-    expect(keyboard).toContain("void flushLatestEditorSnapshot();");
+    expect(screen).toContain("void flushLatestEditorSnapshot();");
+    expect(lifecycle).toContain(
+      "writingLifecycleRef.current?.handleAppStateChange(",
+    );
+    expect(lifecycle).not.toContain("returnSessionRef.current.begin()");
+    expect(lifecycle).not.toContain("exitToPreviousList(");
+    expect(keyboard).toContain(
+      "writingLifecycleRef.current?.handleEditorBlur();",
+    );
     expect(screen).toContain("onKeyboardVisibilityChange={handleKeyboardVisibilityChange}");
     expect(latestFlush).toContain("latestFlushTailRef.current.then(run, run)");
     expect(latestFlush).not.toContain("return latestFlushPromiseRef.current");

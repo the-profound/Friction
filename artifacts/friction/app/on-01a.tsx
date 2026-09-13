@@ -30,6 +30,10 @@ import {
 } from "@/lib/detailEntityResolution";
 import { GuardedReturnSession } from "@/lib/guardedReturnSession";
 import {
+  WritingLifecycleFlushCoordinator,
+  type WritingAppState,
+} from "@/lib/writingLifecycle";
+import {
   createClosingTransitionSuppressionController,
   type ClosingTransitionSuppressionController,
 } from "@/lib/closingTransitionSuppression";
@@ -1289,6 +1293,9 @@ export default function WritingScreen() {
             }) ?? undefined
           : undefined,
       );
+      // The lifecycle boundary may outlive the short iOS suspension window.
+      // Make the newest snapshot locally durable before waiting for network.
+      await persistLatestAutosave();
       const result = await flush();
       return { ...result, content: latest, meaningful: true };
     };
@@ -1302,7 +1309,45 @@ export default function WritingScreen() {
       () => undefined,
     );
     return task;
-  }, [discardAutosave, flush, getEditorContent, markDirty, reportAutosaveFailure]);
+  }, [
+    discardAutosave,
+    flush,
+    getEditorContent,
+    markDirty,
+    persistLatestAutosave,
+    reportAutosaveFailure,
+  ]);
+
+  const lifecycleFlushHandlerRef = useRef<(reason: "suspend" | "editor-blur") => void>(
+    () => undefined,
+  );
+  lifecycleFlushHandlerRef.current = (reason) => {
+    if (
+      modeRef.current === "dividing"
+      || !initializedRef.current
+      || isNavigatingRef.current
+    ) {
+      return;
+    }
+    if (isThoughtModeRef.current) {
+      void flushLatestEditorSnapshot();
+      return;
+    }
+    if (reason !== "suspend") return;
+    void (async () => {
+      const latest = await getEditorContent();
+      markDirty(titleRef.current, latest);
+      await persistLatestAutosave();
+      await flush();
+    })();
+  };
+  const writingLifecycleRef = useRef<WritingLifecycleFlushCoordinator | null>(null);
+  if (!writingLifecycleRef.current) {
+    writingLifecycleRef.current = new WritingLifecycleFlushCoordinator(
+      AppState.currentState as WritingAppState,
+      (reason) => lifecycleFlushHandlerRef.current(reason),
+    );
+  }
 
   const handleTitleChange = useCallback(
     (text: string) => {
@@ -2382,24 +2427,20 @@ export default function WritingScreen() {
     exitToPreviousList(removalAction);
   }, [flush, queryClient, getEditorContent, markDirty, id, setRecordKindIntent, showToast, isLocalDirectDraft, exitToPreviousList, persistLatestAutosave, stageCleanup, runPendingCleanup]);
 
-  // Native lifecycle events have no reliable "before unload" hook.  Export the
-  // WebView snapshot while the app is still active and flush it to the thought/article
-  // record; useAutoSave keeps a retry snapshot if the network is unavailable.
+  // Native lifecycle events only persist the editor. They never begin or
+  // commit a guarded return session, so app switching and system overlays
+  // cannot approve a native removal action.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active" || modeRef.current === "dividing" || !initializedRef.current) return;
-      void (async () => {
-        if (isThoughtModeRef.current) {
-          await flushLatestEditorSnapshot();
-          return;
-        }
-        const latest = await getEditorContent();
-        markDirty(titleRef.current, latest);
-        await flush();
-      })();
+      writingLifecycleRef.current?.handleAppStateChange(
+        nextState as WritingAppState,
+      );
     });
-    return () => sub.remove();
-  }, [flushLatestEditorSnapshot, getEditorContent, markDirty, flush]);
+    return () => {
+      sub.remove();
+      writingLifecycleRef.current?.dispose();
+    };
+  }, []);
 
   // A direct draft owns the shared composer lock until this writing screen
   // exits. This cleanup also covers auth resets and programmatic navigation;
@@ -2481,9 +2522,9 @@ export default function WritingScreen() {
       && initializedRef.current
       && !isNavigatingRef.current
     ) {
-      void flushLatestEditorSnapshot();
+      writingLifecycleRef.current?.handleEditorBlur();
     }
-  }, [flushLatestEditorSnapshot]);
+  }, []);
 
   const handleKeyboardVisibilityChange = useCallback((visible: boolean) => {
     setEditorKeyboardState((current) =>
@@ -2492,16 +2533,17 @@ export default function WritingScreen() {
     // Native keyboard events above remain authoritative for closing. A
     // transient WKWebView focusout must not hide a toolbar while the keyboard
     // is still visible.
-    if (
-      !visible
-      && isThoughtModeRef.current
+    if (visible) {
+      writingLifecycleRef.current?.handleEditorFocus();
+    } else if (
+      isThoughtModeRef.current
       && modeRef.current === "draft"
       && initializedRef.current
       && !isNavigatingRef.current
     ) {
-      void flushLatestEditorSnapshot();
+      writingLifecycleRef.current?.handleEditorBlur();
     }
-  }, [flushLatestEditorSnapshot]);
+  }, []);
 
   const handleInsertDivider = useCallback(() => {
     if (isNavigatingRef.current) return;
