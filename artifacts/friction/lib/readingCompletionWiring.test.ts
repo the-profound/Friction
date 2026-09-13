@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const readScreenPath = fileURLToPath(new URL("../app/read.tsx", import.meta.url));
 const readScreen = readFileSync(readScreenPath, "utf8");
+const tokensPath = fileURLToPath(new URL("../constants/tokens.ts", import.meta.url));
+const tokens = readFileSync(tokensPath, "utf8");
 
 function sourceBetween(start: string, end: string): string {
   const startIndex = readScreen.indexOf(start);
@@ -172,12 +174,53 @@ describe("non-blocking completion save", () => {
       "\n});",
     );
 
+    expect(styles).toMatch(/actionShadow:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.white[\s\S]*?\.\.\.Shadows\.readingCompletionAction/);
     expect(styles).toMatch(/rereadBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.primaryAction/);
     expect(styles).toMatch(/rereadBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryActionForeground/);
-    expect(styles).toMatch(/saveBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.noticeAccentSoft[\s\S]*?borderWidth:\s*1\.5[\s\S]*?borderColor:\s*Colors\.primaryAction/);
+    expect(styles).toMatch(/saveBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.noticeAccentSoft/);
     expect(styles).toMatch(/saveBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryAction/);
-    expect(styles).toMatch(/skipBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?borderWidth:\s*1\.5[\s\S]*?borderColor:\s*Colors\.black/);
+    expect(styles).toMatch(/skipBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.white/);
     expect(styles).toMatch(/skipBtnText:\s*\{[\s\S]*?color:\s*Colors\.black/);
-    expect(styles).not.toMatch(/(?:saveBtn|skipBtn):\s*\{[\s\S]*?overflow:\s*"hidden"/);
+    expect(styles).not.toMatch(/(?:rereadBtn|saveBtn|skipBtn):\s*\{[\s\S]*?border(?:Width|Color):/);
+  });
+
+  it("keeps shadow ownership on an opaque outer surface", () => {
+    const screen = sourceBetween(
+      "function ReadingCompleteScreen({",
+      "const readingCompleteStyles = StyleSheet.create",
+    );
+
+    expect(screen.match(/style=\{readingCompleteStyles\.actionShadow\}/g)).toHaveLength(1);
+    expect(screen.match(/style=\{\[readingCompleteStyles\.actionShadow,/g)).toHaveLength(2);
+    expect(screen).toContain("<View style={readingCompleteStyles.rereadBtn}>");
+    expect(screen).toContain("<View style={readingCompleteStyles.saveBtn}>");
+    expect(screen).toContain("<View style={readingCompleteStyles.skipBtn}>");
+  });
+
+  it("defines the completion action shadow for iOS, Android, and web", () => {
+    const shadow = tokens.slice(
+      tokens.indexOf("readingCompletionAction: Platform.select"),
+      tokens.indexOf("/** One raised-surface treatment", tokens.indexOf("readingCompletionAction: Platform.select")),
+    );
+
+    expect(shadow).toContain("ios:");
+    expect(shadow).toContain('shadowColor: "#000"');
+    expect(shadow).toContain("shadowOpacity: 0.12");
+    expect(shadow).toContain("android:");
+    expect(shadow).toContain("elevation: 3");
+    expect(shadow).toContain("web:");
+    expect(shadow).toContain('boxShadow: "0px 2px 8px rgba(0,0,0,0.12)"');
+    expect(shadow).toContain("default: {}");
+  });
+
+  it("keeps disabled styling layout-neutral", () => {
+    const styles = sourceBetween(
+      "const readingCompleteStyles = StyleSheet.create",
+      "\n});",
+    );
+    const disabled = styles.slice(styles.indexOf("btnDisabled:"));
+
+    expect(disabled).toContain("opacity: 0.5");
+    expect(disabled).not.toMatch(/(?:width|height|margin|padding|border|elevation|shadow|boxShadow)\s*:/);
   });
 });

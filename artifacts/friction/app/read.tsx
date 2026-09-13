@@ -2719,40 +2719,46 @@ function ReadingCompleteScreen({
       <View style={[readingCompleteStyles.bottom, { paddingBottom: Math.max(insets.bottom, 24) }]}>
         {/* 다시 읽기 (primary) */}
         <Pressable
-          style={readingCompleteStyles.rereadBtn}
+          style={readingCompleteStyles.actionShadow}
           onPress={onReread}
           accessibilityRole="button"
           accessibilityLabel="다시 읽기"
         >
-          <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
+          <View style={readingCompleteStyles.rereadBtn}>
+            <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
+          </View>
         </Pressable>
 
         {/* 보관하기 (secondary) */}
         <Pressable
-          style={[readingCompleteStyles.saveBtn, (isSaving || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
+          style={[readingCompleteStyles.actionShadow, (isSaving || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
           onPress={onSave}
           disabled={isSaving || !isCollectionsReady || isAlreadySaved}
           accessibilityRole="button"
           accessibilityLabel="보관하기"
           accessibilityState={{ disabled: isSaving || !isCollectionsReady || isAlreadySaved, busy: isSaving }}
         >
-          <Text style={readingCompleteStyles.saveBtnText}>
-            {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "이미 보관된 글이에요" : "보관하기"}
-          </Text>
+          <View style={readingCompleteStyles.saveBtn}>
+            <Text style={readingCompleteStyles.saveBtnText}>
+              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "이미 보관된 글이에요" : "보관하기"}
+            </Text>
+          </View>
         </Pressable>
 
         {/* 나가기 (tertiary) */}
         <Pressable
-          style={[readingCompleteStyles.skipBtn, isDeleting && readingCompleteStyles.btnDisabled]}
+          style={[readingCompleteStyles.actionShadow, isDeleting && readingCompleteStyles.btnDisabled]}
           onPress={onSkip}
           disabled={isDeleting}
           accessibilityRole="button"
           accessibilityLabel="나가기"
           accessibilityState={{ disabled: isDeleting, busy: isDeleting }}
         >
-          <Text style={readingCompleteStyles.skipBtnText}>
-            {isDeleting ? "처리 중..." : "나가기"}
-          </Text>
+          <View style={readingCompleteStyles.skipBtn}>
+            <Text style={readingCompleteStyles.skipBtnText}>
+              {isDeleting ? "처리 중..." : "나가기"}
+            </Text>
+          </View>
         </Pressable>
 
       </View>
@@ -2792,6 +2798,15 @@ const readingCompleteStyles = StyleSheet.create({
     paddingTop: 8,
     gap: 10,
   },
+  actionShadow: {
+    width: "100%",
+    height: 52,
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    ...Shadows.readingCompletionAction,
+  },
   saveBtn: {
     width: "100%",
     height: 52,
@@ -2799,8 +2814,6 @@ const readingCompleteStyles = StyleSheet.create({
     flexShrink: 0,
     backgroundColor: Colors.noticeAccentSoft,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.primaryAction,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2816,8 +2829,7 @@ const readingCompleteStyles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.black,
+    backgroundColor: Colors.white,
     alignItems: "center",
     justifyContent: "center",
   },

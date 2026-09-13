@@ -267,6 +267,22 @@ export const Animation = {
 } as const;
 
 export const Shadows = {
+  /** Low raised treatment for the three actions on the reading completion screen. */
+  readingCompletionAction: Platform.select({
+    ios: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12,
+      shadowRadius: 5,
+    },
+    android: {
+      elevation: 3,
+    },
+    web: {
+      boxShadow: "0px 2px 8px rgba(0,0,0,0.12)",
+    } as object,
+    default: {},
+  }),
   /** One raised-surface treatment shared by the dock and the circular CTA. */
   navBar: Platform.select({
     ios: {
