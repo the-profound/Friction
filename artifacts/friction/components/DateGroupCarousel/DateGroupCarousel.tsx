@@ -42,6 +42,8 @@ interface DateGroupCarouselProps<T> {
   cardHeight: number;
   /** Reset to the first card only when the parent starts a new browse session. */
   resetKey?: string | number;
+  focusItemKey?: string;
+  onFocusItemApplied?: (itemKey: string) => void;
   renderCard: (item: T, context: DateGroupCarouselItemContext) => React.ReactNode;
   shouldIgnoreVerticalPress?: () => boolean;
 }
@@ -61,6 +63,8 @@ export function DateGroupCarousel<T>({
   cardWidth,
   cardHeight,
   resetKey,
+  focusItemKey,
+  onFocusItemApplied,
   renderCard,
   shouldIgnoreVerticalPress,
 }: DateGroupCarouselProps<T>) {
@@ -109,23 +113,27 @@ export function DateGroupCarousel<T>({
     // entity falls back to the nearest valid slot.
     const shouldReset = resetKeyRef.current !== resetKey;
     resetKeyRef.current = resetKey;
-    const nextIndex = resolveCarouselIndex(
-      activeItemKeyRef.current,
-      activeIndexRef.current,
-      itemKeys,
-      shouldReset,
-    );
+    const focusIndex = focusItemKey ? itemKeys.indexOf(focusItemKey) : -1;
+    const nextIndex = focusIndex >= 0
+      ? focusIndex
+      : resolveCarouselIndex(
+          activeItemKeyRef.current,
+          activeIndexRef.current,
+          itemKeys,
+          shouldReset,
+        );
     activeIndexRef.current = nextIndex;
     activeItemKeyRef.current = itemKeys[nextIndex] ?? null;
     setActiveIndex((current) => current === nextIndex ? current : nextIndex);
-    if (shouldReset) {
+    if (shouldReset || focusIndex >= 0) {
       snapToRef.current(nextIndex);
       nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false });
+      if (focusIndex >= 0 && focusItemKey) onFocusItemApplied?.(focusItemKey);
     } else {
       translateX.setValue(getBaseX(nextIndex));
       nativeScrollRef.current?.scrollTo({ x: nextIndex * snapInterval, animated: false });
     }
-  }, [cardWidth, getBaseX, itemCount, itemKeys, itemSignature, resetKey, snapInterval, translateX, windowWidth]);
+  }, [cardWidth, focusItemKey, getBaseX, itemCount, itemKeys, itemSignature, onFocusItemApplied, resetKey, snapInterval, translateX, windowWidth]);
 
   const releaseToNearestSlot = useCallback((distanceX: number, velocityX: number) => {
     snapToRef.current(getCarouselNextIndex(

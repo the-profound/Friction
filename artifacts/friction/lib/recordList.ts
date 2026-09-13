@@ -19,6 +19,25 @@ export interface RecordDateGroup<T extends UnifiedRecord = UnifiedRecord> {
   records: T[];
 }
 
+export interface RecordFocusPosition {
+  groupIndex: number;
+  cardIndex: number;
+  contentIndex: number;
+}
+
+export function findRecordFocusPosition<T extends UnifiedRecord>(
+  recordId: string,
+  cardGroups: readonly RecordDateGroup<T>[],
+  contentRecords: readonly T[],
+): RecordFocusPosition | null {
+  const contentIndex = contentRecords.findIndex((record) => record.id === recordId);
+  for (let groupIndex = 0; groupIndex < cardGroups.length; groupIndex += 1) {
+    const cardIndex = cardGroups[groupIndex].records.findIndex((record) => record.id === recordId);
+    if (cardIndex >= 0) return { groupIndex, cardIndex, contentIndex };
+  }
+  return contentIndex >= 0 ? { groupIndex: -1, cardIndex: -1, contentIndex } : null;
+}
+
 export interface RecordPreview {
   /** Single-line form used for title-only mode and search. */
   title: string;

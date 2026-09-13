@@ -214,6 +214,17 @@ export function useDateGroupVerticalSnap({
     listRef.current?.scrollToOffset({ offset, animated: shouldAnimate });
   }, [listRef]);
 
+  const focusDateKey = useCallback((dateKey: string) => {
+    pendingRestoreKeyRef.current = null;
+    pendingRestoreAnimatedRef.current = false;
+    if (restoreFrameRef.current !== null) {
+      cancelAnimationFrame(restoreFrameRef.current);
+      restoreFrameRef.current = null;
+    }
+    currentKeyByPositionRef.current.set(positionKey, dateKey);
+    moveToDateKey(dateKey, false);
+  }, [moveToDateKey, positionKey]);
+
   const finishPageGesture = useCallback((
     distanceY: number,
     velocityY: number,
@@ -323,6 +334,7 @@ export function useDateGroupVerticalSnap({
     onScroll,
     onScrollBeginDrag,
     onWheel,
+    focusDateKey,
     panHandlers: panResponder.panHandlers,
   };
 }

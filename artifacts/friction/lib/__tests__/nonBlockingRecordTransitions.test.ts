@@ -138,7 +138,7 @@ describe("non-blocking editor transitions", () => {
     expect(closingBack.match(/setRecordKindIntent\("editing"\)/g)).toHaveLength(2);
   });
 
-  it("moves newly promoted edits and ordinary exported letters to the top of their filters", () => {
+  it("focuses newly promoted edits and ordinary exported letters by their result ids", () => {
     const writing = readScreen("app/on-01a.tsx");
     const closing = readScreen("app/on-01c.tsx");
     const promotion = writing.slice(
@@ -150,9 +150,9 @@ describe("non-blocking editor transitions", () => {
       closing.indexOf("const handleConfirmExport"),
     );
 
-    expect(promotion).toContain('setRecordKindIntent("editing", { scrollToTop: true })');
-    expect(exportDestination).toContain('setRecordKindIntent("letter", { scrollToTop: true })');
-    expect(exportDestination.indexOf('setRecordKindIntent("letter", { scrollToTop: true })'))
+    expect(promotion).toContain('setRecordKindIntent("editing", { focusRecordId: promoted.id })');
+    expect(exportDestination).toContain('setRecordKindIntent("letter", { focusRecordId: articleId })');
+    expect(exportDestination.indexOf('setRecordKindIntent("letter", { focusRecordId: articleId })'))
       .toBeGreaterThan(exportDestination.indexOf("} else {"));
   });
 

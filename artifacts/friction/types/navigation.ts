@@ -4,9 +4,15 @@ export type NavLayer = "main" | "sub";
 export type RecordKindIntent = "thought" | "editing" | "letter";
 export type RecordKindIntentOptions = {
   scrollToTop?: boolean;
+  focusRecordId?: string;
 };
 export type RecordScrollToTopIntent = {
   kind: RecordKindIntent;
+  token: number;
+};
+export type RecordFocusIntent = {
+  kind: RecordKindIntent;
+  recordId: string;
   token: number;
 };
 
@@ -20,6 +26,7 @@ export interface NavState {
   tabReselectVersion: Record<MainTabKey, number>;
   recordKindIntent: RecordKindIntent;
   recordScrollToTopIntent: RecordScrollToTopIntent | null;
+  recordFocusIntent: RecordFocusIntent | null;
 }
 
 export interface NavActions {
@@ -30,6 +37,7 @@ export interface NavActions {
   setHeaderScrolled: (scrolled: boolean) => void;
   setRecordKindIntent: (kind: RecordKindIntent, options?: RecordKindIntentOptions) => void;
   consumeRecordScrollToTopIntent: (token: number) => void;
+  consumeRecordFocusIntent: (token: number) => void;
 }
 
 export interface NavContextValue extends NavState, NavActions {}

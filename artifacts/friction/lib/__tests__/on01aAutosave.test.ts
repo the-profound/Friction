@@ -401,6 +401,9 @@ describe("on-01a latest-snapshot autosave boundary", () => {
     expect(promotionFlow.indexOf("upsertArticleInRecordCaches")).toBeLessThan(
       promotionFlow.indexOf("commitAutosaveTransition"),
     );
+    expect(promotionFlow).toContain(
+      'setRecordKindIntent("editing", { focusRecordId: promoted.id })',
+    );
   });
 
   it("treats an explicit dividing route as an article while its query reloads", () => {

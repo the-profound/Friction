@@ -8,6 +8,7 @@ import {
   buildUnifiedRecords,
   classifyQuestionError,
   compareRecordsNewestFirst,
+  findRecordFocusPosition,
   getQuestionUnavailableMessage,
   getQueuedThoughtIds,
   getQueuedThoughts,
@@ -49,6 +50,28 @@ function questionQueueApiError(status: number): ApiError {
 }
 
 describe("record list model", () => {
+  it("finds a converted record in both its card group and content row", () => {
+    const records: UnifiedRecord[] = [
+      { id: "newer", kind: "editing", updatedAt: "2026-01-03T00:00:00.000Z", article: { createdAt: "2026-01-03T00:00:00.000Z" } as never },
+      { id: "converted-id", kind: "editing", updatedAt: "2026-01-02T02:00:00.000Z", article: { createdAt: "2026-01-02T02:00:00.000Z" } as never },
+      { id: "same-day", kind: "editing", updatedAt: "2026-01-02T01:00:00.000Z", article: { createdAt: "2026-01-02T01:00:00.000Z" } as never },
+    ];
+    const groups = buildRecordDateGroups(records);
+
+    expect(findRecordFocusPosition("converted-id", groups, records)).toEqual({
+      groupIndex: 1,
+      cardIndex: 0,
+      contentIndex: 1,
+    });
+  });
+
+  it("keeps a missing converted target pending instead of selecting a fallback", () => {
+    const records: UnifiedRecord[] = [
+      { id: "existing", kind: "letter", updatedAt: "2026-01-01T00:00:00.000Z", article: { createdAt: "2026-01-01T00:00:00.000Z" } as never },
+    ];
+    expect(findRecordFocusPosition("late-result", buildRecordDateGroups(records), records)).toBeNull();
+  });
+
   it("keeps every queued question out of ordinary thought records", () => {
     const queuedThoughts = Array.from(
       { length: 6 },
@@ -452,6 +475,27 @@ describe("on.tsx question queue wiring", () => {
     expect(screen).toContain(
       "if (!shouldShowQuestionErrorToast(errorKind, lastShownQuestionErrorKindRef.current)) return;",
     );
+  });
+});
+
+describe("on.tsx converted-record focus wiring", () => {
+  const readScreen = () =>
+    readFileSync(join(__dirname, "../../app/(tabs)/on.tsx"), "utf8");
+
+  it("waits for the content row or inner card to become visible before consuming", () => {
+    const screen = readScreen();
+    expect(screen).toContain("onContentViewableItemsChangedRef");
+    expect(screen).toContain("token.item.id === intent.recordId");
+    expect(screen).toContain("onFocusItemApplied={handleCardFocusApplied}");
+    expect(screen).toContain("consumeRecordFocusIntent(cardFocus.token)");
+  });
+
+  it("keeps retrying virtualized content rows and does not restore an old offset over focus", () => {
+    const screen = readScreen();
+    expect(screen).toContain("pendingContentFocusIndexRef.current !== info.index");
+    expect(screen).toContain("contentFocusRetryTimerRef.current = setTimeout");
+    expect(screen).toContain("suppressNextContentOffsetRestoreRef.current");
+    expect(screen).toContain("if (recordFocusIntent?.kind === kind) return;");
   });
 });
 

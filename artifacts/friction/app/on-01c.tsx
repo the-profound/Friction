@@ -321,7 +321,7 @@ export default function ClosingScreen() {
           router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
         });
       } else {
-        setRecordKindIntent("letter", { scrollToTop: true });
+        setRecordKindIntent("letter", { focusRecordId: articleId });
         navigateAfterRemovingGuard(() => {
           router.replace({ pathname: "/(tabs)/on", params: { tab: "my_article" } });
         });

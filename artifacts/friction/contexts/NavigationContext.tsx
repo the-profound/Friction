@@ -7,6 +7,7 @@ import type {
   NavLayer,
   RecordKindIntent,
   RecordKindIntentOptions,
+  RecordFocusIntent,
   RecordScrollToTopIntent,
 } from "@/types/navigation";
 
@@ -61,7 +62,9 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const [recordKindIntent, setRecordKindIntent] = useState<RecordKindIntent>("thought");
   const [recordScrollToTopIntent, setRecordScrollToTopIntent] =
     useState<RecordScrollToTopIntent | null>(null);
+  const [recordFocusIntent, setRecordFocusIntent] = useState<RecordFocusIntent | null>(null);
   const recordScrollToTopTokenRef = useRef(0);
+  const recordFocusTokenRef = useRef(0);
   const [tabReselectVersion, setTabReselectVersion] = useState<Record<MainTabKey, number>>({
     IN: 0,
     OF: 0,
@@ -188,10 +191,21 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
         token: recordScrollToTopTokenRef.current,
       });
     }
+    if (options?.focusRecordId) {
+      recordFocusTokenRef.current += 1;
+      setRecordFocusIntent({
+        kind,
+        recordId: options.focusRecordId,
+        token: recordFocusTokenRef.current,
+      });
+    }
   }, []);
 
   const consumeRecordScrollToTopIntent = useCallback((token: number) => {
     setRecordScrollToTopIntent((current) => current?.token === token ? null : current);
+  }, []);
+  const consumeRecordFocusIntent = useCallback((token: number) => {
+    setRecordFocusIntent((current) => current?.token === token ? null : current);
   }, []);
 
   const value = useMemo<NavContextValue>(
@@ -205,6 +219,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       tabReselectVersion,
       recordKindIntent,
       recordScrollToTopIntent,
+      recordFocusIntent,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
@@ -212,6 +227,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       setHeaderScrolled,
       setRecordKindIntent: setRecordKind,
       consumeRecordScrollToTopIntent,
+      consumeRecordFocusIntent,
     }),
     [
       activeTab,
@@ -223,6 +239,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       tabReselectVersion,
       recordKindIntent,
       recordScrollToTopIntent,
+      recordFocusIntent,
       setActiveTab,
       setOfSubTab,
       setToSubTab,
@@ -230,6 +247,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
       setHeaderScrolled,
       setRecordKind,
       consumeRecordScrollToTopIntent,
+      consumeRecordFocusIntent,
     ]
   );
 

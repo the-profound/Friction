@@ -5,6 +5,7 @@ import {
   FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ViewToken,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -76,6 +77,7 @@ import {
   buildUnifiedRecords,
   classifyQuestionError,
   filterRecords,
+  findRecordFocusPosition,
   getQueuedThoughtIds,
   getQueuedThoughts,
   getQuestionUnavailableMessage,
@@ -350,8 +352,10 @@ function OnScreenContent() {
     tabReselectVersion,
     recordKindIntent: kind,
     recordScrollToTopIntent,
+    recordFocusIntent,
     setRecordKindIntent: setKind,
     consumeRecordScrollToTopIntent,
+    consumeRecordFocusIntent,
   } = useNavigation();
   const queryClient = useQueryClient();
   const { startFadeToBlack } = useReaderTransition();
@@ -642,6 +646,24 @@ function OnScreenContent() {
     editing: 0,
     letter: 0,
   });
+  const [cardFocus, setCardFocus] = useState<{
+    token: number;
+    dateKey: string;
+    itemKey: string;
+    outerVisible: boolean;
+    innerApplied: boolean;
+  } | null>(null);
+  const pendingContentFocusIndexRef = useRef<number | null>(null);
+  const recordFocusIntentRef = useRef(recordFocusIntent);
+  recordFocusIntentRef.current = recordFocusIntent;
+  const consumeRecordFocusIntentRef = useRef(consumeRecordFocusIntent);
+  consumeRecordFocusIntentRef.current = consumeRecordFocusIntent;
+  const suppressNextContentOffsetRestoreRef = useRef(false);
+  const contentFocusRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const visibleCardGroupKeysRef = useRef(new Set<string>());
+  const visibleContentRecordKeysRef = useRef(new Set<string>());
+  const renderedKindRef = useRef(kind);
+  renderedKindRef.current = kind;
   const cardGroupKeys = useMemo(
     () => cardGroups.map((group) => group.dateKey),
     [cardGroups],
@@ -707,13 +729,127 @@ function OnScreenContent() {
   }, [consumeRecordScrollToTopIntent, kind, recordScrollToTopIntent]);
 
   useEffect(() => {
+    if (!recordFocusIntent || recordFocusIntent.kind !== kind) return;
+    const position = findRecordFocusPosition(recordFocusIntent.recordId, cardGroups, visibleRecords);
+    if (!position) return;
+
+    if (view === "card") {
+      if (position.groupIndex < 0 || position.cardIndex < 0) return;
+      const group = cardGroups[position.groupIndex];
+      setCardFocus({
+        token: recordFocusIntent.token,
+        dateKey: group.dateKey,
+        itemKey: cardRecordKey(group.records[position.cardIndex]),
+        outerVisible: visibleCardGroupKeysRef.current.has(group.dateKey),
+        innerApplied: false,
+      });
+      verticalDateSnap.focusDateKey(group.dateKey);
+    } else {
+      if (position.contentIndex < 0) return;
+      const recordKey = `${recordFocusIntent.kind}:${recordFocusIntent.recordId}`;
+      if (visibleContentRecordKeysRef.current.has(recordKey)) {
+        suppressNextContentOffsetRestoreRef.current = true;
+        consumeRecordFocusIntent(recordFocusIntent.token);
+        return;
+      }
+      pendingContentFocusIndexRef.current = position.contentIndex;
+      contentListRef.current?.scrollToIndex({
+        index: position.contentIndex,
+        animated: false,
+        viewPosition: 0.5,
+      });
+    }
+  }, [
+    cardGroups,
+    consumeRecordFocusIntent,
+    kind,
+    recordFocusIntent,
+    verticalDateSnap.focusDateKey,
+    view,
+    visibleRecords,
+  ]);
+  const handleCardFocusApplied = useCallback((itemKey: string) => {
+    setCardFocus((current) => {
+      if (!current || current.itemKey !== itemKey) return current;
+      return { ...current, innerApplied: true };
+    });
+  }, []);
+  useEffect(() => {
+    if (!cardFocus?.outerVisible || !cardFocus.innerApplied) return;
+    consumeRecordFocusIntent(cardFocus.token);
+    setCardFocus(null);
+  }, [cardFocus, consumeRecordFocusIntent]);
+  const cardViewabilityConfigRef = useRef({ itemVisiblePercentThreshold: 50 });
+  const onCardViewableItemsChangedRef = useRef((info: {
+    viewableItems: ViewToken<RecordDateGroup<CardRecord>>[];
+  }) => {
+    visibleCardGroupKeysRef.current = new Set(
+      info.viewableItems
+        .filter((token) => token.isViewable && token.item)
+        .map((token) => token.item!.dateKey),
+    );
+    setCardFocus((current) =>
+      current && visibleCardGroupKeysRef.current.has(current.dateKey)
+        ? { ...current, outerVisible: true }
+        : current);
+  });
+  const contentViewabilityConfigRef = useRef({ itemVisiblePercentThreshold: 50 });
+  const onContentViewableItemsChangedRef = useRef((info: {
+    viewableItems: ViewToken<CardRecord>[];
+  }) => {
+    const intent = recordFocusIntentRef.current;
+    visibleContentRecordKeysRef.current = new Set(
+      info.viewableItems
+        .filter((token) => token.isViewable && token.item)
+        .map((token) => `${token.item!.kind}:${token.item!.id}`),
+    );
+    if (!intent || intent.kind !== renderedKindRef.current) return;
+    const targetVisible = info.viewableItems.some((token) =>
+      token.isViewable
+      && token.item?.kind === intent.kind
+      && token.item.id === intent.recordId);
+    if (!targetVisible) return;
+    suppressNextContentOffsetRestoreRef.current = true;
+    pendingContentFocusIndexRef.current = null;
+    consumeRecordFocusIntentRef.current(intent.token);
+  });
+  const handleContentScrollToIndexFailed = useCallback((info: {
+    index: number;
+    highestMeasuredFrameIndex: number;
+    averageItemLength: number;
+  }) => {
+    if (pendingContentFocusIndexRef.current !== info.index) return;
+    contentListRef.current?.scrollToOffset({
+      offset: Math.max(0, info.averageItemLength * info.index),
+      animated: false,
+    });
+    if (contentFocusRetryTimerRef.current) clearTimeout(contentFocusRetryTimerRef.current);
+    contentFocusRetryTimerRef.current = setTimeout(() => {
+      if (pendingContentFocusIndexRef.current !== info.index) return;
+      contentListRef.current?.scrollToIndex({
+        index: info.index,
+        animated: false,
+        viewPosition: 0.5,
+      });
+    }, 50);
+  }, []);
+
+  useEffect(() => {
     if (view !== "content") return;
+    if (recordFocusIntent?.kind === kind) return;
+    if (suppressNextContentOffsetRestoreRef.current) {
+      suppressNextContentOffsetRestoreRef.current = false;
+      return;
+    }
     const offset = contentScrollOffsetsRef.current[kind];
     const frame = requestAnimationFrame(() => {
       contentListRef.current?.scrollToOffset({ offset, animated: false });
     });
     return () => cancelAnimationFrame(frame);
-  }, [kind, view, visibleRecords.length]);
+  }, [kind, recordFocusIntent, view, visibleRecords.length]);
+  useEffect(() => () => {
+    if (contentFocusRetryTimerRef.current) clearTimeout(contentFocusRetryTimerRef.current);
+  }, []);
   const sortedCollections = useMemo(() => [...((collectionsQuery.data ?? []) as MyCollection[])]
     .filter((collection) => !collection.isArchive)
     .sort((a, b) => Number(Boolean(b.isImpression)) - Number(Boolean(a.isImpression)) || (b.articleCount ?? 0) - (a.articleCount ?? 0)), [collectionsQuery.data]);
@@ -1057,9 +1193,16 @@ function OnScreenContent() {
             <FlatList
               ref={recordListRef}
               data={cardGroups}
+              onViewableItemsChanged={onCardViewableItemsChangedRef.current}
+              viewabilityConfig={cardViewabilityConfigRef.current}
               extraData={`${recordResetVersion}:${selectedArticleId ?? ""}:${spaceLetterByArticleId.size}`}
               nestedScrollEnabled
               keyExtractor={(group) => group.dateKey}
+              getItemLayout={(_, index) => ({
+                length: estimatedGroupHeight,
+                offset: estimatedGroupHeight * index,
+                index,
+              })}
               renderItem={({ item, index }) => {
                 const cardHeight = getRecordGroupCardHeight(item.records, cardWidth);
                 return (
@@ -1072,6 +1215,8 @@ function OnScreenContent() {
                       cardWidth={cardWidth}
                       cardHeight={cardHeight}
                       resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}${queuedQuestionRecords.length > 0 ? ":q" : ""}` : cardMixSeed}
+                      focusItemKey={cardFocus?.dateKey === item.dateKey ? cardFocus.itemKey : undefined}
+                      onFocusItemApplied={handleCardFocusApplied}
                       renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, context.measureOrigin, cardHeight)}
                       shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
                     />
@@ -1095,6 +1240,8 @@ function OnScreenContent() {
             <FlatList
               ref={contentListRef}
               data={visibleRecords}
+              onViewableItemsChanged={onContentViewableItemsChangedRef.current}
+              viewabilityConfig={contentViewabilityConfigRef.current}
               keyExtractor={(record) => `${record.kind}-${record.id}`}
               renderItem={({ item }) => {
                 const isCurrentQuestion = item.kind === "thought" && item.isQuestion;
@@ -1142,6 +1289,7 @@ function OnScreenContent() {
               }}
               refreshControl={<RefreshControl refreshing={isManualRefreshing} onRefresh={handleRefresh} />}
               onScroll={(event) => handleContentRecordScroll(kind, event)}
+              onScrollToIndexFailed={handleContentScrollToIndexFailed}
               onScrollBeginDrag={closeOpenRecordRow}
               scrollEventThrottle={16}
               scrollEnabled={recordListScrollEnabled}
