@@ -137,6 +137,28 @@ describe("ArticleListItem contract", () => {
     expect(letterPickerSheetFn).not.toContain("bodyVariant");
   });
 
+  it("protects the shared completed-letter empty state and archive action layout", () => {
+    expect(pickerSource).toContain(
+      "\"'편지' 상태의 글만 공유할 수 있어요. 기록함에서 단상을 작성하고, 검토 작업과 마감 작업을 거쳐, '편지'로 완성해주세요!\"",
+    );
+    expect(pickerSource).toContain("emptyMessage={DEFAULT_LETTER_PICKER_EMPTY_MESSAGE}");
+    expect(gridPickerSheetSource).toContain(
+      "emptyMessage={DEFAULT_LETTER_PICKER_EMPTY_MESSAGE}",
+    );
+    expect(pickerSource).toContain('accessibilityRole="button"');
+    expect(pickerSource).toMatch(
+      /emptyActionOuter:\s*\{[\s\S]*?height:\s*44,[\s\S]*?flexGrow:\s*0,[\s\S]*?flexShrink:\s*0,/,
+    );
+    expect(pickerSource).toMatch(
+      /emptyAction:\s*\{[\s\S]*?height:\s*44,[\s\S]*?flexGrow:\s*0,[\s\S]*?flexShrink:\s*0,[\s\S]*?backgroundColor:\s*Colors\.primaryAction,/,
+    );
+    expect(pickerSource).toContain("color: Colors.primaryActionForeground");
+    expect(scheduleSheetSource).toContain('label: "기록함으로 이동"');
+    expect(scheduleSheetSource).toMatch(
+      /onPress:\s*\(\)\s*=>\s*\{\s*setLetterPickerVisible\(false\);\s*onClose\(\);\s*onGoToArchive\(\);/,
+    );
+  });
+
   it("uses a non-blocking cached cover image with a synchronous fallback", () => {
     expect(coverSource).toContain('contentFit="cover"');
     expect(coverSource).toContain('cachePolicy="memory-disk"');

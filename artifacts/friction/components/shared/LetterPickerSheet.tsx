@@ -12,6 +12,9 @@ import { Colors, Typography } from "@/constants/tokens";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { getSendArticleAuthorName } from "@/lib/sendPickerPresentation";
 
+export const DEFAULT_LETTER_PICKER_EMPTY_MESSAGE =
+  "'편지' 상태의 글만 공유할 수 있어요. 기록함에서 단상을 작성하고, 검토 작업과 마감 작업을 거쳐, '편지'로 완성해주세요!";
+
 export interface LetterPickerArticle {
   id: string;
   title?: string | null;
@@ -106,6 +109,7 @@ export function LetterPickerSelectionSheet<T>({
               style={styles.emptyActionOuter}
               contentStyle={styles.emptyAction}
               onPress={emptyAction.onPress}
+              accessibilityRole="button"
             >
               <Text style={styles.emptyActionText}>{emptyAction.label}</Text>
             </ScalePressable>
@@ -172,7 +176,7 @@ export function LetterPickerSheet({
       selectedId={selectedId}
       onSelect={onSelect}
       emptyTitle="완성된 편지가 없어요"
-      emptyMessage="LETTER 상태의 편지만 보낼 수 있어요"
+      emptyMessage={DEFAULT_LETTER_PICKER_EMPTY_MESSAGE}
       emptyAction={emptyAction}
     />
   );
@@ -194,19 +198,28 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontSize: 13,
     color: Colors.zinc500,
+    textAlign: "center",
   },
   emptyActionOuter: {
     marginTop: 8,
+    height: 44,
+    alignSelf: "center",
+    flexGrow: 0,
+    flexShrink: 0,
   },
   emptyAction: {
+    height: 44,
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 20,
-    paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: Colors.zinc900,
+    backgroundColor: Colors.primaryAction,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyActionText: {
     ...Typography.bodySemiBold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.primaryActionForeground,
   },
 });

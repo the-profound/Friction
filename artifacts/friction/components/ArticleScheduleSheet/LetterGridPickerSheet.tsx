@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 
 import {
+  DEFAULT_LETTER_PICKER_EMPTY_MESSAGE,
   LetterPickerSelectionSheet,
   type LetterPickerArticle,
 } from "@/components/shared/LetterPickerSheet";
@@ -68,7 +69,7 @@ export function LetterGridPickerSheet({
       onSelect={onSelect}
       bodyVariant="grid"
       emptyTitle="완성된 편지가 없어요"
-      emptyMessage="LETTER 상태의 편지만 보낼 수 있어요"
+      emptyMessage={DEFAULT_LETTER_PICKER_EMPTY_MESSAGE}
       emptyAction={emptyAction}
     />
   );
