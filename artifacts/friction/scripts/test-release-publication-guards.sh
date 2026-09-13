@@ -105,19 +105,34 @@ if [[ "$1" == "env:exec" ]]; then
   export EXPO_PUBLIC_DOMAIN="release-test.example"
   eval "$3"
 elif [[ "$1" == "build" ]]; then
-  cat <<'JSON'
-[
-  {"id":"ios-build-id","platform":"IOS"},
-  {
-    "id":"android-build-id",
-    "platform":"ANDROID",
-    "artifacts":{"buildUrl":"https://example.test/friction.apk"},
-    "buildDetailsPageUrl":"https://example.test/android-build"
-  }
-]
-JSON
+  platform=""
+  while [[ "$#" -gt 0 ]]; do
+    if [[ "$1" == "--platform" ]]; then
+      platform="$2"
+      break
+    fi
+    shift
+  done
+  touch "$SYNC_DIR/$platform.started"
+  other="android"
+  [[ "$platform" == "android" ]] && other="ios"
+  for _ in $(seq 1 100); do
+    [[ -e "$SYNC_DIR/$other.started" ]] && break
+    sleep 0.02
+  done
+  if [[ ! -e "$SYNC_DIR/$other.started" ]]; then
+    echo "$platform build was not started in parallel." >&2
+    exit 3
+  fi
+  if [[ "$platform" == "ios" ]]; then
+    echo '{"id":"ios-build-id","platform":"IOS"}'
+  elif [[ "${ANDROID_RESULT:-success}" == "missing-artifact" ]]; then
+    echo '{"id":"android-build-id","platform":"ANDROID","artifacts":{}}'
+  else
+    echo '{"id":"android-build-id","platform":"ANDROID","artifacts":{"buildUrl":"https://example.test/friction.apk"},"buildDetailsPageUrl":"https://example.test/android-build"}'
+  fi
 elif [[ "$1" == "submit" ]]; then
-  exit 0
+  [[ "${IOS_SUBMIT_RESULT:-success}" != "failure" ]] || exit 4
 else
   echo "Unexpected EAS command: $*" >&2
   exit 2
@@ -125,27 +140,67 @@ fi
 EOF
 chmod +x "$SUCCESS_EAS"
 
-INVOCATION_LOG="$INVOCATION_LOG" \
-  EAS_BIN="$SUCCESS_EAS" \
-  EXPO_TOKEN="test-token" \
-  EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
-  EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
-  EXPO_PUBLIC_DOMAIN="release-test.example" \
-  bash "$SCRIPT_DIR/publish-test.sh" > "$TMP_DIR/publish-test-success.log" 2>&1
+run_publish_case() {
+  local case_name="$1"
+  local expected_status="$2"
+  local android_result="$3"
+  local ios_submit_result="$4"
+  local output="$TMP_DIR/publish-test-$case_name.log"
+  local sync_dir="$TMP_DIR/sync-$case_name"
+  mkdir -p "$sync_dir"
+  : > "$INVOCATION_LOG"
 
-if [[ "$(grep -c '^build ' "$INVOCATION_LOG")" -ne 1 ]]; then
-  echo "Combined test publish must invoke exactly one EAS build." >&2
-  cat "$INVOCATION_LOG" >&2
-  exit 1
-fi
-grep -q '^build --platform all --profile test ' "$INVOCATION_LOG"
-grep -q '^env:exec production ' "$INVOCATION_LOG"
+  set +e
+  INVOCATION_LOG="$INVOCATION_LOG" \
+    SYNC_DIR="$sync_dir" \
+    ANDROID_RESULT="$android_result" \
+    IOS_SUBMIT_RESULT="$ios_submit_result" \
+    EAS_BIN="$SUCCESS_EAS" \
+    EXPO_TOKEN="test-token" \
+    EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+    EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+    EXPO_PUBLIC_DOMAIN="release-test.example" \
+    bash "$SCRIPT_DIR/publish-test.sh" > "$output" 2>&1
+  local status=$?
+  set -e
+
+  if [[ "$expected_status" == "success" && "$status" -ne 0 ]] ||
+     [[ "$expected_status" == "failure" && "$status" -eq 0 ]]; then
+    echo "Unexpected status for publish case $case_name: $status" >&2
+    cat "$output" >&2
+    exit 1
+  fi
+  if [[ "$(grep -c '^build ' "$INVOCATION_LOG")" -ne 2 ]]; then
+    echo "Test publish must invoke one independent build per platform." >&2
+    cat "$INVOCATION_LOG" >&2
+    exit 1
+  fi
+  grep -q '^build --platform ios --profile test ' "$INVOCATION_LOG"
+  grep -q '^build --platform android --profile test ' "$INVOCATION_LOG"
+  grep -q '^env:exec production ' "$INVOCATION_LOG"
+  if [[ "$(grep -c '^submit ' "$INVOCATION_LOG" || true)" -ne 1 ]] ||
+     [[ "$(grep -c '^submit --platform ios --id ios-build-id --profile test ' "$INVOCATION_LOG" || true)" -ne 1 ]]; then
+    echo "Test publish must invoke exactly one submission, for the completed iOS build." >&2
+    cat "$INVOCATION_LOG" >&2
+    exit 1
+  fi
+}
+
+run_publish_case success success success success
 grep -q '^submit --platform ios --id ios-build-id --profile test ' "$INVOCATION_LOG"
-if grep -q '^submit --platform android' "$INVOCATION_LOG"; then
-  echo "Combined test publish must not submit Android to Google Play." >&2
-  exit 1
-fi
 grep -q 'https://example.test/friction.apk' "$TMP_DIR/publish-test-success.log"
+grep -q '\[iOS 제출\] 완료' "$TMP_DIR/publish-test-success.log"
+
+run_publish_case android-missing-artifact failure missing-artifact success
+grep -q '^submit --platform ios --id ios-build-id --profile test ' "$INVOCATION_LOG"
+grep -q '\[iOS 제출\] 완료' "$TMP_DIR/publish-test-android-missing-artifact.log"
+grep -q '\[Android 결과\] APK 아티팩트 정보를 확인하지 못했습니다' "$TMP_DIR/publish-test-android-missing-artifact.log"
+
+run_publish_case ios-submit-failure failure success failure
+grep -q '^submit --platform ios --id ios-build-id --profile test ' "$INVOCATION_LOG"
+grep -q 'https://example.test/friction.apk' "$TMP_DIR/publish-test-ios-submit-failure.log"
+grep -q '\[iOS 제출\] App Store Connect 제출에 실패했습니다' "$TMP_DIR/publish-test-ios-submit-failure.log"
+grep -q '\[Android 경로\] APK 빌드 및 결과 확인 성공' "$TMP_DIR/publish-test-ios-submit-failure.log"
 
 (
   cd "$SCRIPT_DIR/.."
@@ -158,4 +213,4 @@ grep -q 'https://example.test/friction.apk' "$TMP_DIR/publish-test-success.log"
 ) > "$TMP_DIR/resolved-test-config.log"
 grep -q 'track=production' "$TMP_DIR/resolved-test-config.log"
 
-echo "Release publication guards validated the shared test profile, combined build, iOS submission, Android APK reporting, and missing-value rejection."
+echo "Release publication guards validated parallel platform builds, isolated iOS submission, Android APK-only reporting, failure isolation, and missing-value rejection."
