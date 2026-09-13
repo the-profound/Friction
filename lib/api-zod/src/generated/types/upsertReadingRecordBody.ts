@@ -16,4 +16,6 @@ export interface UpsertReadingRecordBody {
    * @maximum 1
    */
   scrollPosition: number;
+  /** @minimum 0 */
+  saveRevision?: number;
 }

@@ -21,4 +21,14 @@ describe("createReadingSaveBoundary", () => {
     expect(boundary.signal.aborted).toBe(true);
     expect(abortListener).toHaveBeenCalledTimes(1);
   });
+
+  it("lets a lifecycle flush replace an older in-flight save", () => {
+    const boundary = createReadingSaveBoundary("user-a", "article-1");
+    const olderSignal = boundary.beginDispatch();
+    const latestSignal = boundary.beginDispatch(true);
+
+    expect(olderSignal.aborted).toBe(true);
+    expect(latestSignal.aborted).toBe(false);
+    expect(boundary.canDispatch("user-a", "article-1")).toBe(true);
+  });
 });

@@ -10,6 +10,7 @@ const state = vi.hoisted(() => {
       id: column("reading_records.id"),
       userId: column("reading_records.user_id"),
       articleId: column("reading_records.article_id"),
+      saveRevision: column("reading_records.save_revision"),
     },
     userArticleReads: {
       id: column("user_article_reads.id"),
@@ -19,6 +20,8 @@ const state = vi.hoisted(() => {
   };
   const whereCalls: unknown[] = [];
   const insertCalls: Array<{ table: unknown; values: Record<string, unknown> }> = [];
+  const conflictCalls: Array<Record<string, unknown>> = [];
+  let insertReturningRows: unknown[] | null = null;
   const responses: unknown[][] = [];
   const nextRows = () => responses.shift() ?? [];
   const db = {
@@ -34,8 +37,11 @@ const state = vi.hoisted(() => {
       values: (values: Record<string, unknown>) => {
         insertCalls.push({ table, values });
         return {
-          onConflictDoUpdate: () => ({
-            returning: async () => [{ id: "created", ...values }],
+          onConflictDoUpdate: (config: Record<string, unknown>) => ({
+            returning: async () => {
+              conflictCalls.push(config);
+              return insertReturningRows ?? [{ id: "created", ...values }];
+            },
           }),
         };
       },
@@ -49,11 +55,21 @@ const state = vi.hoisted(() => {
       },
     })),
   };
-  return { db, insertCalls, responses, tables, whereCalls };
+  return {
+    db,
+    conflictCalls,
+    insertCalls,
+    responses,
+    tables,
+    whereCalls,
+    get insertReturningRows() { return insertReturningRows; },
+    set insertReturningRows(rows: unknown[] | null) { insertReturningRows = rows; },
+  };
 });
 
 vi.mock("drizzle-orm", () => ({
   eq: (left: unknown, right: unknown) => ({ op: "eq", left, right }),
+  lt: (left: unknown, right: unknown) => ({ op: "lt", left, right }),
   and: (...conditions: unknown[]) => ({ op: "and", conditions }),
 }));
 
@@ -112,6 +128,8 @@ beforeEach(() => {
   state.db.insert.mockClear();
   state.db.delete.mockClear();
   state.insertCalls.length = 0;
+  state.conflictCalls.length = 0;
+  state.insertReturningRows = null;
   state.responses.length = 0;
   state.whereCalls.length = 0;
 });
@@ -144,6 +162,7 @@ describe("reading route authentication boundary", () => {
           articleId: "article-1",
           currentPage: 2,
           scrollPosition: 0,
+          saveRevision: 1,
         }),
       });
       expect(response.status).toBe(403);
@@ -164,10 +183,67 @@ describe("reading route authentication boundary", () => {
           articleId: "article-1",
           currentPage: 2,
           scrollPosition: 0,
+          saveRevision: 1,
         }),
       });
       expect(response.status).toBe(200);
       expect(state.insertCalls[0]?.values).toMatchObject({ userId: "user-a" });
+      expect(state.conflictCalls[0]?.setWhere).toEqual({
+        op: "lt",
+        left: state.tables.readingRecords.saveRevision,
+        right: 1,
+      });
+    });
+  });
+
+  it("keeps accepting legacy progress writes without a save revision", async () => {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/reading-records`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-test-user-id": "user-a",
+        },
+        body: JSON.stringify({
+          userId: "user-a",
+          articleId: "article-1",
+          currentPage: 2,
+          scrollPosition: 0,
+        }),
+      });
+      expect(response.status).toBe(200);
+      expect(state.insertCalls[0]?.values.saveRevision).toEqual(expect.any(Number));
+    });
+  });
+
+  it("returns the stored record when an older revision loses the conditional update", async () => {
+    const stored = {
+      id: "existing",
+      userId: "user-a",
+      articleId: "article-1",
+      currentPage: 4,
+      scrollPosition: 0,
+      saveRevision: 10,
+    };
+    state.insertReturningRows = [];
+    state.responses.push([stored]);
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/reading-records`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-test-user-id": "user-a",
+        },
+        body: JSON.stringify({
+          userId: "user-a",
+          articleId: "article-1",
+          currentPage: 1,
+          scrollPosition: 0,
+          saveRevision: 9,
+        }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(stored);
     });
   });
 

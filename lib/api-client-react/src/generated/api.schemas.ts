@@ -392,6 +392,8 @@ export interface ReadingRecord {
   articleId: string;
   currentPage: number;
   scrollPosition: number;
+  /** @minimum 0 */
+  saveRevision: number;
   updatedAt: string;
 }
 
@@ -409,6 +411,8 @@ export interface UpsertReadingRecordBody {
    * @maximum 1
    */
   scrollPosition: number;
+  /** @minimum 0 */
+  saveRevision?: number;
 }
 
 export interface UserArticleRead {

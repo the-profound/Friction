@@ -1,6 +1,7 @@
 export interface ReadingSaveBoundary {
-  signal: AbortSignal;
+  readonly signal: AbortSignal;
   canDispatch: (userId: string, articleId: string) => boolean;
+  beginDispatch: (replaceInFlight?: boolean) => AbortSignal;
   dispose: () => void;
 }
 
@@ -13,23 +14,35 @@ export function createReadingSaveBoundary(
   ownerUserId: string,
   ownerArticleId: string,
 ): ReadingSaveBoundary {
-  const controller = new AbortController();
+  let latestController = new AbortController();
+  const controllers = new Set<AbortController>([latestController]);
   let active = true;
 
   return {
-    signal: controller.signal,
+    get signal() {
+      return latestController.signal;
+    },
     canDispatch(userId, articleId) {
       return (
         active &&
-        !controller.signal.aborted &&
         userId === ownerUserId &&
         articleId === ownerArticleId
       );
     },
+    beginDispatch(replaceInFlight = false) {
+      if (replaceInFlight) {
+        for (const controller of controllers) controller.abort();
+        controllers.clear();
+      }
+      latestController = new AbortController();
+      controllers.add(latestController);
+      return latestController.signal;
+    },
     dispose() {
       if (!active) return;
       active = false;
-      controller.abort();
+      for (const controller of controllers) controller.abort();
+      controllers.clear();
     },
   };
 }

@@ -20,6 +20,25 @@ export interface ReadingSession {
   position: ReadingPosition;
 }
 
+export type ReaderAppState = "active" | "inactive" | "background" | "unknown" | "extension";
+
+export function entersReaderSuspension(
+  previousState: ReaderAppState,
+  nextState: ReaderAppState,
+): boolean {
+  return (
+    nextState !== "active"
+    && (previousState === "active" || previousState === "unknown")
+  );
+}
+
+export function resumesReaderFromSuspension(
+  previousState: ReaderAppState,
+  nextState: ReaderAppState,
+): boolean {
+  return previousState !== "active" && nextState === "active";
+}
+
 /**
  * Normalizes a reader page index. The reader reserves `totalPages` as the
  * question-card virtual page, so it is intentionally included in the range.

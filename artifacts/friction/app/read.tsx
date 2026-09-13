@@ -34,6 +34,7 @@ import Animated, {
   withDelay,
   runOnJS,
   Easing,
+  cancelAnimation,
   type SharedValue,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -93,8 +94,11 @@ import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import { shouldCommitCompletionForEntry, type ReadingMode } from "@/lib/policies";
 import {
   clampReadingPage,
+  entersReaderSuspension,
   getVisualReadingPage,
   isCurrentReadingPagerTransition,
+  resumesReaderFromSuspension,
+  type ReaderAppState,
 } from "@/lib/readingPersistence";
 import { useToast } from "@/contexts/ToastContext";
 import { formatReadingThoughtQuote } from "@/lib/thoughtInlineEditor";
@@ -284,6 +288,7 @@ export default function ReadScreen() {
   }, []);
   const [exitConfirmVisible, setExitConfirmVisible] = useState(false);
   const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
+  const [readerResumeSignal, setReaderResumeSignal] = useState(0);
   const [showSelectionPill, setShowSelectionPill] = useState(false);
   const showSelectionPillRef = useRef(false);
   const selectionPillDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -818,27 +823,6 @@ export default function ReadScreen() {
     }
   }, [reading.session.state, articleId, totalPages]);
 
-  // Fire app_backgrounded_during_reading when OS suspends the app mid-read.
-  // Verbose analytics logs gated behind __DEV__ so production builds stay quiet
-  // and avoid string-formatting cost on every AppState transition.
-  useEffect(() => {
-    if (__DEV__) console.log("[Analytics] AppState listener registered — articleId:", articleId, "state:", reading.session.state);
-    const sub = AppState.addEventListener("change", (nextState) => {
-      if (__DEV__) console.log("[Analytics] AppState changed →", nextState, "| session:", reading.session.state, "| page:", currentPage, "/", totalPages);
-      if (
-        nextState === "background" &&
-        (reading.session.state === "READING" || reading.session.state === "PAUSED")
-      ) {
-        if (__DEV__) console.log("[Analytics] Firing app_backgrounded_during_reading, flushing PostHog…");
-        trackAppBackgroundedDuringReading({ articleId, currentPage, totalPages });
-      }
-    });
-    return () => {
-      if (__DEV__) console.log("[Analytics] AppState listener removed — articleId:", articleId);
-      sub.remove();
-    };
-  }, [articleId, currentPage, totalPages, reading.session.state]);
-
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const prev = document.body.style.overflow;
@@ -1115,6 +1099,8 @@ export default function ReadScreen() {
     isCarouselBackward: visualPage >= totalPages,
   };
   const isCommittingRef = useRef(false);
+  const isReaderSuspendedRef = useRef(AppState.currentState !== "active");
+  const interruptedGestureRef = useRef(false);
   const pageTurnGenerationRef = useRef(0);
   const committedTotalPagesRef = useRef(totalPages);
   useEffect(() => {
@@ -1149,6 +1135,64 @@ export default function ReadScreen() {
     isCommittingRef.current = false;
     activeSwipeRef.current = null;
   }, [totalPages]);
+
+  const flushPositionRef = useRef(reading.flushPosition);
+  flushPositionRef.current = reading.flushPosition;
+  const readerLifecycleRef = useRef({
+    appState: AppState.currentState as ReaderAppState,
+    articleId,
+    currentPage,
+    totalPages,
+    sessionState: reading.session.state,
+  });
+  readerLifecycleRef.current.articleId = articleId;
+  readerLifecycleRef.current.currentPage = currentPage;
+  readerLifecycleRef.current.totalPages = totalPages;
+  readerLifecycleRef.current.sessionState = reading.session.state;
+
+  useEffect(() => {
+    const settlePagerForSuspension = () => {
+      pageTurnGenerationRef.current += 1;
+      isReaderSuspendedRef.current = true;
+      interruptedGestureRef.current = true;
+      isCommittingRef.current = false;
+      gestureState.current.isCommitting = false;
+      activeSwipeRef.current = null;
+      cancelAnimation(currentSlotSV);
+      cancelAnimation(prevSlotSV);
+      cancelAnimation(nextSlotSV);
+      const W = containerWidthRef.current || 300;
+      const vp = visualPageRef.current;
+      const tp = totalPagesRef.current;
+      currentSlotSV.value = 0;
+      prevSlotSV.value = vp >= tp ? -(W + CAROUSEL_GAP) : -(W + PARK_EXTRA);
+      nextSlotSV.value = vp >= tp - 1 ? W + CAROUSEL_GAP : 0;
+      qCardOpacitySV.value = vp >= tp ? 1 : 0;
+    };
+
+    const sub = AppState.addEventListener("change", (nextState) => {
+      const lifecycle = readerLifecycleRef.current;
+      const previousState = lifecycle.appState;
+      lifecycle.appState = nextState as ReaderAppState;
+      if (entersReaderSuspension(previousState, nextState as ReaderAppState)) {
+        settlePagerForSuspension();
+        void flushPositionRef.current();
+        if (lifecycle.sessionState === "READING" || lifecycle.sessionState === "PAUSED") {
+          trackAppBackgroundedDuringReading({
+            articleId: lifecycle.articleId,
+            currentPage: lifecycle.currentPage,
+            totalPages: lifecycle.totalPages,
+          });
+        }
+      } else if (resumesReaderFromSuspension(previousState, nextState as ReaderAppState)) {
+        isReaderSuspendedRef.current = false;
+        setReaderResumeSignal((signal) => signal + 1);
+      }
+    });
+    return () => sub.remove();
+  // Shared values and refs are stable for this mounted reader identity.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRestartReading = useCallback(() => {
     // Retire every callback owned by the completed/Q-card pager before moving
@@ -1297,9 +1341,15 @@ export default function ReadScreen() {
     }
     return g
     .onBegin(() => {
+      if (isReaderSuspendedRef.current) {
+        interruptedGestureRef.current = true;
+        return;
+      }
+      interruptedGestureRef.current = false;
       if (isDraggingRef.current || isTextSelectingRef.current) return;
     })
     .onUpdate((e) => {
+      if (isReaderSuspendedRef.current || interruptedGestureRef.current) return;
       if (isThoughtsOpenRef.current) return;
       if (isCommittingRef.current) return;
       // 드래그 도중 손가락을 잠깐 멈추면 WebView가 롱프레스로 판단해 텍스트 선택
@@ -1346,6 +1396,10 @@ export default function ReadScreen() {
       }
     })
     .onEnd((e) => {
+      if (isReaderSuspendedRef.current || interruptedGestureRef.current) {
+        activeSwipeRef.current = null;
+        return;
+      }
       if (isCommittingRef.current) return;
 
       const gs = gestureState.current;
@@ -1502,6 +1556,10 @@ export default function ReadScreen() {
       }
     })
     .onFinalize(() => {
+      if (isReaderSuspendedRef.current || interruptedGestureRef.current) {
+        activeSwipeRef.current = null;
+        return;
+      }
       if (!isCommittingRef.current) {
         const W = containerWidthRef.current || 300;
         const gs = gestureState.current;
@@ -2009,6 +2067,7 @@ export default function ReadScreen() {
                               bottomInset={insets.bottom}
                               layout={layout}
                               clearSignal={clearSelectionSignal}
+                              resumeSignal={readerResumeSignal}
                             />
                           );
                         }
@@ -2380,6 +2439,7 @@ const PageView = React.memo(function PageView({
   bottomInset,
   layout,
   clearSignal,
+  resumeSignal,
 }: {
   content: string;
   onTextSelect?: (text: string, isEmpty: boolean) => void;
@@ -2387,6 +2447,7 @@ const PageView = React.memo(function PageView({
   bottomInset: number;
   layout: ReaderLayout;
   clearSignal?: number;
+  resumeSignal?: number;
 }) {
   const dynamicPageStyles = useMemo(
     () =>
@@ -2422,6 +2483,7 @@ const PageView = React.memo(function PageView({
               onTextSelect={onTextSelect}
               onDragStateChange={onDragStateChange}
               clearSelectionSignal={clearSignal}
+              resumeSignal={resumeSignal}
             />
         </View>
       </View>

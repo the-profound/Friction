@@ -12,5 +12,7 @@ export interface ReadingRecord {
   articleId: string;
   currentPage: number;
   scrollPosition: number;
+  /** @minimum 0 */
+  saveRevision: number;
   updatedAt: Date;
 }

@@ -34,6 +34,7 @@ export interface WebViewMarkdownReaderProps {
   onReady?: () => void;
   clearSelectionSignal?: number;
   onDragStateChange?: (isDragging: boolean) => void;
+  resumeSignal?: number;
 }
 
 const FADE_OUT_DURATION_MS = 100;
@@ -49,6 +50,7 @@ export default function WebViewMarkdownReader({
   onReady,
   clearSelectionSignal,
   onDragStateChange,
+  resumeSignal = 0,
 }: WebViewMarkdownReaderProps) {
   const webViewRef = useRef<WebView>(null);
   const mountedAtRef = useRef<number>(Date.now());
@@ -207,6 +209,16 @@ export default function WebViewMarkdownReader({
     if (bridge.isReady()) bridge.send({ type: "setBodyMetrics", metrics: typography });
   }, [bridge, typography]);
 
+  const previousResumeSignalRef = useRef(resumeSignal);
+  useEffect(() => {
+    if (resumeSignal === previousResumeSignalRef.current) return;
+    previousResumeSignalRef.current = resumeSignal;
+    if (!bridge.isReady()) return;
+    pendingVersionRef.current += 1;
+    injectContent(htmlRef.current, pendingVersionRef.current);
+    bridge.send({ type: "setBodyMetrics", metrics: typography });
+  }, [bridge, injectContent, resumeSignal, typography]);
+
   useEffect(() => subscribeNativeBodyFontMode((mode) => {
     if (mode !== "fallback" || !bridge.isReady()) return;
     bridge.injectRaw(
@@ -284,6 +296,13 @@ export default function WebViewMarkdownReader({
         source={{ html: documentHtml }}
         style={styles.webView}
         onMessage={handleMessage}
+        onLoadStart={() => {
+          // WKWebView may reload its document after an iOS suspension without
+          // remounting this React component. Retire the old bridge readiness so
+          // the new document's font-ready event reinjects the current content.
+          bodyFontsReadyRef.current = false;
+          bridge.reset("WebViewMarkdownReader document loaded");
+        }}
         onLoad={() => {
           // Initial content is injected only after onBodyFontsReady.
         }}

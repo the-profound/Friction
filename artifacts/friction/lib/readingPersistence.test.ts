@@ -8,6 +8,8 @@ import {
   goToPreviousPage,
   isCurrentReadingPagerTransition,
   isLastPage,
+  entersReaderSuspension,
+  resumesReaderFromSuspension,
 } from "./readingPersistence";
 
 describe("reader virtual-page bounds", () => {
@@ -64,5 +66,15 @@ describe("reader virtual-page bounds", () => {
     expect(isCurrentReadingPagerTransition(4, 5, 4, 5)).toBe(true);
     expect(isCurrentReadingPagerTransition(4, 5, 5, 5)).toBe(false);
     expect(isCurrentReadingPagerTransition(7, 5, 7, 5)).toBe(false);
+  });
+});
+
+describe("reader app-state boundaries", () => {
+  it("suspends and resumes once across iOS inactive/background sequences", () => {
+    expect(entersReaderSuspension("active", "inactive")).toBe(true);
+    expect(entersReaderSuspension("unknown", "background")).toBe(true);
+    expect(entersReaderSuspension("inactive", "background")).toBe(false);
+    expect(resumesReaderFromSuspension("background", "active")).toBe(true);
+    expect(resumesReaderFromSuspension("active", "active")).toBe(false);
   });
 });

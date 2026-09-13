@@ -1932,6 +1932,8 @@ export const GetReadingRecordQueryParams = zod.object({
   articleId: zod.coerce.string().uuid(),
 });
 
+export const getReadingRecordResponseRecordOneSaveRevisionMin = 0;
+
 export const GetReadingRecordResponse = zod.object({
   record: zod
     .union([
@@ -1941,6 +1943,9 @@ export const GetReadingRecordResponse = zod.object({
         articleId: zod.string().uuid(),
         currentPage: zod.number(),
         scrollPosition: zod.number(),
+        saveRevision: zod
+          .number()
+          .min(getReadingRecordResponseRecordOneSaveRevisionMin),
         updatedAt: zod.date(),
       }),
       zod.null(),
@@ -1956,6 +1961,8 @@ export const upsertReadingRecordBodyCurrentPageMin = 0;
 export const upsertReadingRecordBodyScrollPositionMin = 0;
 export const upsertReadingRecordBodyScrollPositionMax = 1;
 
+export const upsertReadingRecordBodySaveRevisionMin = 0;
+
 export const UpsertReadingRecordBody = zod.object({
   userId: zod.string().uuid(),
   articleId: zod.string().uuid(),
@@ -1964,7 +1971,13 @@ export const UpsertReadingRecordBody = zod.object({
     .number()
     .min(upsertReadingRecordBodyScrollPositionMin)
     .max(upsertReadingRecordBodyScrollPositionMax),
+  saveRevision: zod
+    .number()
+    .min(upsertReadingRecordBodySaveRevisionMin)
+    .optional(),
 });
+
+export const upsertReadingRecordResponseSaveRevisionMin = 0;
 
 export const UpsertReadingRecordResponse = zod.object({
   id: zod.string().uuid(),
@@ -1972,6 +1985,7 @@ export const UpsertReadingRecordResponse = zod.object({
   articleId: zod.string().uuid(),
   currentPage: zod.number(),
   scrollPosition: zod.number(),
+  saveRevision: zod.number().min(upsertReadingRecordResponseSaveRevisionMin),
   updatedAt: zod.date(),
 });
 

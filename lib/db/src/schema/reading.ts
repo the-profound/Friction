@@ -1,4 +1,4 @@
-import { integer, pgTable, real, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigint, integer, pgTable, real, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -24,6 +24,7 @@ export const readingRecordsTable = pgTable("reading_records", {
   articleId: uuid("article_id").notNull().references(() => articlesTable.id),
   currentPage: integer("current_page").notNull().default(0),
   scrollPosition: real("scroll_position").notNull().default(0),
+  saveRevision: bigint("save_revision", { mode: "number" }).notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => [
   unique("reading_records_unique").on(t.userId, t.articleId),

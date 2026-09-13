@@ -1,10 +1,17 @@
 import { Router, type IRouter, type Response } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { db, readingRecordsTable, userArticleReadsTable } from "@workspace/db";
 import { UpsertReadingRecordBody, CreateUserArticleReadBody } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
+
+export function resolveReadingSaveRevision(
+  saveRevision: number | undefined,
+  now: number = Date.now(),
+): number {
+  return saveRevision ?? now;
+}
 
 function rejectDifferentUser(
   requestedUserId: string,
@@ -43,6 +50,7 @@ router.put("/reading-records", requireAuth, async (req, res) => {
     return;
   }
   const { userId, articleId, currentPage, scrollPosition } = parsed.data;
+  const saveRevision = resolveReadingSaveRevision(parsed.data.saveRevision);
   if (rejectDifferentUser(userId, req.user!.id, res)) return;
 
   const [record] = await db.insert(readingRecordsTable).values({
@@ -50,16 +58,28 @@ router.put("/reading-records", requireAuth, async (req, res) => {
     articleId,
     currentPage,
     scrollPosition,
+    saveRevision,
   }).onConflictDoUpdate({
     target: [readingRecordsTable.userId, readingRecordsTable.articleId],
     set: {
       currentPage,
       scrollPosition,
+      saveRevision,
       updatedAt: new Date(),
     },
+    setWhere: lt(readingRecordsTable.saveRevision, saveRevision),
   }).returning();
 
-  res.json(record);
+  if (record) {
+    res.json(record);
+    return;
+  }
+  const [currentRecord] = await db.select().from(readingRecordsTable)
+    .where(and(
+      eq(readingRecordsTable.userId, userId),
+      eq(readingRecordsTable.articleId, articleId),
+    ));
+  res.json(currentRecord);
 });
 
 router.delete("/reading-records/:id", requireAuth, async (req, res) => {

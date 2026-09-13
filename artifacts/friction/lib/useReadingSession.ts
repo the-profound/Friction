@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useUpsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey } from "@workspace/api-client-react";
+import { upsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey } from "@workspace/api-client-react";
 import { invalidateTeamArticles, patchInboxItemInCache } from "./queryInvalidation";
 import type { ReadingMode } from "./policies";
 import {
@@ -49,6 +49,7 @@ export interface ReadingSessionActions {
   restartReading: () => void;
   continueReading: () => void;
   resetProgress: () => Promise<{ success: boolean; error?: string }>;
+  flushPosition: () => Promise<void>;
 }
 
 export function useReadingSession({
@@ -118,13 +119,18 @@ export function useReadingSession({
     () => createReadingSaveBoundary(userId, articleId),
     [articleId, userId],
   );
-  const upsertReading = useUpsertReadingRecord({
-    request: { signal: saveBoundary.signal },
-  });
   const createArticleRead = useCreateUserArticleRead();
   const markInboxReadMutation = useMarkInboxRead();
   const deleteReading = useDeleteReadingRecord();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestPositionRef = useRef({ currentPage: 0, scrollPosition: 0 });
+  const lastPersistedPositionRef = useRef<string | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveGenerationRef = useRef(0);
+  const saveRevisionRef = useRef(0);
+  const hydratedRef = useRef(false);
+  const inFlightSaveRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const saveIdentityRef = useRef(sessionIdentity);
   const inboxIdRef = useRef(inboxId);
   const teamCollectionIdRef = useRef(teamCollectionId);
   useEffect(() => {
@@ -146,19 +152,95 @@ export function useReadingSession({
 
   const savePosition = useCallback(
     (currentPage: number, scrollPosition: number) => {
+      latestPositionRef.current = { currentPage, scrollPosition };
+      const generation = saveGenerationRef.current + 1;
+      saveGenerationRef.current = generation;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(async () => {
-        if (!saveBoundary.canDispatch(userId, articleId)) return;
-        try {
-          await upsertReading.mutateAsync({
-            data: { userId, articleId, currentPage, scrollPosition },
-          });
-        } catch {
-        }
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        saveQueueRef.current = saveQueueRef.current.catch(() => undefined).then(async () => {
+          if (generation !== saveGenerationRef.current) return;
+          if (!hydratedRef.current) return;
+          if (!saveBoundary.canDispatch(userId, articleId)) return;
+          const saveKey = `${currentPage}\u0000${scrollPosition}`;
+          if (lastPersistedPositionRef.current === saveKey) return;
+          const saveRevision = Math.max(saveRevisionRef.current + 1, Date.now());
+          saveRevisionRef.current = saveRevision;
+          const request = upsertReadingRecord(
+            { userId, articleId, currentPage, scrollPosition, saveRevision },
+            { signal: saveBoundary.beginDispatch() },
+          ).then(() => {
+            lastPersistedPositionRef.current = saveKey;
+          }).catch(() => undefined);
+          inFlightSaveRef.current = { key: saveKey, promise: request };
+          try {
+            await request;
+          } finally {
+            if (inFlightSaveRef.current?.promise === request) {
+              inFlightSaveRef.current = null;
+            }
+          }
+        });
       }, POSITION_SAVE_DEBOUNCE_MS);
     },
-    [userId, articleId, saveBoundary, upsertReading],
+    [userId, articleId, saveBoundary],
   );
+
+  const flushPosition = useCallback(async () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (!hydratedRef.current || !saveBoundary.canDispatch(userId, articleId)) return;
+    const { currentPage, scrollPosition } = latestPositionRef.current;
+    const saveKey = `${currentPage}\u0000${scrollPosition}`;
+    if (lastPersistedPositionRef.current === saveKey) return;
+    if (inFlightSaveRef.current?.key === saveKey) {
+      return inFlightSaveRef.current.promise;
+    }
+    saveGenerationRef.current += 1;
+    const latestSignal = saveBoundary.beginDispatch(true);
+    const pending = (async () => {
+      if (!saveBoundary.canDispatch(userId, articleId)) return;
+      const saveRevision = Math.max(saveRevisionRef.current + 1, Date.now());
+      saveRevisionRef.current = saveRevision;
+      try {
+        await upsertReadingRecord(
+          { userId, articleId, currentPage, scrollPosition, saveRevision },
+          { signal: latestSignal },
+        );
+        lastPersistedPositionRef.current = saveKey;
+      } catch {
+      }
+    })();
+    inFlightSaveRef.current = { key: saveKey, promise: pending };
+    void pending.finally(() => {
+      if (inFlightSaveRef.current?.promise === pending) {
+        inFlightSaveRef.current = null;
+      }
+    });
+    saveQueueRef.current = pending;
+    return pending;
+  }, [articleId, saveBoundary, userId]);
+
+  useEffect(() => {
+    latestPositionRef.current = {
+      currentPage: session.position.currentPage,
+      scrollPosition: session.position.scrollPosition,
+    };
+  }, [session.position.currentPage, session.position.scrollPosition]);
+
+  useEffect(() => {
+    if (saveIdentityRef.current === sessionIdentity) return;
+    saveIdentityRef.current = sessionIdentity;
+    saveGenerationRef.current += 1;
+    latestPositionRef.current = { currentPage: 0, scrollPosition: 0 };
+    lastPersistedPositionRef.current = null;
+    inFlightSaveRef.current = null;
+    saveRevisionRef.current = 0;
+    saveQueueRef.current = Promise.resolve();
+    hydratedRef.current = false;
+  }, [sessionIdentity]);
 
   const startReading = useCallback(() => {
     if (!canTransitionSession(session.state, "READING")) return;
@@ -312,6 +394,16 @@ export function useReadingSession({
     session.articleId === articleId &&
     session.mode === mode;
 
+  useEffect(() => {
+    hydratedRef.current = isSessionHydrated && isCurrentSession;
+    if (savedRecord?.record?.saveRevision != null) {
+      saveRevisionRef.current = Math.max(
+        saveRevisionRef.current,
+        savedRecord.record.saveRevision,
+      );
+    }
+  }, [isCurrentSession, isSessionHydrated, savedRecord?.record?.saveRevision]);
+
   return {
     session,
     progress,
@@ -330,5 +422,6 @@ export function useReadingSession({
     restartReading,
     continueReading,
     resetProgress,
+    flushPosition,
   };
 }

@@ -4019,10 +4019,13 @@ components:
           type: integer
         scrollPosition:
           type: number
+        saveRevision:
+          type: integer
+          minimum: 0
         updatedAt:
           type: string
           format: date-time
-      required: [id, userId, articleId, currentPage, scrollPosition, updatedAt]
+      required: [id, userId, articleId, currentPage, scrollPosition, saveRevision, updatedAt]
 
     ReadingRecordNullable:
       type: object
@@ -4050,6 +4053,9 @@ components:
           type: number
           minimum: 0
           maximum: 1
+        saveRevision:
+          type: integer
+          minimum: 0
       required: [userId, articleId, currentPage, scrollPosition]
 
     UserArticleRead:
