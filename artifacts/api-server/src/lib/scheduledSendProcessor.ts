@@ -15,12 +15,14 @@ import {
   spacesTable,
   spaceLettersTable,
   spaceParticipationsTable,
+  spaceRoundsTable,
   spaceRoundSlotsTable,
   spaceScheduledSendRecipientsTable,
   spaceScheduledSendsTable,
 } from "@workspace/db";
 import { and, eq, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { logger } from "./logger";
+import { getSpaceRoundStatusForPeriod } from "./spaceRoundStatus";
 import {
   createCorrelationId,
   logOperationalMetric,
@@ -42,16 +44,20 @@ export interface ProcessDueScheduledSendsResult {
 }
 
 const READABLE_ARTICLE_STATUSES = new Set(["DIVIDING", "CLOSING", "LETTER"]);
+const LEGACY_CATCH_UP_DATE_FAILURE =
+  "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.";
 
-function isKstSixOClockOn(date: Date, expectedDate: string): boolean {
+function getKstDeliveryTime(date: Date): { date: string; isSixOClock: boolean } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: "h23",
   }).formatToParts(date);
   const value = (type: string) => parts.find((part) => part.type === type)?.value;
-  return `${value("year")}-${value("month")}-${value("day")}` === expectedDate &&
-    value("hour") === "06" && value("minute") === "00";
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    isSixOClock: value("hour") === "06" && value("minute") === "00",
+  };
 }
 
 export function resolveSpaceDeliveryRecipientIds(input: {
@@ -123,7 +129,14 @@ async function processOneScheduledSend(
     if (
       !send ||
       send.scheduledAt > now ||
-      (send.status !== "PENDING" && send.status !== "SENT")
+      (
+        send.status !== "PENDING" &&
+        send.status !== "SENT" &&
+        !(
+          send.status === "FAILED" &&
+          send.failureReason === LEGACY_CATCH_UP_DATE_FAILURE
+        )
+      )
     ) {
       logReservationOutcome({
         correlationId,
@@ -157,17 +170,76 @@ async function processOneScheduledSend(
       .limit(1);
 
     let failureReason: string | null = null;
-    if (!letter) {
+    const isRecoveringCatchUpFailure =
+      send.status === "FAILED" &&
+      send.failureReason === LEGACY_CATCH_UP_DATE_FAILURE;
+    let recoveryLifecycleFailure: string | null = null;
+    if (
+      isRecoveringCatchUpFailure &&
+      send.reservedRoundId &&
+      send.reservationAuthorId
+    ) {
+      // New reservation creation uses this same identity lock. It prevents a
+      // replacement PENDING attempt from racing a legacy recovery, while also
+      // serializing separate FAILED rows for the same immutable slot use.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(
+        hashtextextended(${`${send.spaceId}:${send.reservedRoundId}:${send.reservationAuthorId}`}, 0)
+      )`);
+      // Lifecycle mutations lock space before round. Reuse that order and
+      // re-read both records only after the identity lock, so recovery cannot
+      // race archival or completion using an earlier snapshot.
+      await tx.execute(sql`SELECT id FROM spaces WHERE id = ${send.spaceId} FOR UPDATE`);
+      await tx.execute(
+        sql`SELECT id FROM space_rounds WHERE id = ${send.reservedRoundId} FOR UPDATE`,
+      );
+      const [[lockedSpace], [lockedRound]] = await Promise.all([
+        tx
+          .select({ status: spacesTable.status })
+          .from(spacesTable)
+          .where(eq(spacesTable.id, send.spaceId))
+          .limit(1),
+        tx
+          .select({
+            status: spaceRoundsTable.status,
+            startsAt: spaceRoundsTable.startsAt,
+            endsAt: spaceRoundsTable.endsAt,
+          })
+          .from(spaceRoundsTable)
+          .where(eq(spaceRoundsTable.id, send.reservedRoundId))
+          .limit(1),
+      ]);
+      if (
+        !lockedSpace ||
+        lockedSpace.status === "ARCHIVED" ||
+        !lockedRound ||
+        getSpaceRoundStatusForPeriod(lockedRound, now) === "COMPLETED"
+      ) {
+        recoveryLifecycleFailure =
+          "완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다.";
+      }
+    }
+    if (recoveryLifecycleFailure) {
+      failureReason = recoveryLifecycleFailure;
+    } else if (!letter) {
       failureReason = "원본 공간 글을 찾을 수 없습니다.";
     } else if (!space) {
       failureReason = "공간을 찾을 수 없습니다.";
-    } else if (space.status === "ARCHIVED" && send.status === "PENDING") {
+    } else if (space.status === "ARCHIVED" && send.status !== "SENT") {
       failureReason = "공간이 종료되어 발신할 수 없습니다.";
     } else if (!letter.sourceArticleId) {
       failureReason = "수신함에 전달할 원본 글이 없습니다.";
     } else if (letter.letterType === "CENTER") {
       // A CENTER send must deliver the exact immutable assignment it reserved,
       // not whichever slot happens to be assigned when a delayed worker runs.
+      // A catch-up send keeps that historical identity while its actual
+      // delivery moves to a later server-selected KST 06:00.
+      const deliveryTime = getKstDeliveryTime(send.scheduledAt);
+      const hasValidDeliveryDate =
+        !!send.reservedDate &&
+        (
+          deliveryTime.date === send.reservedDate ||
+          deliveryTime.date > send.reservedDate
+        );
       if (
         !send.slotId ||
         !send.reservedRoundId ||
@@ -175,9 +247,10 @@ async function processOneScheduledSend(
         !send.reservationAuthorId ||
         send.reservationAuthorId !== letter.authorId ||
         send.reservedRoundId !== letter.spaceRoundId ||
-        !isKstSixOClockOn(send.scheduledAt, send.reservedDate)
+        !deliveryTime.isSixOClock ||
+        !hasValidDeliveryDate
       ) {
-        failureReason = "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.";
+        failureReason = LEGACY_CATCH_UP_DATE_FAILURE;
       } else {
         const [slot] = await tx
           .select()
@@ -192,6 +265,59 @@ async function processOneScheduledSend(
         ) {
           failureReason = "예약 슬롯이 예약 당시의 회차·작성자·날짜와 일치하지 않습니다.";
         }
+      }
+    }
+    if (!failureReason && isRecoveringCatchUpFailure) {
+      const competingAttempts = await tx
+        .select({
+          id: spaceScheduledSendsTable.id,
+          status: spaceScheduledSendsTable.status,
+          failureReason: spaceScheduledSendsTable.failureReason,
+          createdAt: spaceScheduledSendsTable.createdAt,
+        })
+        .from(spaceScheduledSendsTable)
+        .where(
+          and(
+            eq(spaceScheduledSendsTable.spaceId, send.spaceId),
+            eq(spaceScheduledSendsTable.slotId, send.slotId!),
+            eq(spaceScheduledSendsTable.reservedRoundId, send.reservedRoundId!),
+            eq(spaceScheduledSendsTable.reservedDate, send.reservedDate!),
+            eq(spaceScheduledSendsTable.reservationAuthorId, send.reservationAuthorId!),
+            inArray(spaceScheduledSendsTable.status, ["PENDING", "SENT", "FAILED"]),
+          ),
+        );
+      const otherAttempts = competingAttempts.filter((attempt) => attempt.id !== send.id);
+      const hasActiveOrSentReplacement = otherAttempts.some(
+        (attempt) => attempt.status === "PENDING" || attempt.status === "SENT",
+      );
+      const canonicalLegacyFailure = [send, ...otherAttempts]
+        .filter(
+          (attempt) =>
+            attempt.status === "FAILED" &&
+            attempt.failureReason === LEGACY_CATCH_UP_DATE_FAILURE,
+        )
+        .sort((left, right) => {
+          const timeDifference = right.createdAt.getTime() - left.createdAt.getTime();
+          return timeDifference || right.id.localeCompare(left.id);
+        })[0];
+      if (hasActiveOrSentReplacement || canonicalLegacyFailure?.id !== send.id) {
+        await tx
+          .update(spaceScheduledSendsTable)
+          .set({
+            status: "FAILED",
+            failureReason: hasActiveOrSentReplacement
+              ? "동일 슬롯의 다른 예약이 이미 대기 중이거나 발신되었습니다."
+              : "동일 슬롯의 더 최신 실패 예약이 복구 대상으로 선택되었습니다.",
+            sentAt: null,
+          })
+          .where(
+            and(
+              eq(spaceScheduledSendsTable.id, send.id),
+              eq(spaceScheduledSendsTable.status, "FAILED"),
+              eq(spaceScheduledSendsTable.failureReason, LEGACY_CATCH_UP_DATE_FAILURE),
+            ),
+          );
+        return { outcome: "skipped" };
       }
     }
     if (!failureReason && letter && letter.sourceArticleId) {
@@ -219,7 +345,7 @@ async function processOneScheduledSend(
         .where(
           and(
             eq(spaceScheduledSendsTable.id, send.id),
-            inArray(spaceScheduledSendsTable.status, ["PENDING", "SENT"]),
+            inArray(spaceScheduledSendsTable.status, ["PENDING", "SENT", "FAILED"]),
           ),
         );
       logger.warn(
@@ -240,6 +366,11 @@ async function processOneScheduledSend(
       });
       return { outcome: "failed" };
     }
+
+    // FAILED rows only re-enter through the exact historical catch-up defect
+    // above. All identity checks have now passed under this reservation lock.
+    const isDeliverableReservation =
+      send.status === "PENDING" || isRecoveringCatchUpFailure;
 
     let recipientSnapshot = await tx
       .select({ recipientId: spaceScheduledSendRecipientsTable.recipientId })
@@ -291,7 +422,7 @@ async function processOneScheduledSend(
       // this same delivery transaction.  A historical SENT row has no way to
       // prove that currently visible legacy evidence is exhaustive, so retain
       // its unresolved state and merely repair recipients that are provable.
-      if (send.status === "PENDING") {
+      if (isDeliverableReservation) {
         await tx
           .update(spaceScheduledSendsTable)
           .set({ recipientsSnapshottedAt: now })
@@ -341,14 +472,20 @@ async function processOneScheduledSend(
         .onConflictDoNothing();
     }
 
-    if (send.status === "PENDING") {
+    if (isDeliverableReservation) {
       await tx
         .update(spaceScheduledSendsTable)
         .set({ status: "SENT", sentAt: now, failureReason: null })
         .where(
           and(
             eq(spaceScheduledSendsTable.id, send.id),
-            eq(spaceScheduledSendsTable.status, "PENDING"),
+            or(
+              eq(spaceScheduledSendsTable.status, "PENDING"),
+              and(
+                eq(spaceScheduledSendsTable.status, "FAILED"),
+                eq(spaceScheduledSendsTable.failureReason, LEGACY_CATCH_UP_DATE_FAILURE),
+              ),
+            )!,
           ),
         );
       logReservationOutcome({
@@ -380,6 +517,26 @@ export async function processDueScheduledSends(opts?: {
     lte(spaceScheduledSendsTable.scheduledAt, now),
     or(
       eq(spaceScheduledSendsTable.status, "PENDING"),
+      and(
+        eq(spaceScheduledSendsTable.status, "FAILED"),
+        eq(spaceScheduledSendsTable.failureReason, LEGACY_CATCH_UP_DATE_FAILURE),
+        sql`(${spaceScheduledSendsTable.scheduledAt} AT TIME ZONE 'Asia/Seoul')::date > ${spaceScheduledSendsTable.reservedDate}`,
+        sql`(${spaceScheduledSendsTable.scheduledAt} AT TIME ZONE 'Asia/Seoul')::time = TIME '06:00:00'`,
+        sql`EXISTS (
+          SELECT 1
+          FROM space_letters sl
+          JOIN space_round_slots srs
+            ON srs.id = ${spaceScheduledSendsTable.slotId}
+           AND srs.space_round_id = ${spaceScheduledSendsTable.reservedRoundId}
+           AND srs.assigned_user_id = ${spaceScheduledSendsTable.reservationAuthorId}
+           AND srs.scheduled_date = ${spaceScheduledSendsTable.reservedDate}
+          WHERE sl.id = ${spaceScheduledSendsTable.spaceLetterId}
+            AND sl.space_id = ${spaceScheduledSendsTable.spaceId}
+            AND sl.letter_type = 'CENTER'
+            AND sl.space_round_id = ${spaceScheduledSendsTable.reservedRoundId}
+            AND sl.author_id = ${spaceScheduledSendsTable.reservationAuthorId}
+        )`,
+      ),
       and(
         eq(spaceScheduledSendsTable.status, "SENT"),
         or(

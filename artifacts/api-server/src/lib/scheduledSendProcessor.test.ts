@@ -7,9 +7,15 @@ const state = vi.hoisted(() => {
       id: column("space_scheduled_sends.id"),
       spaceId: column("space_scheduled_sends.space_id"),
       spaceLetterId: column("space_scheduled_sends.space_letter_id"),
+      slotId: column("space_scheduled_sends.slot_id"),
+      reservedRoundId: column("space_scheduled_sends.reserved_round_id"),
+      reservationAuthorId: column("space_scheduled_sends.reservation_author_id"),
       scheduledAt: column("space_scheduled_sends.scheduled_at"),
       sentAt: column("space_scheduled_sends.sent_at"),
       status: column("space_scheduled_sends.status"),
+      failureReason: column("space_scheduled_sends.failure_reason"),
+      reservedDate: column("space_scheduled_sends.reserved_date"),
+      createdAt: column("space_scheduled_sends.created_at"),
       recipientsSnapshottedAt: column("space_scheduled_sends.recipients_snapshotted_at"),
     },
     letters: {
@@ -26,6 +32,12 @@ const state = vi.hoisted(() => {
       id: column("spaces.id"),
       creatorId: column("spaces.creator_id"),
       status: column("spaces.status"),
+    },
+    rounds: {
+      id: column("space_rounds.id"),
+      status: column("space_rounds.status"),
+      startsAt: column("space_rounds.starts_at"),
+      endsAt: column("space_rounds.ends_at"),
     },
     articles: {
       id: column("articles.id"),
@@ -108,6 +120,7 @@ vi.mock("@workspace/db", () => ({
   inboxTable: state.tables.inbox,
   spacesTable: state.tables.spaces,
   spaceLettersTable: state.tables.letters,
+  spaceRoundsTable: state.tables.rounds,
   spaceRoundSlotsTable: state.tables.slots,
   spaceParticipationsTable: state.tables.participations,
   spaceScheduledSendRecipientsTable: state.tables.recipients,
@@ -133,6 +146,7 @@ const dueSend = (overrides: Record<string, unknown> = {}) => ({
   sentAt: null,
   status: "PENDING",
   recipientsSnapshottedAt: null,
+  createdAt: new Date("2019-12-01T00:00:00.000Z"),
   ...overrides,
 });
 
@@ -153,6 +167,12 @@ const readableArticle = {
   id: "article-1",
   status: "LETTER",
   deletedAt: null,
+};
+
+const activeRound = {
+  status: "ACTIVE",
+  startsAt: new Date("2019-12-01T00:00:00.000Z"),
+  endsAt: new Date("2099-12-31T00:00:00.000Z"),
 };
 
 function queueSuccessfulDelivery(send = dueSend()) {
@@ -335,6 +355,311 @@ describe("space scheduled-send delivery", () => {
       affectedSlots: [new Date("2020-01-01T21:00:00.000Z")],
     });
     expect(state.inserts.some((entry) => entry.table === state.tables.inbox)).toBe(true);
+  });
+
+  it("delivers a catch-up CENTER send at a later server-selected KST 06:00", async () => {
+    const centerSend = dueSend({
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2019-12-30",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"), // 2020-01-02 06:00 KST
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [centerSend],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+      [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2019-12-30" }],
+      [readableArticle], [], [{ userId: "participant-1" }],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 1,
+      failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T21:00:00.000Z")],
+    });
+  });
+
+  it.each([
+    ["non-06:00 delivery", { scheduledAt: new Date("2020-01-01T21:01:00.000Z") }],
+    ["delivery before its reserved date", { scheduledAt: new Date("2019-12-28T21:00:00.000Z") }],
+    ["missing round identity", { reservedRoundId: null }],
+    ["wrong author identity", { reservationAuthorId: "author-2" }],
+  ])("rejects a damaged catch-up CENTER identity: %s", async (_label, overrides) => {
+    const centerSend = dueSend({
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2019-12-30",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+      ...overrides,
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [centerSend],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 1,
+      affectedSlots: [],
+    });
+    expect(state.inserts).toHaveLength(0);
+  });
+
+  it("recovers only the exact legacy catch-up failure and remains idempotent", async () => {
+    const failedCatchUp = dueSend({
+      status: "FAILED",
+      failureReason: "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.",
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2019-12-30",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [failedCatchUp],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+      [space], [activeRound],
+      [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2019-12-30" }],
+      [failedCatchUp],
+      [readableArticle], [], [{ userId: "participant-1" }],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 1,
+      failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T21:00:00.000Z")],
+    });
+    expect(state.updates).toContainEqual(
+      expect.objectContaining({ status: "SENT", failureReason: null }),
+    );
+
+    state.responses.push(
+      [{ id: "send-1" }],
+      [{ ...failedCatchUp, status: "SENT", failureReason: null, recipientsSnapshottedAt: new Date() }],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+      [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2019-12-30" }],
+      [readableArticle],
+      [{ recipientId: "participant-1" }, { recipientId: "operator-1" }],
+    );
+    state.updates.length = 0;
+    state.inserts.length = 0;
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T21:00:00.000Z")],
+    });
+    expect(state.updates).toHaveLength(0);
+  });
+
+  it("does not recover a FAILED catch-up with any other failure reason", async () => {
+    state.responses.push(
+      [{ id: "send-1" }],
+      [dueSend({
+        status: "FAILED",
+        failureReason: "원본 글을 읽을 수 없어 발신할 수 없습니다.",
+        slotId: "slot-1",
+        reservedRoundId: "round-1",
+        reservedDate: "2019-12-30",
+        reservationAuthorId: "author-1",
+        scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+      })],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 0,
+      affectedSlots: [],
+    });
+    expect(state.inserts).toHaveLength(0);
+    expect(state.updates).toHaveLength(0);
+  });
+
+  it("rejects legacy catch-up recovery after archival and retires the legacy reason", async () => {
+    const failedCatchUp = dueSend({
+      status: "FAILED",
+      failureReason: "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.",
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2019-12-30",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [failedCatchUp],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [{ ...space, status: "ARCHIVED" }],
+      [{ ...space, status: "ARCHIVED" }], [activeRound],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 1,
+      affectedSlots: [],
+    });
+    expect(state.updates).toEqual([
+      expect.objectContaining({
+        status: "FAILED",
+        failureReason: "완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다.",
+      }),
+    ]);
+    expect(state.inserts).toHaveLength(0);
+  });
+
+  it("rejects legacy catch-up recovery after its reserved round completes", async () => {
+    const failedCatchUp = dueSend({
+      status: "FAILED",
+      failureReason: "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.",
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2019-12-30",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [failedCatchUp],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+      [space],
+      [{
+        status: "ACTIVE",
+        startsAt: new Date("2019-12-01T00:00:00.000Z"),
+        endsAt: new Date("2020-01-31T00:00:00.000Z"),
+      }],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 1,
+      affectedSlots: [],
+    });
+    expect(state.updates).toEqual([
+      expect.objectContaining({
+        status: "FAILED",
+        failureReason: "완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다.",
+      }),
+    ]);
+    expect(state.inserts).toHaveLength(0);
+  });
+
+  it("retires the legacy reason when recovery finds a newly unreadable article", async () => {
+    const failedCatchUp = dueSend({
+      status: "FAILED",
+      failureReason: "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.",
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2019-12-30",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+    });
+    state.responses.push(
+      [{ id: "send-1" }], [failedCatchUp],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+      [space], [activeRound],
+      [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2019-12-30" }],
+      [failedCatchUp],
+      [{ ...readableArticle, status: "DRAFT" }],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 1,
+      affectedSlots: [],
+    });
+    expect(state.updates).toEqual([
+      expect.objectContaining({
+        status: "FAILED",
+        failureReason: "원본 글을 읽을 수 없어 발신할 수 없습니다.",
+      }),
+    ]);
+    expect(state.inserts).toHaveLength(0);
+  });
+
+  it.each(["PENDING", "SENT"] as const)(
+    "does not recover a legacy failure when the same slot has a %s attempt",
+    async (competingStatus) => {
+      const failedCatchUp = dueSend({
+        status: "FAILED",
+        failureReason: "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.",
+        slotId: "slot-1",
+        reservedRoundId: "round-1",
+        reservedDate: "2019-12-30",
+        reservationAuthorId: "author-1",
+        scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+      });
+      state.responses.push(
+        [{ id: "send-1" }], [failedCatchUp],
+        [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+        [space],
+        [space], [activeRound],
+        [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2019-12-30" }],
+        [
+          failedCatchUp,
+          {
+            ...failedCatchUp,
+            id: "send-2",
+            status: competingStatus,
+            failureReason: null,
+            createdAt: new Date("2019-12-02T00:00:00.000Z"),
+          },
+        ],
+      );
+
+      await expect(processDueScheduledSends()).resolves.toEqual({
+        sentCount: 0,
+        failedCount: 0,
+        affectedSlots: [],
+      });
+      expect(state.inserts).toHaveLength(0);
+      expect(state.updates).toEqual([
+        expect.objectContaining({
+          failureReason: "동일 슬롯의 다른 예약이 이미 대기 중이거나 발신되었습니다.",
+        }),
+      ]);
+    },
+  );
+
+  it("recovers only the newest of multiple legacy failures for the same slot", async () => {
+    const olderFailure = dueSend({
+      status: "FAILED",
+      failureReason: "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.",
+      slotId: "slot-1",
+      reservedRoundId: "round-1",
+      reservedDate: "2019-12-30",
+      reservationAuthorId: "author-1",
+      scheduledAt: new Date("2020-01-01T21:00:00.000Z"),
+    });
+    const newerFailure = {
+      ...olderFailure,
+      id: "send-2",
+      createdAt: new Date("2019-12-02T00:00:00.000Z"),
+    };
+    state.responses.push(
+      [{ id: "send-1" }], [olderFailure],
+      [{ ...letter, letterType: "CENTER", spaceRoundId: "round-1" }],
+      [space],
+      [space], [activeRound],
+      [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2019-12-30" }],
+      [olderFailure, newerFailure],
+    );
+
+    await expect(processDueScheduledSends()).resolves.toEqual({
+      sentCount: 0,
+      failedCount: 0,
+      affectedSlots: [],
+    });
+    expect(state.inserts).toHaveLength(0);
+    expect(state.updates).toEqual([
+      expect.objectContaining({
+        failureReason: "동일 슬롯의 더 최신 실패 예약이 복구 대상으로 선택되었습니다.",
+      }),
+    ]);
   });
 
   it("processing the same due reservation twice in quick succession is a safe no-op the second time — e.g. the exact-06:00 trigger and the periodic sweep racing", async () => {
