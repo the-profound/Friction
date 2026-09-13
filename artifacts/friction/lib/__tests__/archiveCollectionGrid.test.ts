@@ -42,9 +42,34 @@ describe("archive collection recent-letter previews", () => {
     expect(previewStyle).not.toContain('justifyContent: "center"');
   });
 
+  it("shows author and collection metadata on preview covers, same as the space card", () => {
+    expect(archiveScreen).toContain(
+      "authorName={entry.article?.authorNickname ?? undefined}",
+    );
+    expect(archiveScreen).toContain(
+      "collectionName={entry.article?.collectionName ?? undefined}",
+    );
+  });
+
+  it("disables the preview cover's own shadow, matching the space card treatment", () => {
+    const previewCardsFn = archiveScreen.slice(
+      archiveScreen.indexOf("function CollectionPreviewCards"),
+      archiveScreen.indexOf("function ", archiveScreen.indexOf("function CollectionPreviewCards") + 1),
+    );
+    expect(previewCardsFn).toContain("noShadow");
+  });
+
+  it("keeps the preview row height stable across 0-3 letters and async loading", () => {
+    const previewStyle = archiveScreen.slice(
+      archiveScreen.indexOf("collectionPreviews:"),
+      archiveScreen.indexOf("cardSpacer:", archiveScreen.indexOf("collectionPreviews:")),
+    );
+    expect(previewStyle).toContain("minHeight: 119");
+    expect(previewStyle).toContain('pointerEvents: "none"');
+  });
+
   it("omits empty preview rows and keeps the collection card as the only action", () => {
     expect(archiveScreen).toContain("if (articles.length === 0) return null");
-    expect(archiveScreen).toContain('pointerEvents="none"');
     expect(archiveScreen).toContain("disabled");
     expect(archiveScreen).toContain('pathname: "/of-01-detail"');
     expect(archiveScreen).not.toContain("onPreviewPress");

@@ -895,6 +895,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
     marginTop: 10,
+    minHeight: 119,
+    pointerEvents: "none",
   },
   cardSpacer: {
     flex: 1,
@@ -1090,7 +1092,7 @@ function CollectionPreviewCards({
   const coverRadius = 16 * (coverWidth / Sizing.cardSlotW);
 
   return (
-    <View style={styles.collectionPreviews} pointerEvents="none">
+    <View style={styles.collectionPreviews}>
       {articles.map((entry) => (
         <View
           key={entry.articleId}
@@ -1098,10 +1100,13 @@ function CollectionPreviewCards({
         >
           <ArticleCardItem
             title={entry.article?.title ?? "제목 없음"}
+            authorName={entry.article?.authorNickname ?? undefined}
+            collectionName={entry.article?.collectionName ?? undefined}
             cover={entry.article?.cover}
             cardWidth={coverWidth}
             cardRadius={coverRadius}
             disabled
+            noShadow
             onPress={() => {}}
           />
         </View>
