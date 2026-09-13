@@ -53,6 +53,7 @@ import {
 } from "@/lib/queryInvalidation";
 import { useToast } from "@/contexts/ToastContext";
 import { useNavigation as useAppNavigation } from "@/contexts/NavigationContext";
+import { waitForLatestArticleCoverSave } from "@/lib/articleCoverSaveCoordinator";
 
 const WRITING_HEADER_HEIGHT = 68;
 
@@ -348,6 +349,14 @@ export default function ClosingScreen() {
     isActionInProgressRef.current = true;
     setIsExporting(true);
     try {
+      const coverSaved = await waitForLatestArticleCoverSave(id!);
+      if (!coverSaved) {
+        showToast({
+          message: "표지가 아직 저장되지 않았어요. 오류 안내에서 다시 시도해주세요.",
+          type: "error",
+        });
+        return;
+      }
       // Save the complete snapshot and enter CLOSING in one server transaction.
       // This also makes a response-loss retry safe when the first request
       // already committed the same snapshot.
@@ -394,12 +403,17 @@ export default function ClosingScreen() {
     if (isActionInProgressRef.current) return;
     setRecordKindIntent("editing");
     isActionInProgressRef.current = true;
-    // 표지 편집은 이제 별도 화면(on-01c-cover)에서 이루어지고, 그 화면이
-    // 뒤로가기 전에 저장을 마무리한 뒤 캐시를 갱신하므로, 이 화면은 목록만
-    // 최신 상태로 무효화하면 된다.
-    void invalidateArticleLists(queryClient);
+    // Navigation stays immediate, but a list refetch must not race a detached
+    // cover save and replace the optimistic latest cover with stale server data.
+    if (id) {
+      void waitForLatestArticleCoverSave(id).then((saved) => {
+        if (saved) void invalidateArticleLists(queryClient);
+      });
+    } else {
+      void invalidateArticleLists(queryClient);
+    }
     navigateAfterRemovingGuard(() => router.replace("/(tabs)/on"));
-  }, [navigateAfterRemovingGuard, queryClient, router, setRecordKindIntent]);
+  }, [id, navigateAfterRemovingGuard, queryClient, router, setRecordKindIntent]);
 
   const handleStepBack = useCallback(() => {
     if (isActionInProgressRef.current) return;

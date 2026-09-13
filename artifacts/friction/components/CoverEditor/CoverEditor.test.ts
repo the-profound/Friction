@@ -136,9 +136,10 @@ describe("CoverEditor color picker integration", () => {
     // the cross-screen singleton instead of a locally-owned ref.
     expect(closingScreen).toContain("isCoverPhotoUploadInProgress(id)");
     expect(closingScreen).toContain("표지 사진 업로드가 끝난 뒤 내보낼 수 있어요.");
+    expect(closingScreen).toContain("waitForLatestArticleCoverSave(id).then((saved)");
   });
 
-  it("the dedicated cover-edit page renders always-expanded with no dim/sheet chrome and flushes the save before leaving", () => {
+  it("the dedicated cover-edit page renders always-expanded and commits the latest cover without blocking navigation", () => {
     const coverPage = read("../../app/on-01c-cover.tsx");
 
     expect(coverPage).not.toContain('from "@/components/BottomSheet/BottomSheet"');
@@ -149,8 +150,9 @@ describe("CoverEditor color picker integration", () => {
     expect(coverPage).toContain("<CoverEditor");
 
     // Back navigation (header button / swipe / hardware back all funnel
-    // through handleBack) must await the debounced save before returning.
-    expect(coverPage).toContain("await flushCoverSave()");
+    // through handleBack) stages the latest value without awaiting the network.
+    expect(coverPage).toContain("commitLatestCover()");
+    expect(coverPage).not.toContain("await flushCoverSave()");
     expect(coverPage).toContain("router.back()");
     expect(coverPage).toContain("usePreventRemove(shouldPreventRemoval, handlePreventedRemoval)");
     expect(coverPage).toContain('BackHandler.addEventListener("hardwareBackPress"');

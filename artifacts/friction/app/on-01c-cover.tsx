@@ -15,7 +15,11 @@ import {
   stageArticleTransitionSnapshot,
   getProtectedArticleDetailSnapshot,
 } from "@/lib/queryInvalidation";
-import { createSerializedAsyncRunner, type SerializedAsyncRunner } from "@/lib/serializedAsyncRunner";
+import {
+  markArticleCoverSaveCommitted,
+  queueLatestArticleCoverSave,
+  waitForLatestArticleCoverSave,
+} from "@/lib/articleCoverSaveCoordinator";
 import { useGetArticle, useGetUser, useUpdateArticle } from "@workspace/api-client-react";
 import type { ArticleCover } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -82,72 +86,67 @@ export default function CoverEditScreen() {
   useEffect(() => {
     if (!article || initializedRef.current) return;
     initializedRef.current = true;
-    setCover(resolveArticleCover(article.cover));
+    const resolved = resolveArticleCover(article.cover);
+    latestCoverRef.current = resolved;
+    setCover(resolved);
   }, [article]);
 
-  const pendingCoverRef = useRef<ArticleCover | null>(null);
+  const latestCoverRef = useRef<ArticleCover | null>(cover);
   const saveCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const coverSaveQueueRef = useRef<SerializedAsyncRunner>(createSerializedAsyncRunner());
-
-  const persistCover = useCallback(
-    (nextCover: ArticleCover) =>
-      coverSaveQueueRef.current(async () => {
-        if (!id) throw new Error("편지 정보를 찾을 수 없어요.");
+  const queueCoverSave = useCallback((nextCover: ArticleCover) => {
+    if (!id) return;
+    queueLatestArticleCoverSave(id, {
+      value: nextCover,
+      save: async () => {
         await updateArticle.mutateAsync({
           id,
           data: { cover: nextCover },
         });
+      },
+      onLatestSaved: () => {
         patchArticleInRecordCaches(queryClient, id, { cover: nextCover });
         stageArticleTransitionSnapshot(queryClient, id, { cover: nextCover }, article);
-      }),
-    [id, queryClient, updateArticle, article],
-  );
+        void invalidateArticleLists(queryClient);
+      },
+      onLatestError: (error, retry) => {
+        console.warn("Failed to save cover:", error instanceof Error ? error.message : error);
+        showToast({
+          message: "표지를 저장하지 못했어요.",
+          type: "error",
+          duration: 7000,
+          action: {
+            label: "다시 시도",
+            onPress: retry,
+          },
+        });
+      },
+    });
+  }, [article, id, queryClient, showToast, updateArticle]);
 
-  const flushCoverSave = useCallback(async () => {
+  const commitLatestCover = useCallback(() => {
     if (saveCoverTimerRef.current) {
       clearTimeout(saveCoverTimerRef.current);
       saveCoverTimerRef.current = null;
     }
-    const pending = pendingCoverRef.current;
-    if (!pending || !id) return;
-    try {
-      await persistCover(pending);
-      if (pendingCoverRef.current === pending) {
-        pendingCoverRef.current = null;
-      }
-    } catch (e: unknown) {
-      console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
-      if (!pendingCoverRef.current) {
-        pendingCoverRef.current = pending;
-      }
-      throw e;
-    }
-  }, [id, persistCover]);
+    const latest = latestCoverRef.current;
+    if (!latest || !id) return;
+    patchArticleInRecordCaches(queryClient, id, { cover: latest });
+    stageArticleTransitionSnapshot(queryClient, id, { cover: latest }, article);
+    queueCoverSave(latest);
+  }, [article, id, queryClient, queueCoverSave]);
 
   const handleCoverChange = useCallback(
     (next: ArticleCover) => {
       setCover(next);
-      pendingCoverRef.current = next;
+      latestCoverRef.current = next;
       if (!id) return;
       if (saveCoverTimerRef.current) clearTimeout(saveCoverTimerRef.current);
-      saveCoverTimerRef.current = setTimeout(async () => {
+      saveCoverTimerRef.current = setTimeout(() => {
         saveCoverTimerRef.current = null;
-        const toSave = pendingCoverRef.current;
-        if (!toSave) return;
-        try {
-          await persistCover(toSave);
-          if (pendingCoverRef.current === toSave) {
-            pendingCoverRef.current = null;
-          }
-        } catch (e: unknown) {
-          console.warn("Failed to save cover:", e instanceof Error ? e.message : e);
-          if (!pendingCoverRef.current) {
-            pendingCoverRef.current = toSave;
-          }
-        }
+        commitLatestCover();
       }, 500);
     },
-    [id, persistCover],
+    [commitLatestCover, id],
   );
 
   const handlePhotoCoverCommit = useCallback(
@@ -157,7 +156,8 @@ export default function CoverEditScreen() {
       // bytes. Reconcile the live preview and every article cache from that
       // server-owned value instead of issuing a second PATCH.
       setCover(savedCover);
-      pendingCoverRef.current = null;
+      latestCoverRef.current = savedCover;
+      markArticleCoverSaveCommitted(id, savedCover);
       patchArticleInRecordCaches(queryClient, id, { cover: savedCover });
       stageArticleTransitionSnapshot(queryClient, id, { cover: savedCover }, article);
     },
@@ -169,8 +169,14 @@ export default function CoverEditScreen() {
       clearTimeout(saveCoverTimerRef.current);
       saveCoverTimerRef.current = null;
     }
-    await flushCoverSave();
-  }, [flushCoverSave]);
+    commitLatestCover();
+    if (id) {
+      const saved = await waitForLatestArticleCoverSave(id);
+      if (!saved) {
+        throw new Error("기존 표지를 저장한 뒤 사진을 적용해주세요.");
+      }
+    }
+  }, [commitLatestCover, id]);
 
   const isCoverUploadingRef = useRef(false);
   const handleCoverUploadStateChange = useCallback(
@@ -188,9 +194,8 @@ export default function CoverEditScreen() {
     };
   }, [id]);
 
-  // ── 뒤로가기: 진행 중인 표지 저장을 마무리한 뒤에만 화면을 벗어난다. ──
+  // ── 뒤로가기: 최신 표지를 즉시 확정하고 물리 저장은 백그라운드에서 마무리한다. ──
   const isActionInProgressRef = useRef(false);
-  const [isSavingOnExit, setIsSavingOnExit] = useState(false);
   const [shouldPreventRemoval, setShouldPreventRemoval] = useState(true);
   const pendingNavigationRef = useRef<(() => void) | null>(null);
   const navigationCommittedRef = useRef(false);
@@ -203,27 +208,19 @@ export default function CoverEditScreen() {
     setShouldPreventRemoval(false);
   }, []);
 
-  const handleBack = useCallback(async () => {
+  const handleBack = useCallback(() => {
     if (isActionInProgressRef.current) return;
     if (isCoverUploadingRef.current) {
       showToast({ message: "표지 사진 작업이 끝난 뒤 이동할 수 있어요.", type: "info" });
       return;
     }
     isActionInProgressRef.current = true;
-    setIsSavingOnExit(true);
-    try {
-      // Back navigation must finish the pending cover save before returning
-      // to Closing, so Closing's derived `cover` reads the final value.
-      await flushCoverSave();
-    } catch {
-      showToast({ message: "표지를 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
-      // Never trap the user behind a failed save — navigate back anyway.
-    } finally {
-      setIsSavingOnExit(false);
-      void invalidateArticleLists(queryClient);
-      navigateAfterRemovingGuard(() => router.back());
-    }
-  }, [flushCoverSave, navigateAfterRemovingGuard, queryClient, router, showToast]);
+    // Commit the latest selection to cache and the coalescing persistence
+    // boundary synchronously. Navigation never waits for debounce, an older
+    // in-flight request, or slow network I/O.
+    commitLatestCover();
+    navigateAfterRemovingGuard(() => router.back());
+  }, [commitLatestCover, navigateAfterRemovingGuard, router, showToast]);
 
   const handlePreventedRemoval = useCallback(() => {
     if (isActionInProgressRef.current) return;
@@ -260,15 +257,13 @@ export default function CoverEditScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ gestureEnabled: !isSavingOnExit }} />
+      <Stack.Screen options={{ gestureEnabled: true }} />
       <View style={[styles.container, { paddingTop: topInset }]}>
         <View style={styles.header}>
           <View style={styles.headerSide}>
             <HeaderButton
               variant="back"
               onPress={handleBack}
-              disabled={isSavingOnExit}
-              busy={isSavingOnExit}
               accessibilityLabel="마감 화면으로 돌아가기"
             />
           </View>

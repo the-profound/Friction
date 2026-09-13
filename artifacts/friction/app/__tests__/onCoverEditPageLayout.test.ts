@@ -36,10 +36,14 @@ describe("dedicated cover-edit page layout (Task #2020)", () => {
     expect(controlsAreaStyle).toContain("flex: 1");
   });
 
-  it("flushes the pending cover save before navigating back", () => {
-    const handleBack = screen.match(/const handleBack = useCallback\(async \(\) => \{[\s\S]*?\n {2}\}, \[[^\]]*\]\);/)?.[0] ?? "";
-    expect(handleBack).toContain("await flushCoverSave()");
+  it("stages the latest cover and navigates without waiting for network persistence", () => {
+    const handleBack = screen.match(/const handleBack = useCallback\(\(\) => \{[\s\S]*?\n {2}\}, \[[^\]]*\]\);/)?.[0] ?? "";
+    expect(handleBack).toContain("commitLatestCover()");
     expect(handleBack).toContain("router.back()");
+    expect(handleBack).not.toContain("await");
+    expect(screen).toContain("queueLatestArticleCoverSave(id");
+    expect(screen).toContain("patchArticleInRecordCaches(queryClient, id, { cover: latest })");
+    expect(screen).toContain('label: "다시 시도"');
   });
 
   it("blocks leaving while a cover photo upload is in progress", () => {
