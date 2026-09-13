@@ -35,7 +35,7 @@ async function findBundles(directory) {
   return bundles;
 }
 
-if (process.env.EAS_BUILD_PROFILE !== "preview" && process.env.EAS_BUILD_PROFILE !== "production") {
+if (process.env.EAS_BUILD_PROFILE !== "preview" && process.env.EAS_BUILD_PROFILE !== "test") {
   console.log("Skipping EAS bundle validation for non-release profile.");
   process.exit(0);
 }

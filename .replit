@@ -78,13 +78,13 @@ router = "path"
 PORT = "3001"
 
 [[workflows.workflow]]
-name = "Publish iOS(test)"
+name = "Publish iOS&Android (test)"
 mode = "parallel"
 author = 56922764
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-ios.sh"
+args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-test.sh"
 
 [[workflows.workflow]]
 name = "Publish iOS(dev)"
@@ -106,15 +106,6 @@ args = "pnpm --filter @workspace/friction dev:tunnel"
 
 [workflows.workflow.metadata]
 outputType = "console"
-
-[[workflows.workflow]]
-name = "Publish Android(test)"
-mode = "parallel"
-author = 56922764
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-android.sh"
 
 [agent]
 stack = "PNPM_WORKSPACE"

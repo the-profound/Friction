@@ -13,6 +13,9 @@ command run by `env:exec`, after clearing local public configuration values.
 command; app.config release guards otherwise inspect the empty parent environment.
 
 **How to apply:** Derive a value-free local configuration fingerprint first, then
-run a clean `eas env:exec <track> "APP_RELEASE_TRACK=... EAS_BUILD_PROFILE=... node
-validate-release-env.mjs ..."` command and compare fingerprints. Never substitute a
+map the build profile independently to both its semantic release track and configured
+EAS Cloud environment, then run a clean `eas env:exec <environment>
+"APP_RELEASE_TRACK=<track> EAS_BUILD_PROFILE=<profile> node validate-release-env.mjs
+..."` command. These names may differ: a test profile can intentionally retain
+production runtime semantics and consume production variables. Never substitute a
 default Cloud target for a missing local intended value.

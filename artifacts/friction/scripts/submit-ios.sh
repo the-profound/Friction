@@ -39,7 +39,7 @@ echo ""
 $EAS submit \
   --platform ios \
   --latest \
-  --profile production \
+  --profile test \
   --non-interactive
 
 rm -f /tmp/asc_api_key.p8

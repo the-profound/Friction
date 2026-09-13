@@ -2,13 +2,15 @@ const { createHash } = require("node:crypto");
 
 const buildProfile = process.env.EAS_BUILD_PROFILE;
 const releaseTrack =
-  buildProfile === "preview" || buildProfile === "production" || buildProfile === "development"
-    ? buildProfile
-    : process.env.APP_VARIANT === "preview"
-      ? "preview"
-      : process.env.APP_VARIANT === "development"
-        ? "development"
-        : "production";
+  buildProfile === "test"
+    ? "production"
+    : buildProfile === "preview" || buildProfile === "development"
+      ? buildProfile
+      : process.env.APP_VARIANT === "preview"
+        ? "preview"
+        : process.env.APP_VARIANT === "development"
+          ? "development"
+          : "production";
 const IS_DEV = releaseTrack === "development";
 const IS_PREVIEW = releaseTrack === "preview";
 
@@ -79,10 +81,11 @@ function buildReleaseDiagnostics() {
 
 function validateEasReleaseEnvironment() {
   const profile = process.env.EAS_BUILD_PROFILE;
-  if (profile !== "preview" && profile !== "production") return;
-  if (process.env.APP_RELEASE_TRACK !== profile) {
+  if (profile !== "preview" && profile !== "test") return;
+  const expectedTrack = profile === "test" ? "production" : profile;
+  if (process.env.APP_RELEASE_TRACK !== expectedTrack) {
     throw new Error(
-      `Release track does not match EAS ${profile}. APP_RELEASE_TRACK must be ${profile}.`,
+      `Release track does not match EAS ${profile}. APP_RELEASE_TRACK must be ${expectedTrack}.`,
     );
   }
 

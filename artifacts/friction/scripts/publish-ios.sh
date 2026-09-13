@@ -16,9 +16,9 @@ fi
 
 echo ""
 echo "🔎 릴리즈 환경 변수 검증 중..."
-APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=production \
+APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=test \
   node "$SCRIPT_DIR/validate-release-env.mjs" --track production
-bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
+bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" test
 
 export EXPO_APPLE_TEAM_ID="D9P94YPN8F"
 
@@ -31,7 +31,7 @@ echo ""
 
 $EAS build \
   --platform ios \
-  --profile production \
+  --profile test \
   --non-interactive \
   --wait \
   --json > /tmp/eas_build_output.json
@@ -51,7 +51,7 @@ echo ""
 $EAS submit \
   --platform ios \
   --id "$BUILD_ID" \
-  --profile production \
+  --profile test \
   --non-interactive
 
 echo ""

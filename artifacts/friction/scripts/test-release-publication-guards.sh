@@ -53,10 +53,109 @@ run_missing_value_case() {
   fi
 }
 
-for script_name in publish-ios.sh publish-preview.sh publish-android.sh; do
+for script_name in publish-test.sh publish-ios.sh publish-preview.sh publish-android.sh; do
   for variable in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_DOMAIN; do
     run_missing_value_case "$script_name" "$variable"
   done
 done
 
-echo "Release publish guards reject every missing local public configuration value before EAS runs."
+node - "$SCRIPT_DIR/../eas.json" <<'NODE'
+const fs = require("node:fs");
+const eas = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const test = eas.build?.test;
+if (
+  test?.environment !== "production" ||
+  test?.env?.APP_RELEASE_TRACK !== "production" ||
+  test?.ios?.distribution !== "store" ||
+  test?.android?.buildType !== "apk" ||
+  eas.submit?.test?.ios?.ascAppId !== "6795505833"
+) {
+  throw new Error("The shared test build/submit profile is incomplete.");
+}
+if (eas.build?.production || eas.build?.["android-test"] || eas.submit?.production) {
+  throw new Error("Obsolete production/android-test profiles are still configured.");
+}
+if (
+  eas.build?.preview?.env?.APP_RELEASE_TRACK !== "preview" ||
+  eas.build?.development?.env?.APP_RELEASE_TRACK !== "development" ||
+  eas.build?.development?.developmentClient !== true
+) {
+  throw new Error("Preview or development profile behavior changed.");
+}
+NODE
+
+if rg -n --glob '*.sh' --glob '*.mjs' -- \
+  '--profile (production|android-test)|EAS_BUILD_PROFILE=(production|android-test)' \
+  "$SCRIPT_DIR" > "$TMP_DIR/obsolete-profile-references.log"; then
+  echo "Obsolete test publish profile reference found:" >&2
+  cat "$TMP_DIR/obsolete-profile-references.log" >&2
+  exit 1
+fi
+
+INVOCATION_LOG="$TMP_DIR/eas-invocations.log"
+SUCCESS_EAS="$TMP_DIR/eas-success"
+cat > "$SUCCESS_EAS" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$INVOCATION_LOG"
+
+if [[ "$1" == "env:exec" ]]; then
+  export EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co"
+  export EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key"
+  export EXPO_PUBLIC_DOMAIN="release-test.example"
+  eval "$3"
+elif [[ "$1" == "build" ]]; then
+  cat <<'JSON'
+[
+  {"id":"ios-build-id","platform":"IOS"},
+  {
+    "id":"android-build-id",
+    "platform":"ANDROID",
+    "artifacts":{"buildUrl":"https://example.test/friction.apk"},
+    "buildDetailsPageUrl":"https://example.test/android-build"
+  }
+]
+JSON
+elif [[ "$1" == "submit" ]]; then
+  exit 0
+else
+  echo "Unexpected EAS command: $*" >&2
+  exit 2
+fi
+EOF
+chmod +x "$SUCCESS_EAS"
+
+INVOCATION_LOG="$INVOCATION_LOG" \
+  EAS_BIN="$SUCCESS_EAS" \
+  EXPO_TOKEN="test-token" \
+  EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+  EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+  EXPO_PUBLIC_DOMAIN="release-test.example" \
+  bash "$SCRIPT_DIR/publish-test.sh" > "$TMP_DIR/publish-test-success.log" 2>&1
+
+if [[ "$(grep -c '^build ' "$INVOCATION_LOG")" -ne 1 ]]; then
+  echo "Combined test publish must invoke exactly one EAS build." >&2
+  cat "$INVOCATION_LOG" >&2
+  exit 1
+fi
+grep -q '^build --platform all --profile test ' "$INVOCATION_LOG"
+grep -q '^env:exec production ' "$INVOCATION_LOG"
+grep -q '^submit --platform ios --id ios-build-id --profile test ' "$INVOCATION_LOG"
+if grep -q '^submit --platform android' "$INVOCATION_LOG"; then
+  echo "Combined test publish must not submit Android to Google Play." >&2
+  exit 1
+fi
+grep -q 'https://example.test/friction.apk' "$TMP_DIR/publish-test-success.log"
+
+(
+  cd "$SCRIPT_DIR/.."
+  EAS_BUILD_PROFILE=test \
+    APP_RELEASE_TRACK=production \
+    EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+    EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+    EXPO_PUBLIC_DOMAIN="release-test.example" \
+    node scripts/validate-resolved-release-config.mjs
+) > "$TMP_DIR/resolved-test-config.log"
+grep -q 'track=production' "$TMP_DIR/resolved-test-config.log"
+
+echo "Release publication guards validated the shared test profile, combined build, iOS submission, Android APK reporting, and missing-value rejection."

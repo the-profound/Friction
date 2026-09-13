@@ -22,13 +22,13 @@ fi
 
 echo ""
 echo "🔎 Android test용 EAS 환경을 사용합니다..."
-echo "   앱 런타임 설정은 EAS의 production 환경에서 빌드에 주입됩니다."
+echo "   앱 런타임 설정은 test 프로필의 EAS production 환경에서 빌드에 주입됩니다."
 
 cd "$APP_DIR"
 
-APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=android-test \
+APP_RELEASE_TRACK=production EAS_BUILD_PROFILE=test \
   node "$SCRIPT_DIR/validate-release-env.mjs" --track production
-bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" production
+bash "$SCRIPT_DIR/validate-eas-cloud-env.sh" test
 
 echo ""
 echo "📦 Android test APK 빌드 시작 (EAS Cloud)..."
@@ -37,7 +37,7 @@ echo ""
 
 "$EAS" build \
   --platform android \
-  --profile android-test \
+  --profile test \
   --non-interactive \
   --wait \
   --json > "$BUILD_OUTPUT"

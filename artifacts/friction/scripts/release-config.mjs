@@ -10,6 +10,11 @@ const INVALID_VALUES = new Set([
 ]);
 
 export const RELEASE_TRACKS = ["development", "preview", "production"];
+export const BUILD_PROFILE_TRACKS = {
+  development: "development",
+  preview: "preview",
+  test: "production",
+};
 export const RELEASE_REQUIRED_VARIABLES = [
   "EXPO_PUBLIC_SUPABASE_URL",
   "EXPO_PUBLIC_SUPABASE_ANON_KEY",
@@ -56,7 +61,7 @@ export function resolveReleaseTrack(env = process.env) {
   const profile = env.EAS_BUILD_PROFILE?.trim();
   const declaredTrack = env.APP_RELEASE_TRACK?.trim();
 
-  if (profile && RELEASE_TRACKS.includes(profile)) return profile;
+  if (profile && BUILD_PROFILE_TRACKS[profile]) return BUILD_PROFILE_TRACKS[profile];
   if (declaredTrack && RELEASE_TRACKS.includes(declaredTrack)) return declaredTrack;
   return env.APP_VARIANT === "development" ? "development" : "development";
 }
@@ -71,8 +76,8 @@ export function buildReleaseConfigSummary(env = process.env, expectedTrack) {
   }
   if (
     env.EAS_BUILD_PROFILE &&
-    RELEASE_TRACKS.includes(env.EAS_BUILD_PROFILE) &&
-    declaredTrack !== env.EAS_BUILD_PROFILE
+    BUILD_PROFILE_TRACKS[env.EAS_BUILD_PROFILE] &&
+    declaredTrack !== BUILD_PROFILE_TRACKS[env.EAS_BUILD_PROFILE]
   ) {
     issues.push("APP_RELEASE_TRACK does not match EAS_BUILD_PROFILE");
   }

@@ -5,19 +5,10 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "production": {
+    "test": {
+      "environment": "production",
       "env": {
         "APP_RELEASE_TRACK": "production"
-      },
-      "ios": {
-        "distribution": "store",
-        "credentialsSource": "remote",
-        "autoIncrement": true
-      }
-    },
-    "preview": {
-      "env": {
-        "APP_RELEASE_TRACK": "preview"
       },
       "ios": {
         "distribution": "store",
@@ -30,11 +21,14 @@
         "autoIncrement": true
       }
     },
-    "android-test": {
-      "extends": "production",
-      "environment": "production",
+    "preview": {
       "env": {
-        "APP_RELEASE_TRACK": "production"
+        "APP_RELEASE_TRACK": "preview"
+      },
+      "ios": {
+        "distribution": "store",
+        "credentialsSource": "remote",
+        "autoIncrement": true
       },
       "android": {
         "buildType": "apk",
@@ -56,7 +50,7 @@
     }
   },
   "submit": {
-    "production": {
+    "test": {
       "ios": {
         "ascAppId": "6795505833"
       }

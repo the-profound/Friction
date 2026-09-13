@@ -4,12 +4,13 @@ import { execFileSync } from "node:child_process";
 import { buildReleaseConfigSummary, resolveReleaseTrack } from "./release-config.mjs";
 
 const profile = process.env.EAS_BUILD_PROFILE;
-if (profile !== "preview" && profile !== "production") {
+if (profile !== "preview" && profile !== "test") {
   console.log("Skipping resolved Expo config validation for non-release profile.");
   process.exit(0);
 }
 
-const summary = buildReleaseConfigSummary(process.env, profile);
+const expectedTrack = profile === "test" ? "production" : profile;
+const summary = buildReleaseConfigSummary(process.env, expectedTrack);
 if (!summary.valid) {
   console.error(`Resolved release configuration is invalid: ${summary.issues.join(", ")}.`);
   process.exit(1);
