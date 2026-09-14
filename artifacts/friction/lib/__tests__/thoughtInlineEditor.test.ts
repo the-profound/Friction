@@ -12,6 +12,7 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  resolveThoughtEditorCardMinHeight,
   resolveThoughtInputHeight,
   shouldShowReadingThoughtToolbar,
   startImmediateClose,
@@ -267,6 +268,21 @@ describe("inline reading thought lifecycle", () => {
     })).toBe(72);
   });
 
+  it("gives the card surface the same measured height contract as the native input", () => {
+    expect(resolveThoughtEditorCardMinHeight({
+      inputHeight: undefined,
+      verticalPadding: 32,
+    })).toBeUndefined();
+    expect(resolveThoughtEditorCardMinHeight({
+      inputHeight: 196,
+      verticalPadding: 32,
+    })).toBe(228);
+    expect(resolveThoughtEditorCardMinHeight({
+      inputHeight: 72,
+      verticalPadding: 32,
+    })).toBe(104);
+  });
+
   it("keeps DOM height measurement web-only while retaining native content-size events", () => {
     const source = readFileSync(
       join(__dirname, "../../components/ThoughtsBottomSheet/ThoughtsBottomSheet.tsx"),
@@ -276,7 +292,15 @@ describe("inline reading thought lifecycle", () => {
     expect(source).toContain('if (Platform.OS === "web") {');
     expect(source).toContain('element.style.height = "0px";');
     expect(source.match(/onContentSizeChange=\{/g)).toHaveLength(2);
-    expect(source).toContain("scrollEditorBottomIntoView(key);");
+    expect(source).toContain(
+      "scrollEditorBottomIntoView(key, cardLayoutRevisionRef.current);",
+    );
+    expect(source.match(/minHeight: editorCardMinHeight/g)).toHaveLength(2);
+    expect(source).toContain("cardLayoutRevisionRef.current !== layoutRevision");
+    expect(source).toContain("reconcileEditorVisibilityRef.current();");
+    expect(source).toContain(
+      "Math.abs(listViewportHeightRef.current - nextHeight) < 0.5",
+    );
     expect(source).toContain(
       'unmeasuredHeight: Platform.OS === "web" ? "minimum" : "intrinsic"',
     );

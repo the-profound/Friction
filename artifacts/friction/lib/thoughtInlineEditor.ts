@@ -54,6 +54,17 @@ export function resolveThoughtInputHeight(input: {
   return Math.max(minHeight, measurement.contentHeight);
 }
 
+export function resolveThoughtEditorCardMinHeight(input: {
+  inputHeight?: number;
+  verticalPadding: number;
+}): number | undefined {
+  if (
+    input.inputHeight === undefined
+    || !Number.isFinite(input.inputHeight)
+  ) return undefined;
+  return input.inputHeight + input.verticalPadding;
+}
+
 export function shouldShowReadingThoughtToolbar(input: {
   visible: boolean;
   editorActive: boolean;

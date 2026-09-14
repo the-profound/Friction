@@ -49,6 +49,7 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  resolveThoughtEditorCardMinHeight,
   resolveThoughtInputHeight,
   shouldShowReadingThoughtToolbar,
   startImmediateClose,
@@ -67,6 +68,7 @@ const THOUGHT_FONT_RATIO = 0.04;
 const THOUGHT_LINE_HEIGHT_RATIO = 1.7;
 const THOUGHT_INPUT_MIN_LINES = 3;
 const THOUGHT_INPUT_VERTICAL_PADDING = 8;
+const THOUGHT_CARD_VERTICAL_PADDING = 32;
 
 const SWIPE_CLOSE_VEL = 0.5;
 const SWIPE_CLOSE_DY = 60;
@@ -223,6 +225,8 @@ export default function ThoughtsBottomSheet({
   const listScrollYRef = useRef(0);
   const listViewportHeightRef = useRef(0);
   const cardLayoutRef = useRef<Record<string, { y: number; height: number }>>({});
+  const cardLayoutRevisionRef = useRef(0);
+  const reconcileEditorVisibilityRef = useRef<() => void>(() => {});
   const [thoughtCardWidth, setThoughtCardWidth] = useState(
     Math.max(0, screenWidth - Spacing.screenPx * 2),
   );
@@ -251,6 +255,10 @@ export default function ThoughtsBottomSheet({
     // Forcing the minimum height during that window makes the measured viewport
     // feed back as the content height and leaves long content clipped.
     unmeasuredHeight: Platform.OS === "web" ? "minimum" : "intrinsic",
+  });
+  const editorCardMinHeight = resolveThoughtEditorCardMinHeight({
+    inputHeight,
+    verticalPadding: THOUGHT_CARD_VERTICAL_PADDING,
   });
   const showKeyboardToolbar = shouldShowReadingThoughtToolbar({
     visible,
@@ -428,7 +436,9 @@ export default function ThoughtsBottomSheet({
         if (cardSheetHAnimRef.current) {
           animations.push(Animated.timing(cardSheetHAnimRef.current, { toValue: targetH, ...timingBase }));
         }
-        Animated.parallel(animations).start();
+        Animated.parallel(animations).start(() => {
+          reconcileEditorVisibilityRef.current();
+        });
       } else {
         // 전체 단계에서 키보드 열림 → 높이 그대로, inputPad만 올림
         // (defaultPanelHeight + kh 가 maxPanelHeight 보다 작을 수 있어
@@ -440,7 +450,9 @@ export default function ThoughtsBottomSheet({
           duration: KB_ANIM_DURATION,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: false,
-        }).start();
+        }).start(() => {
+          reconcileEditorVisibilityRef.current();
+        });
       }
     });
 
@@ -458,7 +470,9 @@ export default function ThoughtsBottomSheet({
         const midH = screenHeight * PANEL_MID_RATIO;
         const timingBase = { duration: KB_ANIM_DURATION, easing: Easing.out(Easing.cubic), useNativeDriver: false as const };
         Animated.timing(outerHeightAnim, { toValue: midH, ...timingBase }).start();
-        Animated.timing(inputPadAnim, { toValue: restPadRef.current, ...timingBase }).start();
+        Animated.timing(inputPadAnim, { toValue: restPadRef.current, ...timingBase }).start(() => {
+          reconcileEditorVisibilityRef.current();
+        });
         if (cardSheetHAnimRef.current) {
           Animated.timing(cardSheetHAnimRef.current, { toValue: midH, ...timingBase }).start();
         }
@@ -469,7 +483,9 @@ export default function ThoughtsBottomSheet({
           duration: KB_ANIM_DURATION,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: false,
-        }).start();
+        }).start(() => {
+          reconcileEditorVisibilityRef.current();
+        });
       }
     });
 
@@ -878,8 +894,12 @@ export default function ThoughtsBottomSheet({
     }, 80);
   }, [commitEditor]);
 
-  const scrollEditorBottomIntoView = useCallback((key: string) => {
+  const scrollEditorBottomIntoView = useCallback((key: string, layoutRevision: number) => {
     setTimeout(() => {
+      if (
+        editorRef.current?.key !== key
+        || cardLayoutRevisionRef.current !== layoutRevision
+      ) return;
       const layout = cardLayoutRef.current[key];
       if (!layout) {
         scrollRef.current?.scrollToEnd({ animated: true });
@@ -889,6 +909,13 @@ export default function ThoughtsBottomSheet({
       scrollRef.current?.scrollTo({ y: Math.max(0, target), animated: true });
     }, 0);
   }, []);
+
+  reconcileEditorVisibilityRef.current = () => {
+    const key = editorRef.current?.key;
+    if (!key) return;
+    cardLayoutRevisionRef.current += 1;
+    scrollEditorBottomIntoView(key, cardLayoutRevisionRef.current);
+  };
 
   const updateThoughtCardLayout = useCallback((
     key: string,
@@ -903,7 +930,8 @@ export default function ThoughtsBottomSheet({
       editorRef.current?.key === key
       && (!previous || Math.abs(previous.height - layout.height) >= 0.5)
     ) {
-      scrollEditorBottomIntoView(key);
+      cardLayoutRevisionRef.current += 1;
+      scrollEditorBottomIntoView(key, cardLayoutRevisionRef.current);
     }
   }, [scrollEditorBottomIntoView]);
 
@@ -1104,7 +1132,10 @@ export default function ThoughtsBottomSheet({
             ref={scrollRef}
             style={styles.scroll}
             onLayout={(event) => {
-              listViewportHeightRef.current = event.nativeEvent.layout.height;
+              const nextHeight = event.nativeEvent.layout.height;
+              if (Math.abs(listViewportHeightRef.current - nextHeight) < 0.5) return;
+              listViewportHeightRef.current = nextHeight;
+              reconcileEditorVisibilityRef.current();
             }}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
@@ -1150,7 +1181,7 @@ export default function ThoughtsBottomSheet({
                       onLayout={(event) => {
                         updateThoughtCardLayout(t.id, event.nativeEvent.layout);
                       }}
-                      style={styles.editorCard}
+                      style={[styles.editorCard, { minHeight: editorCardMinHeight }]}
                     >
                       <TextInput
                         ref={inputRef}
@@ -1215,7 +1246,7 @@ export default function ThoughtsBottomSheet({
                     onLayout={(event) => {
                       updateThoughtCardLayout(editor.key, event.nativeEvent.layout);
                     }}
-                    style={styles.editorCard}
+                    style={[styles.editorCard, { minHeight: editorCardMinHeight }]}
                   >
                     <TextInput
                       ref={inputRef}
