@@ -521,6 +521,7 @@ describe("auth navigation boundary", () => {
   it("waits for delayed active-reading storage before choosing the native landing route", () => {
     expect(
       getProtectedNavigationDecision({
+        shouldDecideInitialRoute: true,
         isActiveReadingHydrated: false,
         activeSession: null,
         userId: "user-a",
@@ -539,6 +540,7 @@ describe("auth navigation boundary", () => {
     };
     expect(
       getProtectedNavigationDecision({
+        shouldDecideInitialRoute: true,
         isActiveReadingHydrated: true,
         activeSession,
         userId: "user-a",
@@ -548,7 +550,16 @@ describe("auth navigation boundary", () => {
     ).toEqual({ kind: "restore-reading", activeSession });
   });
 
-  it.each(["ios", "android"])("restores reading after returning to the foreground on %s", () => {
+  it.each([
+    ["ios", "/on"],
+    ["ios", "/article-detail"],
+    ["ios", "/read"],
+    ["ios", "/on-01a"],
+    ["android", "/on"],
+    ["android", "/article-detail"],
+    ["android", "/read"],
+    ["android", "/on-01a"],
+  ])("keeps the current %s route %s after returning to the foreground", (_platform, pathname) => {
     const activeSession = {
       userId: "user-a",
       articleId: "article-1",
@@ -556,13 +567,14 @@ describe("auth navigation boundary", () => {
     };
     expect(
       getProtectedNavigationDecision({
+        shouldDecideInitialRoute: false,
         isActiveReadingHydrated: true,
         activeSession,
         userId: "user-a",
-        pathname: "/on",
+        pathname,
         shouldOpenRecords: false,
       }),
-    ).toEqual({ kind: "restore-reading", activeSession });
+    ).toEqual({ kind: "stay" });
   });
 
   it("opens records instead of restoring another account or cleared completion", () => {
@@ -573,6 +585,7 @@ describe("auth navigation boundary", () => {
     };
     expect(
       getProtectedNavigationDecision({
+        shouldDecideInitialRoute: true,
         isActiveReadingHydrated: true,
         activeSession: otherAccountSession,
         userId: "user-b",
@@ -582,6 +595,7 @@ describe("auth navigation boundary", () => {
     ).toEqual({ kind: "open-records" });
     expect(
       getProtectedNavigationDecision({
+        shouldDecideInitialRoute: true,
         isActiveReadingHydrated: true,
         activeSession: null,
         userId: "user-a",
@@ -599,6 +613,7 @@ describe("auth navigation boundary", () => {
     };
     expect(
       getProtectedNavigationDecision({
+        shouldDecideInitialRoute: false,
         isActiveReadingHydrated: true,
         activeSession: basicSession,
         userId: "user-a",
@@ -608,6 +623,7 @@ describe("auth navigation boundary", () => {
     ).toEqual({ kind: "stay" });
     expect(
       getProtectedNavigationDecision({
+        shouldDecideInitialRoute: false,
         isActiveReadingHydrated: true,
         activeSession: null,
         userId: "user-a",

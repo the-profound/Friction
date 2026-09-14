@@ -47,18 +47,21 @@ export type ProtectedNavigationDecision<T> =
   | { kind: "open-records" };
 
 export function getProtectedNavigationDecision<T extends ActiveReadingOwner>({
+  shouldDecideInitialRoute,
   isActiveReadingHydrated,
   activeSession,
   userId,
   pathname,
   shouldOpenRecords,
 }: {
+  shouldDecideInitialRoute: boolean;
   isActiveReadingHydrated: boolean;
   activeSession: T | null;
   userId: string;
   pathname: string;
   shouldOpenRecords: boolean;
 }): ProtectedNavigationDecision<T> {
+  if (!shouldDecideInitialRoute) return { kind: "stay" };
   if (!isActiveReadingHydrated) return { kind: "wait" };
 
   const ownedActiveSession = getActiveReadingForUser(activeSession, userId);

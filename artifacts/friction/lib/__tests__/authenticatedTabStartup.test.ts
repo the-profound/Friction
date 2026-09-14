@@ -18,15 +18,18 @@ describe("authenticated native tab startup", () => {
       '(segments[1] as string) === "index"',
     );
     expect(rootLayout).toContain('router.replace("/(tabs)/on")');
-    expect(rootLayout).toContain("!hasRedirectedRef.current");
+    expect(rootLayout).toContain(
+      "shouldDecideInitialRoute: !hasCompletedInitialNavigationRef.current",
+    );
   });
 
   it("only forces the record tab once per session, then lets a deliberate inbox tap stay on inbox", () => {
     // The forced-records redirect must be gated by a ref that only allows
     // the very first post-hydration navigation check to redirect away from
     // the inbox route.
-    expect(rootLayout).toContain("const hasRedirectedRef = useRef(false);");
-    expect(rootLayout).toContain("!hasRedirectedRef.current),");
+    expect(rootLayout).toContain(
+      "const hasCompletedInitialNavigationRef = useRef(false);",
+    );
 
     // The ref must flip to true after the first hydrated check regardless of
     // which way that check decided (not only when it actually redirected),
@@ -34,8 +37,23 @@ describe("authenticated native tab startup", () => {
     // starts on the record tab and later taps the inbox tab for the first
     // time would still get bounced back to records.
     expect(rootLayout).toContain("if (!isHydrated) return;");
-    expect(rootLayout).toContain("hasRedirectedRef.current = true;");
+    expect(rootLayout).toContain(
+      "hasCompletedInitialNavigationRef.current = true;",
+    );
     expect(rootLayout).toContain("}, [isHydrated]);");
+  });
+
+  it("keeps the protected stack mounted while a foreground refresh synchronizes active reading", () => {
+    const activeReadingContext = read("contexts/ActiveReadingContext.tsx");
+    const refreshStart = activeReadingContext.indexOf(
+      "const refreshActiveSession = useCallback",
+    );
+    const refreshEnd = activeReadingContext.indexOf("}, []);", refreshStart);
+    const refreshBody = activeReadingContext.slice(refreshStart, refreshEnd);
+
+    expect(refreshBody).not.toContain("setIsHydrated(false)");
+    expect(rootLayout).toContain('if (Platform.OS === "web") return;');
+    expect(rootLayout).toContain("void refreshActiveSession();");
   });
 
   it("passes the authenticated identity through the protected provider boundary", () => {
@@ -76,7 +94,7 @@ describe("authenticated native tab startup", () => {
 
   it("keeps notification taps routed explicitly to inbox", () => {
     expect(notificationDeepLink).toContain(
-      'router.replace("/(tabs)/index")',
+      'router.replace("/(tabs)")',
     );
   });
 });

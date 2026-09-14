@@ -7,4 +7,4 @@ Protected navigation must not choose its initial landing route until active-read
 
 **Why:** Authentication recovery, default native landing, foreground storage reads, and completion clears can all finish in different orders. Treating an initial `null` as “no reading” or allowing an older read/write to finish last can lose or resurrect the reading.
 
-**How to apply:** Serialize active-reading storage reads and writes, capture a restore revision before any asynchronous work, invalidate it synchronously on local set/clear, and close the navigation boundary again during foreground revalidation. Never persist or force-restore re-read mode.
+**How to apply:** Serialize active-reading storage reads and writes, capture a restore revision before any asynchronous work, and invalidate it synchronously on local set/clear. Only the first hydration may block protected navigation and choose the landing route. Foreground revalidation must keep hydration complete and update state without replacing the current route. Never persist or force-restore re-read mode.

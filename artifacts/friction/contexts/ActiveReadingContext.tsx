@@ -89,7 +89,6 @@ export function ActiveReadingProvider({ children }: { children: React.ReactNode 
 
   const refreshActiveSession = useCallback(async () => {
     const loadRevision = revisionGuardRef.current.begin();
-    setIsHydrated(false);
     try {
       let val: string | null = null;
       await storageQueueRef.current.enqueue(async () => {
