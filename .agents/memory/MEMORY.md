@@ -153,3 +153,4 @@
 - [Reading progress save ordering](friction-reading-progress-save-ordering.md) — lifecycle flushes need hydration gating, gesture cancellation, and server-enforced revision ordering.
 - [iOS writing suspension dedupe](friction-ios-writing-suspension-dedupe.md) — blur may precede AppState by a turn; dedupe pending and already-emitted flushes, then reset on focus/resume.
 - [Native multiline card height contract](friction-native-multiline-card-height.md) — content-size measurements must size both the input and its card; viewport changes share the same scroll generation.
+- [ProseMirror default scroll authority](friction-prosemirror-default-scroll-authority.md) — a rich-text engine's own default caret-follow scroll can override app-level correction unless unified via its official override hook.

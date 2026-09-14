@@ -59,6 +59,24 @@ describe("native editor viewport scroll correction", () => {
     ).toBe(404);
   });
 
+  it("keeps the scroll position still when ordinary typing wraps a line but the caret stays within the margin", () => {
+    // Simulates a normal, unrequested-scroll-free keystroke: the caret moves
+    // down by one wrapped line's height, but both its old and new edges
+    // remain inside the visible margin — this must never produce a scroll
+    // change, matching the "don't auto-scroll ordinary typing" contract that
+    // the editor's own default caret-follow behavior must also respect.
+    expect(
+      computeEditorViewportScrollTop({
+        currentScrollTop: 320,
+        maxScrollTop: 1_400,
+        viewportHeight: 500,
+        marginPx: 16,
+        caretTop: 590,
+        caretBottom: 614,
+      }),
+    ).toBe(320);
+  });
+
   it("clamps stale iOS offsets when document height shrinks or reflows", () => {
     expect(
       computeEditorViewportScrollTop({

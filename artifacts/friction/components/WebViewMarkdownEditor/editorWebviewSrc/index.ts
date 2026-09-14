@@ -1627,6 +1627,24 @@ function spellFindRange(
       content: initialHtml,
       editable: true,
       autofocus: false,
+      editorProps: {
+        // ProseMirror dispatches `tr.scrollIntoView()` on its own for every
+        // DOM-observed change — this includes ordinary character-by-character
+        // typing (readDOMChange), not just explicit commands. Left alone, its
+        // default `scrollRectIntoView` runs a native, toolbar/margin-unaware
+        // scroll that fights with (and is far more abrupt than) this app's
+        // own viewport correction, producing the big jump when a line wraps.
+        // `handleScrollToSelection` is ProseMirror's own extension point for
+        // replacing that default: returning a truthy value here fully
+        // suppresses `scrollRectIntoView`, so `correctDocumentViewport` is the
+        // single authority for every caret-follow scroll — typing included —
+        // and a wrapped line can only ever produce the same margin-aware
+        // adjustment already used for focus/Enter/resize/paste/drag.
+        handleScrollToSelection: () => {
+          correctDocumentViewport(true);
+          return true;
+        },
+      },
       onUpdate: ({ editor: ed, transaction }) => {
         // export 캐시 무효화: 실제 doc 이 바뀐 트랜잭션만 카운트.
         // selection/decoration-only 트랜잭션으로는 무효화하지 않는다.
