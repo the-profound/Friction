@@ -550,6 +550,32 @@ describe("auth navigation boundary", () => {
     ).toEqual({ kind: "restore-reading", activeSession });
   });
 
+  it("accepts a persisted space reading origin while keeping legacy sessions compatible", () => {
+    expect(
+      isActiveReadingState({
+        userId: "user-a",
+        articleId: "article-1",
+        mode: "basic",
+        entrySource: "space",
+      }),
+    ).toBe(true);
+    expect(
+      isActiveReadingState({
+        userId: "user-a",
+        articleId: "article-1",
+        mode: "basic",
+      }),
+    ).toBe(true);
+    expect(
+      isActiveReadingState({
+        userId: "user-a",
+        articleId: "article-1",
+        mode: "basic",
+        entrySource: "unknown",
+      }),
+    ).toBe(false);
+  });
+
   it.each([
     ["ios", "/on"],
     ["ios", "/article-detail"],

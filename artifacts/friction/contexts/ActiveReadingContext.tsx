@@ -7,6 +7,7 @@ const STORAGE_KEY = "friction:activeReadingSession";
 export interface ActiveReadingState extends ActiveReadingOwner {
   articleId: string;
   inboxId?: string;
+  entrySource?: "list" | "inbox" | "space";
   mode: string;
 }
 
@@ -35,6 +36,12 @@ export function isActiveReadingState(value: unknown): value is ActiveReadingStat
     typeof candidate.articleId === "string" &&
     candidate.articleId.length > 0 &&
     (candidate.inboxId === undefined || typeof candidate.inboxId === "string") &&
+    (
+      candidate.entrySource === undefined ||
+      candidate.entrySource === "list" ||
+      candidate.entrySource === "inbox" ||
+      candidate.entrySource === "space"
+    ) &&
     candidate.mode === "basic"
   );
 }

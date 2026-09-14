@@ -92,6 +92,7 @@ import ActionSheetModal from "@/components/ActionSheetModal/ActionSheetModal";
 import { useUser } from "@/contexts/UserContext";
 import { useActiveReading } from "@/contexts/ActiveReadingContext";
 import { shouldCommitCompletionForEntry, type ReadingMode } from "@/lib/policies";
+import { shouldSyncSpaceInboxRead } from "@/lib/spaceInboxReadSync";
 import {
   clampReadingPage,
   entersReaderSuspension,
@@ -190,7 +191,7 @@ export default function ReadScreen() {
   const inboxId = params.inboxId;
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
   const readerIdentity = `${articleId}\u0000${mode}\u0000${inboxId ?? ""}`;
-  const entrySource = params.entrySource as "list" | "inbox" | undefined;
+  const entrySource = params.entrySource as "list" | "inbox" | "space" | undefined;
   const teamCollectionId = params.teamCollectionId;
   // True when the user opens an article via a collection article list rather
   // than via the inbox. Used in handleCommitAndSkip to determine whether to
@@ -595,6 +596,21 @@ export default function ReadScreen() {
     next();
   }, [duplicatePrompt]);
 
+  const syncSpaceInboxRead = useCallback(async () => {
+    if (!shouldSyncSpaceInboxRead({ entrySource, mode, userId, articleId })) return;
+    try {
+      await markOthersRead.mutateAsync({
+        articleId,
+        params: { recipientId: userId },
+      });
+      invalidateInbox(queryClient);
+    } catch (e) {
+      // Space reading completion remains successful even if inbox synchronization
+      // fails. A later inbox refresh may retry through the normal reading flow.
+      console.warn("[syncSpaceInboxRead] failed (non-fatal):", e);
+    }
+  }, [entrySource, mode, userId, articleId, markOthersRead, queryClient]);
+
   // ── Analytics tracking refs ────────────────────────────────────────────────
   const pageEnterTimeRef = useRef<number>(Date.now());
   const readingStartTimeRef = useRef<number>(0);
@@ -780,10 +796,10 @@ export default function ReadScreen() {
 
   useEffect(() => {
     if (mode === "basic" && articleId) {
-      setActiveSession({ articleId, inboxId, mode, userId });
+      setActiveSession({ articleId, inboxId, entrySource, mode, userId });
     }
     return () => {};
-  }, [articleId, inboxId, mode, setActiveSession, userId]);
+  }, [articleId, inboxId, entrySource, mode, setActiveSession, userId]);
 
   useEffect(() => {
     if (!reading.isRestoring && reading.isSessionHydrated && reading.session.state === "IDLE" && totalPages > 0) {
@@ -1611,6 +1627,7 @@ export default function ReadScreen() {
           showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
           return;
         }
+        await syncSpaceInboxRead();
         invalidateInbox(queryClient);
 
         let targetCollectionId: string | undefined = selectedCollectionId;
@@ -1670,7 +1687,7 @@ export default function ReadScreen() {
     overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
       if (finished) runOnJS(navigateBackDelayed)();
     });
-  }, [isCollectionsReady, isAlreadySaved, reading, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, applyAnsweredQuestionCardsToMemo, overlayOpacity, navigateBackDelayed, showToast]);
+  }, [isCollectionsReady, isAlreadySaved, reading, syncSpaceInboxRead, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, applyAnsweredQuestionCardsToMemo, overlayOpacity, navigateBackDelayed, showToast]);
 
   const handleCommitAndSkip = useCallback(async () => {
     if (isDeleting) return;
@@ -1680,6 +1697,7 @@ export default function ReadScreen() {
       // 완독 화면을 유지한 채 fade-out — 슬롯을 되돌리면 편지 페이지가
       // 잠깐 보이는 점프가 생긴다. 실패 시에도 완독 화면에 남아 재시도한다.
       if (result.success) {
+        await syncSpaceInboxRead();
         trackArticleAction({ articleId, action: "skip", msSinceComplete: Date.now() - completionTimeRef.current });
         if (!isListEntry) {
           // 수신함 경로: 읽기 완료 후 수신함 목록 갱신
@@ -1699,7 +1717,7 @@ export default function ReadScreen() {
     } finally {
       setIsDeleting(false);
     }
-  }, [isDeleting, isListEntry, reading, router, clearActiveSession, queryClient, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
+  }, [isDeleting, isListEntry, reading, syncSpaceInboxRead, router, clearActiveSession, queryClient, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
 
   const handleRereadExit = useCallback(async () => {
     if (shouldCommitCompletionForEntry(mode, inboxId)) {

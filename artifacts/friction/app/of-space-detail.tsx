@@ -1382,7 +1382,10 @@ export default function SpaceDetailScreen() {
         // meaningless — bail out.
         if (!tappedLetterRef.current?.sourceArticleId) return;
         wentToReaderRef.current = true;
-        router.push({ pathname: "/read" as never, params: { articleId: article.id } });
+        router.push({
+          pathname: "/read" as never,
+          params: { articleId: article.id, entrySource: "space" },
+        });
       } else {
         router.push({ pathname: "/read" as never, params: { articleId: article.id, mode: "re_read" } });
       }

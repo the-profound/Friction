@@ -139,6 +139,7 @@ function ActiveReadingGuard({
         params: {
           articleId: readingToRestore.articleId,
           inboxId: readingToRestore.inboxId,
+          entrySource: readingToRestore.entrySource,
           mode: readingToRestore.mode,
         },
       });
@@ -149,6 +150,7 @@ function ActiveReadingGuard({
     protectedNavigationKind,
     readingToRestore?.articleId,
     readingToRestore?.inboxId,
+    readingToRestore?.entrySource,
     readingToRestore?.mode,
     router,
   ]);

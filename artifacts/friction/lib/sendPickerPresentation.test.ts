@@ -215,6 +215,19 @@ describe("send picker presentation", () => {
     ).toEqual([]);
   });
 
+  it("shows a synchronized delivery as soon as its isRead cache value changes", () => {
+    const item = inboxItem(
+      "space-delivery",
+      "space-article",
+      "2026-09-02T00:00:00.000Z",
+      false,
+    );
+    const now = Date.parse("2026-09-03T00:00:00.000Z");
+
+    expect(filterReadReplyLetters([item], now)).toEqual([]);
+    expect(filterReadReplyLetters([{ ...item, isRead: true }], now)).toHaveLength(1);
+  });
+
   it("keeps only active spaces with an approved participating role", () => {
     const makeSpace = (
       id: string,

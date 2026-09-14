@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { shouldSyncSpaceInboxRead } from "./spaceInboxReadSync";
 
 const readScreenPath = fileURLToPath(new URL("../app/read.tsx", import.meta.url));
 const readScreen = readFileSync(readScreenPath, "utf8");
 const tokensPath = fileURLToPath(new URL("../constants/tokens.ts", import.meta.url));
 const tokens = readFileSync(tokensPath, "utf8");
+const spaceDetailPath = fileURLToPath(new URL("../app/of-space-detail.tsx", import.meta.url));
+const spaceDetail = readFileSync(spaceDetailPath, "utf8");
 
 function sourceBetween(start: string, end: string): string {
   const startIndex = readScreen.indexOf(start);
@@ -49,6 +52,62 @@ describe("rereceived inbox completion wiring", () => {
     expect(handler).toContain("applyAnsweredQuestionCardsToMemo()");
     expect(handler).toContain("overlayOpacity.value = withTiming(1");
     expect(handler).toContain("runOnJS(navigateBackDelayed)()");
+  });
+});
+
+describe("space letter inbox synchronization", () => {
+  it("marks every unread inbox copy after a primary space read completes", () => {
+    expect(spaceDetail).toContain('params: { articleId: article.id, entrySource: "space" }');
+    expect(spaceDetail).toContain('params: { articleId: article.id, mode: "re_read" }');
+
+    const sync = sourceBetween(
+      "const syncSpaceInboxRead = useCallback",
+      "// ── Analytics tracking refs",
+    );
+    expect(sync).toContain("shouldSyncSpaceInboxRead({ entrySource, mode, userId, articleId })");
+    expect(sync).toContain("params: { recipientId: userId }");
+    expect(sync).not.toContain("exceptInboxId");
+    expect(sync).toContain("invalidateInbox(queryClient)");
+    expect(sync).toContain("failed (non-fatal)");
+  });
+
+  it("preserves the space origin across active-reading persistence and restoration", () => {
+    expect(readScreen).toContain(
+      "setActiveSession({ articleId, inboxId, entrySource, mode, userId })",
+    );
+    const rootLayout = readFileSync(
+      fileURLToPath(new URL("../app/_layout.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(rootLayout).toContain("entrySource: readingToRestore.entrySource");
+
+    const restoredSession = {
+      userId: "current-user",
+      articleId: "space-article",
+      mode: "basic" as const,
+      entrySource: "space" as const,
+    };
+    expect(shouldSyncSpaceInboxRead(restoredSession)).toBe(true);
+    expect(shouldSyncSpaceInboxRead({ ...restoredSession, mode: "re_read" })).toBe(false);
+    expect(shouldSyncSpaceInboxRead({ ...restoredSession, entrySource: "list" })).toBe(false);
+  });
+
+  it("runs synchronization only after successful completion in save and skip flows", () => {
+    const save = sourceBetween(
+      "const handleCommitAndSave = useCallback",
+      "const handleCommitAndSkip = useCallback",
+    );
+    const skip = sourceBetween(
+      "const handleCommitAndSkip = useCallback",
+      "const handleRereadExit = useCallback",
+    );
+
+    for (const handler of [save, skip]) {
+      expect(handler.indexOf("await reading.commitCompletion()")).toBeGreaterThanOrEqual(0);
+      expect(handler.indexOf("await syncSpaceInboxRead()")).toBeGreaterThan(
+        handler.indexOf("if (!result.success)"),
+      );
+    }
   });
 });
 
