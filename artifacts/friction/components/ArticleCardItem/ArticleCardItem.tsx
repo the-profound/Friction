@@ -62,6 +62,15 @@ interface ArticleCardItemProps {
    * times/ratios and a corner gap opens up during the press animation.
    */
   pressScale?: SharedValue<number>;
+  /**
+   * Selection overlays use this (UI thread, per-frame) to converge the hero
+   * card's own radius onto a destination slot's fixed resting radius by the
+   * end of the close animation, when that slot pins a radius that diverges
+   * from the natural canonical-scaled ratio. Overrides `cardRadius`/the
+   * natural default on the card surface and its cover. Omit for the
+   * unchanged static radius.
+   */
+  radiusOverride?: SharedValue<number>;
 }
 
 const DEFAULT_BG = Colors.zinc50;
@@ -100,6 +109,7 @@ function ArticleCardItem({
   noShadow = false,
   onImageReady,
   pressScale,
+  radiusOverride,
 }: ArticleCardItemProps) {
   const w = cardWidth ?? CARD_W;
   const h = w * Sizing.cardRatio;
@@ -113,6 +123,7 @@ function ArticleCardItem({
     carouselShadow,
     shadowProgress,
   );
+  const animatedRadiusStyle = useAnimatedRadiusOverrideStyle(radiusOverride);
 
   return (
     <ScalePressable
@@ -134,6 +145,7 @@ function ArticleCardItem({
           !noShadow && staticShadowStyle,
           !noShadow && animatedShadowStyle,
           { width: w, height: h, borderRadius },
+          animatedRadiusStyle,
         ]}
       >
         <ArticleCardCover
@@ -148,6 +160,7 @@ function ArticleCardItem({
           width={w}
           height={h}
           borderRadius={borderRadius}
+          radiusOverride={radiusOverride}
           onImageLoad={onImageReady}
         />
       </RAnimated.View>
@@ -226,5 +239,19 @@ function useAnimatedCardSurfaceShadowStyle(
     }
 
     return {};
+  });
+}
+
+/**
+ * Mirrors `useAnimatedCardSurfaceShadowStyle`: runs on the UI thread so the
+ * radius the selection overlay computes per frame (see
+ * `CardSelectOverlay`'s `cardRadiusOverride`) is applied without a JS-thread
+ * round trip. Returns an empty style when no override is supplied, leaving
+ * the static `borderRadius` set alongside it in the style array untouched.
+ */
+function useAnimatedRadiusOverrideStyle(radiusOverride?: SharedValue<number>) {
+  return useAnimatedStyle(() => {
+    if (!radiusOverride) return {};
+    return { borderRadius: radiusOverride.value };
   });
 }

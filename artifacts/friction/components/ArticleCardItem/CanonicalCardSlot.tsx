@@ -32,7 +32,13 @@ interface CanonicalCardSlotProps {
   carouselShadow?: boolean;
 }
 
-const CANONICAL_RADIUS_RATIO = 16 / Sizing.cardSlotW;
+/**
+ * Exported so callers that render sibling placeholder cards outside
+ * `CanonicalCardSlot` (which cannot use its `borderRadius` default directly)
+ * can compute the identical proportional radius for their own slot width and
+ * stay visually matched, instead of hardcoding an independent ratio/literal.
+ */
+export const CANONICAL_RADIUS_RATIO = 16 / Sizing.cardSlotW;
 
 /**
  * Keeps an ArticleCardItem at the same canonical size used by the selection

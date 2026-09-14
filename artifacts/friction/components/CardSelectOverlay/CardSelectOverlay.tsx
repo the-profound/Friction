@@ -16,6 +16,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import RAnimated, {
   useSharedValue,
   useAnimatedStyle,
+  useDerivedValue,
   withTiming,
   withSpring,
   runOnJS,
@@ -48,6 +49,10 @@ import {
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const CARD_W = Sizing.cardSlotW;
 const CARD_H = Sizing.cardH;
+// ArticleCardItem's own natural radius at canonical width (no cardRadius/
+// cardWidth override) — see ArticleCardItem.tsx. Reused here so the hero
+// card's open-state radius (progress === 1) always matches it exactly.
+const CANONICAL_CARD_RADIUS = 16;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 const OVERLAY_GAP = 16;
@@ -193,6 +198,17 @@ interface CardSelectOverlayProps {
    */
   originUsesCarouselShadow?: boolean;
   /**
+   * The origin card's resting corner radius (on-screen pixels) when it
+   * diverges from the natural canonical-scaled ratio (e.g. a CanonicalCardSlot
+   * with an explicit radius override). When set, the hero card's own radius
+   * is interpolated against `progress` so it already matches this value the
+   * instant the close animation finishes, instead of the underlying static
+   * slot popping to a different radius once the Modal unmounts. The open-state
+   * (progress === 1) radius is always the untouched natural canonical value —
+   * only omit this to keep every other caller's existing behavior.
+   */
+  originCardRadius?: number;
+  /**
    * When provided, the item at initialIndex is a sealed envelope.
    * The overlay shows the envelope front face first and plays an opening
    * animation when the user taps "개봉하기".
@@ -240,6 +256,7 @@ export default function CardSelectOverlay({
   currentAuthorId,
   currentSpaceId,
   originUsesCarouselShadow = false,
+  originCardRadius,
   envelopeInfo,
   visibilityButton,
   inlineModal,
@@ -337,6 +354,25 @@ export default function CardSelectOverlay({
   const detailsFade = useSharedValue(1);
   const verticalDismissActiveRef = useRef(false);
   const detailsDismissCapturedRef = useRef(false);
+
+  // When the origin slot pins a resting radius that diverges from the
+  // natural canonical-scaled ratio (see `originCardRadius` doc above), keep
+  // the hero card's on-screen radius equal to that exact value at
+  // progress === 0 and to the untouched natural canonical radius at
+  // progress === 1, interpolating in between on the UI thread so the close
+  // animation's last frame already matches the static slot underneath —
+  // no pop once the Modal unmounts and the real slot takes over.
+  const hasOriginCardRadius = originCardRadius != null;
+  const cardRadiusOverride = useDerivedValue(() => {
+    if (!hasOriginCardRadius) return 0;
+    const scale = interpolate(progress.value, [0, 1], [originScale, finalScale]);
+    const onScreenRadius = interpolate(
+      progress.value,
+      [0, 1],
+      [originCardRadius as number, CANONICAL_CARD_RADIUS * finalScale],
+    );
+    return onScreenRadius / scale;
+  });
 
   // ── Envelope animation values ─────────────────────────────────────────────
   const [envelopePhase, setEnvelopePhase] = useState<EnvelopePhase>("sealed");
@@ -1292,6 +1328,11 @@ export default function CardSelectOverlay({
                               ? progress
                               : undefined
                           }
+                          radiusOverride={
+                            hasOriginCardRadius && i === initialIndex
+                              ? cardRadiusOverride
+                              : undefined
+                          }
                            onImageReady={
                              isCurrentVisualSlot && imageUrl
                                ? () =>
@@ -1339,6 +1380,9 @@ export default function CardSelectOverlay({
                   }
                   shadowProgress={
                     originUsesCarouselShadow ? progress : undefined
+                  }
+                  radiusOverride={
+                    hasOriginCardRadius ? cardRadiusOverride : undefined
                   }
                   onImageReady={
                     isCurrentVisualSlot && imageUrl

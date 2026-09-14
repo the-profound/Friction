@@ -42,5 +42,21 @@ avoids all three problems.
 token there exactly once; disable the projected card's own shadow in that case.
 Keep the radius on both the outer shadow geometry and the same-sized inner clip.
 Apply press scale only to the outer boundary so shadow, clip, and content move
-as one unit. Callers needing a different visual corner ratio should continue to
-pass an explicit final-size radius.
+as one unit.
+
+**Radius value: prefer the exported ratio over a fixed literal.** Space
+detail's round carousel first tried a fixed literal radius override (14px,
+then 16px to match the full-size cover card) for its `CanonicalCardSlot`
+covers and neighboring placeholder cards, matching bug 1 above literally. The
+user later rejected that: a fixed literal doesn't track the slot's actual
+on-screen width, so it stops being "proportional" the moment screen width (and
+therefore the computed slot width) changes. The fix that stuck: export
+`CANONICAL_RADIUS_RATIO` (`16 / Sizing.cardSlotW`) from this file and have the
+caller compute its own local radius constant as
+`Math.max(8, Math.round(actualSlotWidth * CANONICAL_RADIUS_RATIO))` — the exact
+same formula `CanonicalCardSlot` uses internally — then reuse that one local
+constant for both the `CanonicalCardSlot borderRadius` prop *and* any sibling
+non-`CanonicalCardSlot` placeholder cards in the same row. This keeps every
+slot's rounding genuinely tied to that carousel's real card width instead of
+an arbitrary shared number, while still giving plain placeholder views (which
+can't use `CanonicalCardSlot`'s own default) an identical value to match.

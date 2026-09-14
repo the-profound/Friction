@@ -77,6 +77,17 @@ export interface OpenLetterOverlayOptions {
    * token so the hero transition blends shadows correctly.
    */
   originUsesCarouselShadow?: boolean;
+  /**
+   * The origin card's resting corner radius (on-screen pixels), when it
+   * differs from the natural canonical-scaled ratio — e.g. a CanonicalCardSlot
+   * whose outer clip pins an explicit radius rather than scaling it down
+   * proportionally with the slot's width. When set, the hero transition
+   * interpolates its own radius so the closing animation lands on this exact
+   * value instead of popping to it once the Modal unmounts. Omit to keep the
+   * default proportional radius (correct for any slot that never overrides
+   * CanonicalCardSlot's/ArticleCardItem's natural radius).
+   */
+  originCardRadius?: number;
 }
 
 export interface UseLetterSelectionOverlayReturn {
@@ -329,6 +340,9 @@ export function useLetterSelectionOverlay(
   }>({});
   const [selectedEnvelopeInfo, setSelectedEnvelopeInfo] = useState<EnvelopeInfo | null>(null);
   const [selectedCarouselShadow, setSelectedCarouselShadow] = useState(false);
+  const [selectedOriginCardRadius, setSelectedOriginCardRadius] = useState<
+    number | undefined
+  >(undefined);
 
   // Visibility toggle state
   const [visibilityConfirmTarget, setVisibilityConfirmTarget] = useState<{
@@ -497,6 +511,7 @@ export function useLetterSelectionOverlay(
       });
       setSelectedEnvelopeInfo(openOptions?.envelopeInfo ?? null);
       setSelectedCarouselShadow(openOptions?.originUsesCarouselShadow ?? false);
+      setSelectedOriginCardRadius(openOptions?.originCardRadius);
 
       if (openOptions?.measureRef) {
         openOptions.measureRef.measureInWindow((x, y, width, height) => {
@@ -729,6 +744,7 @@ export function useLetterSelectionOverlay(
         currentAuthorId={overlayNavOptions.currentAuthorId}
         currentSpaceId={overlayNavOptions.currentSpaceId}
         originUsesCarouselShadow={selectedCarouselShadow}
+        originCardRadius={selectedOriginCardRadius}
         envelopeInfo={selectedEnvelopeInfo}
         visibilityButton={visibilityButton}
         inlineModal={inlineModalNode ?? undefined}

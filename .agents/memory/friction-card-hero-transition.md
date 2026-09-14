@@ -142,3 +142,46 @@ must always be set together. When adding a new grid/carousel that opts a
 letter cover into `carouselShadow`, grep other `carouselShadow` call sites
 (`on.tsx`, `index.tsx`, `of-01-detail.tsx` as of this writing) to confirm the
 pairing convention before assuming a new site is correct by copy-paste.
+
+## Radius parity for a resting radius set via `originCardRadius`
+
+Most `CanonicalCardSlot` callers never pass an explicit `borderRadius`, so the
+slot's resting radius is already `width * CANONICAL_RADIUS_RATIO` (that
+component's own exported ratio) — exactly what the overlay's own natural
+(unoverridden) radius produces at `progress === 0` too. No special handling is
+needed there, even if the caller separately computes and passes that same
+formula's result explicitly (see `friction-canonical-card-slot-radius-clip.md`
+— space detail's round carousel does this so its neighboring, non-`CanonicalCardSlot`
+placeholder cards can match the same value).
+
+`openLetterOverlay(..., { originCardRadius })` exists for the case where a
+destination slot's resting radius is *not* derivable from the overlay's own
+natural progress=0 math — e.g. a genuinely different, hand-picked ratio, not
+just the same ratio computed and passed through explicitly. When the two
+diverge, the overlay's hero card must be told the destination's exact resting
+radius so its close animation's last frame lands on it, via
+`CardSelectOverlay`'s `originCardRadius` prop, threaded down through
+`ArticleCardItem`/`ArticleCardCover`'s `radiusOverride` (a Reanimated
+`SharedValue`, applied on the UI thread every frame, not a one-shot prop).
+
+**Why:** without it, whenever the destination's resting radius truly diverges
+from the overlay's natural proportional radius, the overlay renders the
+natural value while closing and the instant the Modal unmounts, the real
+static slot underneath snaps to its own (different) value — a hard, one-frame
+jump in effective on-screen radius that reads as the corner suddenly getting
+"cut," distinct from (and easy to conflate with) the shadow-token pop this
+section is modeled after. Passing `originCardRadius` even when the two values
+already coincide is harmless and future-proofs the pairing if the destination
+formula changes independently later.
+
+**How to apply:** the override only needs to converge the *closed* end
+(`progress === 0`) onto the destination's fixed radius; the *open* end
+(`progress === 1`) must stay exactly the natural canonical radius so opening
+into the full-size overlay is unaffected. Interpolate the on-screen radius
+between `[originCardRadius, canonicalRadius * finalScale]` over `progress`,
+then divide by the current transform scale to get the pre-transform radius to
+actually render — the transform will re-multiply it back to the intended
+on-screen value every frame. Pass this only to the slot that is the actual
+transition origin (`i === initialIndex` in the multi-card branch); other
+callers that never set `originCardRadius` get `radiusOverride={undefined}` and
+see zero behavior change.

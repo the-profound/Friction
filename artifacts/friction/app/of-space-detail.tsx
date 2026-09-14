@@ -27,7 +27,9 @@ import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
 import ConfirmModal from "@/components/ConfirmModal/ConfirmModal";
 import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
-import CanonicalCardSlot from "@/components/ArticleCardItem/CanonicalCardSlot";
+import CanonicalCardSlot, {
+  CANONICAL_RADIUS_RATIO,
+} from "@/components/ArticleCardItem/CanonicalCardSlot";
 import type { OriginLayout } from "@/components/CardSelectOverlay/CardSelectOverlay";
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { spaceLetterToViewModel } from "@/hooks/useSpaceLetterCards";
@@ -96,7 +98,15 @@ const SC_LEFT_PAD = Spacing.screenPx;
 const SC_CARD_W = Math.floor((SCREEN_W - SC_LEFT_PAD - 2 * SC_CARD_GAP) / 2.5);
 const SC_CARD_H = SC_CARD_W * (8 / 5);
 
-const SC_SLOT_RADIUS = 14;
+// Proportional to this carousel's actual (shrunk) card width, using the same
+// canonical radius-to-width ratio CanonicalCardSlot defaults to — so the
+// letter-cover thumbnails and their neighboring placeholder cards (write-letter
+// slot, upcoming-round reservation slots) all read as one consistent shape at
+// this carousel's real on-screen size, never a fixed literal.
+const SC_SLOT_RADIUS = Math.max(
+  8,
+  Math.round(SC_CARD_W * CANONICAL_RADIUS_RATIO),
+);
 function roundStatusColor(status: string): string {
   if (status === "ACTIVE") return Colors.noticeAccent;
   if (status === "UPCOMING") return Colors.zinc400;
@@ -1433,6 +1443,10 @@ export default function SpaceDetailScreen() {
         },
         // Already inside this space's own detail screen — keep the space name inactive.
         currentSpaceId: id,
+        // This carousel's CanonicalCardSlot pins SC_SLOT_RADIUS instead of the
+        // natural canonical-scaled ratio; tell the overlay so its close
+        // animation converges on that exact radius instead of popping to it.
+        originCardRadius: SC_SLOT_RADIUS,
       });
       // Async fetch to hydrate the overlay with the full article object
       // (includes sourceArticleId for ancestor chain traversal).

@@ -5,6 +5,10 @@ import {
   Text,
   View,
 } from "react-native";
+import RAnimated, {
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { Image } from "expo-image";
 import type { ArticleCover } from "@workspace/api-client-react";
 import {
@@ -50,6 +54,16 @@ interface ArticleCardCoverProps {
   width?: number;
   height?: number;
   borderRadius?: number;
+  /**
+   * Selection overlays pass this (UI thread, per-frame) to converge this
+   * cover's own clip boundary — the surface that actually clips the image —
+   * onto a destination slot's fixed resting radius by the end of the close
+   * animation. Overrides `borderRadius` on this root view only; the image and
+   * overlay layers keep their own natural radius since this root's
+   * `overflow: "hidden"` clip is the binding boundary whenever it is the
+   * larger of the two. Omit for the unchanged static radius.
+   */
+  radiusOverride?: SharedValue<number>;
   onImageLoad?: () => void;
 }
 
@@ -78,6 +92,7 @@ export default function ArticleCardCover({
   width,
   height,
   borderRadius = 16,
+  radiusOverride,
   onImageLoad,
 }: ArticleCardCoverProps) {
   // Resolve which label to show on the collection/space line.
@@ -206,8 +221,13 @@ export default function ArticleCardCover({
     return () => cancelAnimationFrame(frame);
   }, [failedImageUrl, imageUrl, onImageLoad]);
 
+  const animatedRadiusStyle = useAnimatedStyle(() => {
+    if (!radiusOverride) return {};
+    return { borderRadius: radiusOverride.value };
+  });
+
   return (
-    <View
+    <RAnimated.View
       style={[
         styles.root,
         width === undefined && StyleSheet.absoluteFill,
@@ -224,6 +244,9 @@ export default function ArticleCardCover({
           // background all share the exact same rounded-rect boundary.
           overflow: "hidden",
         },
+        // Applied last so it wins over the static borderRadius above whenever
+        // a selection overlay supplies a per-frame override (see prop doc).
+        animatedRadiusStyle,
       ]}
       onLayout={handleLayout}
     >
@@ -366,7 +389,7 @@ export default function ArticleCardCover({
           </Text>
         ) : null}
       </View>
-    </View>
+    </RAnimated.View>
   );
 }
 
