@@ -233,18 +233,15 @@ function RecordSourceCard({
   if (record.kind === "letter") {
     return (
       <View style={NON_SELECTABLE_WEB_STYLE}>
-        {/* Outer wrapper owns the final corner radius + clip (see
-            CanonicalCardSlot), matching every other screen's card grid so a
-            hairline sliver of whatever sits behind the card can never show
-            through its rounded corners during press or overlay handoff. */}
-        <CanonicalCardSlot width={width} height={height}>
+        {/* The slot's unclipped outer boundary owns the restrained shadow while
+            its same-sized inner boundary clips the projected cover corners. */}
+        <CanonicalCardSlot width={width} height={height} carouselShadow>
           <ArticleCardItem
             title={record.article.title || "제목 없음"}
             authorName={record.article.authorNickname ?? undefined}
             collectionName={record.article.collectionName ?? null}
             spaceName={spaceNameFallback ?? null}
             cover={record.article.cover}
-            carouselShadow={true}
             visibility={letterVisibility}
             onPress={onPress}
             onLongPress={onLongPress}

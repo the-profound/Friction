@@ -3,7 +3,7 @@ name: CanonicalCardSlot radius and clip ownership
 description: Why a scaled-down cover in CanonicalCardSlot can look flatter than neighbors and show a rectangle sliver at its corners.
 ---
 
-# CanonicalCardSlot: outer view must own radius + clip, not the scaled inner content
+# CanonicalCardSlot: shadow and rounded clipping need separate boundaries
 
 `CanonicalCardSlot` (`artifacts/friction/components/ArticleCardItem/CanonicalCardSlot.tsx`)
 renders `ArticleCardItem` at its canonical size (`Sizing.cardSlotW`/`cardH`) and shrinks it
@@ -27,16 +27,20 @@ Two related visual bugs come from this pattern:
    corner triangle of shadow/background is included in the clip and reads as
    a hard-edged rectangle poking out from the rounded corner.
 
-**Why:** both bugs stem from the outer wrapper only ever using
-`overflow: "hidden"` with no radius of its own, i.e. clip shape and clip size
-came from the inner scaled content lining up "by construction" rather than
-being asserted explicitly.
+When the projected card needs a shadow, one node cannot safely own both the
+shadow and `overflow:"hidden"`: iOS clips the shadow to the slot and makes the
+card look flat. Use an unclipped outer boundary for layout, shadow, and the
+shared press transform, with a same-sized rounded clip nested immediately
+inside it. The canonical projection stays inside that clip.
 
-**How to apply:** `CanonicalCardSlot` takes an optional `borderRadius` prop
-applied to the **outer** view (which owns the final radius + clip), defaulting
-to the old `16 / Sizing.cardSlotW` ratio so existing callers (of.tsx, to.tsx,
-user-profile grids, of-01-detail.tsx) keep their look unchanged. Any caller
-whose slot sits beside sibling cards using a different radius ratio (e.g. the
-space-detail round carousel's placeholder slots, `SC_SLOT_RADIUS = 14`) should
-pass that ratio explicitly so the cover's rounding matches its neighbors, and
-so the shadow's corner triangle gets clipped away instead of showing through.
+**Why:** clipping the shadow removes it on iOS, while putting shadow on an
+opaque sibling can expose a duplicate card and Android elevation can change
+sibling paint order. Nesting the clip inside the real shadow-bearing container
+avoids all three problems.
+
+**How to apply:** keep the outer slot `overflow:"visible"` and apply any shadow
+token there exactly once; disable the projected card's own shadow in that case.
+Keep the radius on both the outer shadow geometry and the same-sized inner clip.
+Apply press scale only to the outer boundary so shadow, clip, and content move
+as one unit. Callers needing a different visual corner ratio should continue to
+pass an explicit final-size radius.

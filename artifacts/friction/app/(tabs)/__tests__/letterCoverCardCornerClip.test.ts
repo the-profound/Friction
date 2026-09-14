@@ -16,7 +16,7 @@ const readComponent = (relativePath: string) =>
 // CardSelectOverlay with the same token — otherwise the shadow visibly pops
 // to the larger standard token right at the card's rounded corners.
 describe("letter cover card corner clipping", () => {
-  it("wraps the 기록 tab's letter cover in CanonicalCardSlot so the outer wrapper owns radius+clip", () => {
+  it("wraps the 기록 tab's letter cover in a shadow-owning CanonicalCardSlot", () => {
     const onScreen = read("(tabs)/on.tsx");
     const letterBranch = onScreen.match(
       /if \(record\.kind === "letter"\) \{[\s\S]*?\n {2}\}/,
@@ -24,6 +24,8 @@ describe("letter cover card corner clipping", () => {
 
     expect(letterBranch).toContain("<CanonicalCardSlot");
     expect(letterBranch).toContain("</CanonicalCardSlot>");
+    expect(letterBranch).toContain("carouselShadow");
+    expect(letterBranch).not.toContain("carouselShadow={true}");
     // The slot itself now owns the card's rendered size; ArticleCardItem must
     // not also be forced to a native cardWidth inside it.
     expect(letterBranch).not.toContain("cardWidth={width}");
@@ -82,17 +84,35 @@ describe("card press-scale corner clipping", () => {
     expect(source).toContain("applyScaleStyle={!pressScale}");
   });
 
-  it("makes CanonicalCardSlot's outer clip box scale as one unit with the content's press animation", () => {
+  it("makes CanonicalCardSlot's shadow, clip, and content scale as one unit", () => {
     const source = readComponent("ArticleCardItem/CanonicalCardSlot.tsx");
 
-    // The outer node (owner of the final radius + overflow:hidden clip) must
-    // be the one animated by the shared press-scale value, not a separate
-    // static-only wrapper.
+    // The unclipped outer node must own the shared transform, with the clip
+    // nested beneath it so shadow, corners, and content move together.
     expect(source).toContain("useSharedValue(1)");
     expect(source).toMatch(/transform:\s*\[\{\s*scale:\s*pressScale\.value\s*\}\]/);
     expect(source).toContain("RAnimated.View");
+    expect(source).toContain('overflow: "visible"');
+    expect(source).toContain("styles.clip");
     // The same shared value must reach the ArticleCardItem child so its own
     // ScalePressable writes into it (single source of truth for the ratio).
-    expect(source).toMatch(/cloneElement\([\s\S]*?\{\s*pressScale\s*\}/);
+    expect(source).toMatch(/cloneElement\([\s\S]*?\{\s*pressScale,/);
+  });
+
+  it("renders the carousel shadow once outside the rounded content clip", () => {
+    const slot = readComponent("ArticleCardItem/CanonicalCardSlot.tsx");
+
+    expect(slot).toContain("...Shadows.carouselCard");
+    expect(slot).toContain("carouselShadow && styles.carouselShadow");
+    expect(slot).toMatch(/carouselShadow\s*\?\s*\{\s*noShadow:\s*true\s*\}\s*:\s*\{\}/);
+
+    const outerStyle =
+      slot.match(/outer:\s*\{([^}]*)\}/)?.[1] ?? "";
+    const clipStyle =
+      slot.match(/clip:\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(outerStyle).toContain('overflow: "visible"');
+    expect(outerStyle).not.toContain('overflow: "hidden"');
+    expect(clipStyle).toContain('overflow: "hidden"');
+    expect(clipStyle).not.toContain("Shadows.");
   });
 });

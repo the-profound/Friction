@@ -5,7 +5,7 @@ import RAnimated, {
   useAnimatedStyle,
   type SharedValue,
 } from "react-native-reanimated";
-import { Sizing } from "@/constants/tokens";
+import { Shadows, Sizing } from "@/constants/tokens";
 
 interface CanonicalCardSlotProps {
   /** The visual slot size in the surrounding list or carousel. */
@@ -25,6 +25,11 @@ interface CanonicalCardSlotProps {
    * them instead of looking flatter.
    */
   borderRadius?: number;
+  /**
+   * Draws the restrained carousel shadow on the unclipped slot boundary.
+   * The child card's own shadow is disabled so the shadow is rendered once.
+   */
+  carouselShadow?: boolean;
 }
 
 const CANONICAL_RADIUS_RATIO = 16 / Sizing.cardSlotW;
@@ -33,26 +38,22 @@ const CANONICAL_RADIUS_RATIO = 16 / Sizing.cardSlotW;
  * Keeps an ArticleCardItem at the same canonical size used by the selection
  * overlay, then projects that complete card into a smaller visual slot.
  *
- * The outer view owns layout, the final corner radius, and clipping — it
- * never relies on the scaled-down inner content's own corners lining up
- * exactly with its edges, since a transform can leave a hairline sliver of
- * whatever sits behind the slot visible at the corners. The inner view owns
- * the canonical card dimensions, so ArticleCardItem never recalculates
- * typography, padding, radius, or shadow from a small cardWidth.
+ * The outer view owns layout, optional shadow, and press scale without clipping,
+ * so iOS/web shadows can extend beyond the slot. A same-sized inner clip owns
+ * the final corner radius and clips only the projected card content. The
+ * canonical projection therefore never recalculates typography, padding,
+ * radius, or shadow from a small cardWidth.
  *
  * The single ArticleCardItem child is expected to expose a `pressScale`
  * prop (all current usages satisfy this). This component creates that
  * shared value, hands it to the child so ScalePressable's press-in/out
  * animation writes into it instead of transforming the child's own subtree,
- * and applies the same value as a transform on this OUTER view — the one
- * that actually owns the final radius + clip. Because the outer scale and
- * the inner (already-clipped) content are then the same transformed node
- * tree, the clip boundary and the card content always shrink together at
- * the same ratio and around the same center, so no corner gap or
- * mismatched-radius stair-step can appear while pressed.
+ * and applies the same value as a transform on this OUTER view. Because the
+ * shadow, nested clip, and content are in the same transformed node tree, they
+ * always shrink together at the same ratio and around the same center.
  */
 const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
-  ({ width, height, children, borderRadius }, ref) => {
+  ({ width, height, children, borderRadius, carouselShadow = false }, ref) => {
     const scale = width / Sizing.cardSlotW;
     const canonicalHeight = Sizing.cardH;
     const resolvedRadius =
@@ -65,8 +66,14 @@ const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
 
     const content = React.isValidElement(children)
       ? React.cloneElement(
-          children as React.ReactElement<{ pressScale?: SharedValue<number> }>,
-          { pressScale },
+          children as React.ReactElement<{
+            pressScale?: SharedValue<number>;
+            noShadow?: boolean;
+          }>,
+          {
+            pressScale,
+            ...(carouselShadow ? { noShadow: true } : {}),
+          },
         )
       : children;
 
@@ -75,23 +82,26 @@ const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
         ref={ref}
         style={[
           styles.outer,
+          carouselShadow && styles.carouselShadow,
           { width, height, borderRadius: resolvedRadius },
           animatedOuterStyle,
         ]}
       >
-        <View
-          style={[
-            styles.inner,
-            {
-              left: (width - Sizing.cardSlotW) / 2,
-              top: (height - canonicalHeight) / 2,
-              width: Sizing.cardSlotW,
-              height: canonicalHeight,
-              transform: [{ scale }],
-            },
-          ]}
-        >
-          {content}
+        <View style={[styles.clip, { borderRadius: resolvedRadius }]}>
+          <View
+            style={[
+              styles.inner,
+              {
+                left: (width - Sizing.cardSlotW) / 2,
+                top: (height - canonicalHeight) / 2,
+                width: Sizing.cardSlotW,
+                height: canonicalHeight,
+                transform: [{ scale }],
+              },
+            ]}
+          >
+            {content}
+          </View>
         </View>
       </RAnimated.View>
     );
@@ -104,6 +114,14 @@ export default CanonicalCardSlot;
 
 const styles = StyleSheet.create({
   outer: {
+    overflow: "visible",
+  },
+  carouselShadow: {
+    ...Shadows.carouselCard,
+  },
+  clip: {
+    width: "100%",
+    height: "100%",
     overflow: "hidden",
   },
   inner: {

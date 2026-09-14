@@ -61,10 +61,28 @@ describe("record card shadow ownership", () => {
     expect(articleListItem).toContain("marginHorizontal: Spacing.screenPx");
   });
 
+  it("lets the 기록 letter slot own one unclipped carousel shadow", () => {
+    const onScreen = read("(tabs)/on.tsx");
+    const letterBranch = onScreen.match(
+      /if \(record\.kind === "letter"\) \{[\s\S]*?\n {2}\}/,
+    )?.[0] ?? "";
+    const canonicalSlot = read(
+      "../components/ArticleCardItem/CanonicalCardSlot.tsx",
+    );
+
+    expect(letterBranch).toContain(
+      "<CanonicalCardSlot width={width} height={height} carouselShadow>",
+    );
+    expect(letterBranch).not.toContain("<ArticleCardItem\n            carouselShadow");
+    expect(canonicalSlot).toContain("carouselShadow && styles.carouselShadow");
+    expect(canonicalSlot).toContain('overflow: "visible"');
+    expect(canonicalSlot).toContain("styles.clip");
+  });
+
   it("gives the list view's first row breathing room below the filter bar", () => {
     const onScreen = read("(tabs)/on.tsx");
     expect(onScreen).toContain(
-      "contentContainerStyle={{ paddingTop: Spacing.cardGap, paddingBottom: navBottom + 16 }}",
+      "contentContainerStyle={{ paddingTop: FILTER_BAR_HEIGHT + Spacing.cardGap, paddingBottom: navBottom + 16 }}",
     );
   });
 });
