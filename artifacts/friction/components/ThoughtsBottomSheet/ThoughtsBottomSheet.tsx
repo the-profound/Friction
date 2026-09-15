@@ -140,6 +140,7 @@ export interface ThoughtsBottomSheetProps {
   cardSheetHAnim?: Animated.Value;
   /** 외부에서 애니메이션 close를 트리거하기 위한 ref. 배경 탭 해제 등에서 사용. */
   closeHandleRef?: React.MutableRefObject<(() => void) | null>;
+  onReadingThoughtCreated?: (thought: Thought, content: string) => void;
 }
 
 export default function ThoughtsBottomSheet({
@@ -152,6 +153,7 @@ export default function ThoughtsBottomSheet({
   pendingQuote,
   cardSheetHAnim,
   closeHandleRef,
+  onReadingThoughtCreated,
 }: ThoughtsBottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -694,6 +696,7 @@ export default function ThoughtsBottomSheet({
               sourceArticleId: articleId,
             },
           }) as Thought;
+          onReadingThoughtCreated?.(saved, committedText);
           await cancelThoughtQueries();
           upsertThoughtInCaches(saved);
           commitOptimisticThoughts([
@@ -738,6 +741,7 @@ export default function ThoughtsBottomSheet({
     commitOptimisticThoughts,
     createThought,
     deleteThought,
+    onReadingThoughtCreated,
     removeThoughtFromCaches,
     refreshAndReconcileThoughtFences,
     updateThought,
@@ -761,6 +765,7 @@ export default function ThoughtsBottomSheet({
             sourceArticleId: optimistic.sourceArticleId,
           },
         }) as Thought;
+        onReadingThoughtCreated?.(saved, optimistic.content);
         await cancelThoughtQueries();
       } catch (error) {
         console.warn("[ThoughtsBottomSheet] optimistic create failed:", error);
@@ -808,6 +813,7 @@ export default function ThoughtsBottomSheet({
     createThought,
     invalidateThoughts,
     queryClient,
+    onReadingThoughtCreated,
     upsertThoughtInCaches,
   ]);
 

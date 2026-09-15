@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback, useContext } from "react";
+import React, { useState, useRef, useMemo, useCallback, useContext, useEffect } from "react";
 import {
   View,
   Text,
@@ -40,6 +40,11 @@ import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { getInboxReaderEntry } from "@/lib/policies";
+import {
+  createAnalyticsSessionId,
+  trackInboxLetterImpression,
+  trackInboxLetterOpened,
+} from "@/lib/analytics";
 
 /** Recursively collect all inbox descendants of rootArticleId (oldest → newest BFS). */
 function findAllDescendants(rootArticleId: string, allItems: InboxItem[]): InboxItem[] {
@@ -168,6 +173,13 @@ function InboxScreenContent() {
       // is only called after the component has fully rendered, so TDZ is safe.
       const inboxItem = inboxItemByArticleIdRef.current.get(article.id);
       if (inboxItem) {
+        const analyticsSessionId = createAnalyticsSessionId();
+        trackInboxLetterOpened({
+          sessionId: analyticsSessionId,
+          inboxId: inboxItem.id,
+          articleId: article.id,
+          isReread: selectionMode === "re_read" || inboxItem.hasReadBefore === true,
+        });
         prepareInboxItem(inboxItem);
         const entry = getInboxReaderEntry(inboxItem);
         cancelScrollRestorationRef.current?.();
@@ -178,6 +190,7 @@ function InboxScreenContent() {
             articleId: entry.articleId,
             inboxId: entry.inboxId,
             mode: entry.mode,
+            analyticsSessionId,
           },
         });
       } else {
@@ -204,6 +217,19 @@ function InboxScreenContent() {
     { recipientId: userId, isRead: false } as Parameters<typeof useListInbox>[0],
   );
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [inboxViewSessionId, setInboxViewSessionId] = useState(createAnalyticsSessionId);
+  const impressedInboxIdsRef = useRef(new Set<string>());
+  const hasFocusedInboxRef = useRef(false);
+
+  useFocusEffect(useCallback(() => {
+    if (!hasFocusedInboxRef.current) {
+      hasFocusedInboxRef.current = true;
+      return undefined;
+    }
+    impressedInboxIdsRef.current.clear();
+    setInboxViewSessionId(createAnalyticsSessionId());
+    return undefined;
+  }, []));
 
   useRealtimeChannel(
     userId ? `inbox:${userId}` : null,
@@ -224,6 +250,18 @@ function InboxScreenContent() {
   }, [inboxData]);
 
   const groups = useMemo(() => groupBySlot(visibleItems), [visibleItems]);
+  useEffect(() => {
+    for (const item of visibleItems) {
+      if (!item.articleId || impressedInboxIdsRef.current.has(item.id)) continue;
+      impressedInboxIdsRef.current.add(item.id);
+      trackInboxLetterImpression({
+        viewSessionId: inboxViewSessionId,
+        inboxId: item.id,
+        articleId: item.articleId,
+        hasReadBefore: item.hasReadBefore === true,
+      });
+    }
+  }, [inboxViewSessionId, visibleItems]);
   const scrollPressGuard = useScrollPressGuard();
   const inboxGroupKeys = useMemo(
     () => groups.map((group) => group.dateKey),

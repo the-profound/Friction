@@ -9,6 +9,8 @@ export interface ActiveReadingState extends ActiveReadingOwner {
   inboxId?: string;
   entrySource?: "list" | "inbox" | "space";
   mode: string;
+  analyticsSessionId?: string;
+  analyticsIsReread?: boolean;
 }
 
 interface ActiveReadingContextValue {
@@ -36,6 +38,8 @@ export function isActiveReadingState(value: unknown): value is ActiveReadingStat
     typeof candidate.articleId === "string" &&
     candidate.articleId.length > 0 &&
     (candidate.inboxId === undefined || typeof candidate.inboxId === "string") &&
+    (candidate.analyticsSessionId === undefined || typeof candidate.analyticsSessionId === "string") &&
+    (candidate.analyticsIsReread === undefined || typeof candidate.analyticsIsReread === "boolean") &&
     (
       candidate.entrySource === undefined ||
       candidate.entrySource === "list" ||

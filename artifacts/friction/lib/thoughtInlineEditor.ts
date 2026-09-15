@@ -200,3 +200,14 @@ export function formatReadingThoughtQuote(
   const quote = selectedText.trim().replace(/\n/g, "\n> ");
   return source ? `> ${quote}\n\n— ${source}` : `> ${quote}`;
 }
+
+/** Returns only user-authored text after the leading reading quote/source block. */
+export function getReadingThoughtMemoLength(content: string): number {
+  const lines = normalizeThoughtLineBreaks(content).split("\n");
+  let index = 0;
+  while (index < lines.length && lines[index].trimStart().startsWith(">")) index += 1;
+  while (index < lines.length && lines[index].trim() === "") index += 1;
+  if (index < lines.length && /^—(?:\s|$)/.test(lines[index].trim())) index += 1;
+  while (index < lines.length && lines[index].trim() === "") index += 1;
+  return lines.slice(index).join("\n").trim().length;
+}

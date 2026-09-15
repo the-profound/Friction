@@ -72,9 +72,8 @@ describe("space letter inbox synchronization", () => {
   });
 
   it("preserves the space origin across active-reading persistence and restoration", () => {
-    expect(readScreen).toContain(
-      "setActiveSession({ articleId, inboxId, entrySource, mode, userId })",
-    );
+    expect(readScreen).toContain("analyticsSessionId: analyticsSessionIdRef.current");
+    expect(readScreen).toContain("analyticsIsReread: isAnalyticsReread");
     const rootLayout = readFileSync(
       fileURLToPath(new URL("../app/_layout.tsx", import.meta.url)),
       "utf8",
@@ -161,6 +160,8 @@ describe("in-screen reread reset wiring", () => {
     expect(handler).toContain("setCompleteScreenVisible(false)");
     expect(handler).toContain("setIsInScreenReread(true)");
     expect(handler).toContain("reading.restartReading()");
+    expect(handler).toContain("analyticsSessionIdRef.current = createAnalyticsSessionId()");
+    expect(handler).toContain("hasTrackedReadingStartRef.current = false");
     expect(readScreen).toContain("onReread={handleRestartReading}");
   });
 
@@ -187,6 +188,26 @@ describe("in-screen reread reset wiring", () => {
   });
 });
 
+describe("reading funnel analytics wiring", () => {
+  it("uses one persisted analytics session for start, resume, completion, and action", () => {
+    expect(readScreen).toContain("analyticsSessionId: analyticsSessionIdRef.current");
+    expect(readScreen).toContain("trackReadingStart({");
+    expect(readScreen).toContain("trackReadingResume({");
+    expect(readScreen).toContain("trackReadingComplete({");
+    expect(readScreen).toContain("trackArticleAction({");
+  });
+
+  it("tracks reading memos only from the successful creation callback", () => {
+    const selectionHandler = sourceBetween(
+      "const handleMemoSentence = useCallback",
+      "const dynamicStyles = useMemo",
+    );
+    expect(selectionHandler).not.toContain("trackMemoCreatedDuringReading");
+    expect(readScreen).toContain("onReadingThoughtCreated={(thought, content) => {");
+    expect(readScreen).toContain("memoLength: getReadingThoughtMemoLength(content)");
+  });
+});
+
 describe("non-blocking completion save", () => {
   it("starts persistence in the background and navigates without awaiting it", () => {
     const handler = sourceBetween(
@@ -203,7 +224,7 @@ describe("non-blocking completion save", () => {
     expect(handler).toContain("background save failed");
 
     const backgroundStart = handler.indexOf("void (async () => {");
-    const navigationStart = handler.indexOf('trackArticleAction({ articleId, action: "save"');
+    const navigationStart = handler.indexOf("trackArticleAction({");
     expect(backgroundStart).toBeGreaterThanOrEqual(0);
     expect(navigationStart).toBeGreaterThan(backgroundStart);
     expect(handler.slice(navigationStart)).toContain("clearActiveSession()");

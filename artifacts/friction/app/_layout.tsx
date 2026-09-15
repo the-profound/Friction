@@ -141,6 +141,8 @@ function ActiveReadingGuard({
           inboxId: readingToRestore.inboxId,
           entrySource: readingToRestore.entrySource,
           mode: readingToRestore.mode,
+          analyticsSessionId: readingToRestore.analyticsSessionId,
+          analyticsIsReread: readingToRestore.analyticsIsReread ? "true" : undefined,
         },
       });
     } else if (protectedNavigationKind === "open-records") {
@@ -152,6 +154,8 @@ function ActiveReadingGuard({
     readingToRestore?.inboxId,
     readingToRestore?.entrySource,
     readingToRestore?.mode,
+    readingToRestore?.analyticsSessionId,
+    readingToRestore?.analyticsIsReread,
     router,
   ]);
 

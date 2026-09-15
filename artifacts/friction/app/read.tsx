@@ -20,6 +20,7 @@ import HeaderButton from "@/components/shared/HeaderButton";
 import {
   trackPageTurn,
   trackReadingStart,
+  trackReadingResume,
   trackReadingComplete,
   trackArticleAction,
   trackAppBackgroundedDuringReading,
@@ -102,7 +103,8 @@ import {
   type ReaderAppState,
 } from "@/lib/readingPersistence";
 import { useToast } from "@/contexts/ToastContext";
-import { formatReadingThoughtQuote } from "@/lib/thoughtInlineEditor";
+import { formatReadingThoughtQuote, getReadingThoughtMemoLength } from "@/lib/thoughtInlineEditor";
+import { createAnalyticsSessionId } from "@/lib/analytics";
 
 // Horizontal padding on each side of the reader card so the drop-shadow is
 // visible left and right. Must match pageListContainer.paddingHorizontal below.
@@ -185,6 +187,8 @@ export default function ReadScreen() {
     mode?: string;
     entrySource?: string;
     teamCollectionId?: string;
+    analyticsSessionId?: string;
+    analyticsIsReread?: string;
   }>();
 
   const articleId = params.articleId ?? "";
@@ -193,6 +197,18 @@ export default function ReadScreen() {
   const readerIdentity = `${articleId}\u0000${mode}\u0000${inboxId ?? ""}`;
   const entrySource = params.entrySource as "list" | "inbox" | "space" | undefined;
   const teamCollectionId = params.teamCollectionId;
+  const analyticsSessionIdRef = useRef(params.analyticsSessionId || createAnalyticsSessionId());
+  const analyticsReaderIdentityRef = useRef(readerIdentity);
+  const restoredAnalyticsReread = params.analyticsIsReread === "true";
+  useEffect(() => {
+    if (analyticsReaderIdentityRef.current === readerIdentity) return;
+    analyticsReaderIdentityRef.current = readerIdentity;
+    analyticsSessionIdRef.current = params.analyticsSessionId || createAnalyticsSessionId();
+    hasTrackedReadingStartRef.current = false;
+    readingStartTimeRef.current = 0;
+    completionTimeRef.current = 0;
+    setIsInScreenReread(false);
+  }, [params.analyticsSessionId, readerIdentity]);
   // True when the user opens an article via a collection article list rather
   // than via the inbox. Used in handleCommitAndSkip to determine whether to
   // invalidate the inbox query after skipping (inbox path only).
@@ -260,6 +276,10 @@ export default function ReadScreen() {
   // completion screen stays in the original mode so completion persistence
   // semantics do not change, and uses this local flag only for reread UI.
   const [isInScreenReread, setIsInScreenReread] = useState(false);
+  const isAnalyticsReread =
+    mode === "re_read"
+    || restoredAnalyticsReread
+    || (analyticsReaderIdentityRef.current === readerIdentity && isInScreenReread);
   // Backward 커밋 직후 1커밋 동안 prev 슬롯을 감춘다.
   // 리매핑 시점에 prevSlotSV가 아직 0(중앙)인 채로 새로 들어온 페이지가
   // 그려지면 한 프레임 동안 현재 페이지를 덮어 번쩍임이 생기기 때문 —
@@ -796,10 +816,18 @@ export default function ReadScreen() {
 
   useEffect(() => {
     if (mode === "basic" && articleId) {
-      setActiveSession({ articleId, inboxId, entrySource, mode, userId });
+      setActiveSession({
+        articleId,
+        inboxId,
+        entrySource,
+        mode,
+        userId,
+        analyticsSessionId: analyticsSessionIdRef.current,
+        analyticsIsReread: isAnalyticsReread,
+      });
     }
     return () => {};
-  }, [articleId, inboxId, entrySource, mode, setActiveSession, userId]);
+  }, [articleId, inboxId, entrySource, isAnalyticsReread, mode, setActiveSession, userId]);
 
   useEffect(() => {
     if (!reading.isRestoring && reading.isSessionHydrated && reading.session.state === "IDLE" && totalPages > 0) {
@@ -814,30 +842,45 @@ export default function ReadScreen() {
 
   // Fire reading_start once when the session enters READING state
   useEffect(() => {
+    if (!reading.isSessionHydrated) return;
     if (reading.session.state === "READING" && !hasTrackedReadingStartRef.current) {
       hasTrackedReadingStartRef.current = true;
       readingStartTimeRef.current = Date.now();
       trackReadingStart({
+        sessionId: analyticsSessionIdRef.current,
         articleId,
         totalPages,
         resumedFromPage: reading.session.position.currentPage,
+        isReread: isAnalyticsReread,
       });
+      if (reading.session.position.currentPage > 0) {
+        trackReadingResume({
+          sessionId: analyticsSessionIdRef.current,
+          articleId,
+          totalPages,
+          resumedFromPage: reading.session.position.currentPage,
+          isReread: isAnalyticsReread,
+        });
+      }
     }
-  }, [reading.session.state, articleId, totalPages, reading.session.position.currentPage]);
+  }, [reading.isSessionHydrated, reading.session.state, articleId, totalPages, reading.session.position.currentPage]);
 
   // Fire reading_complete and record completion time when the sheet opens
   useEffect(() => {
+    if (!reading.isSessionHydrated) return;
     if (reading.session.state === "COMPLETED_READY" && completionTimeRef.current === 0) {
       completionTimeRef.current = Date.now();
       trackReadingComplete({
+        sessionId: analyticsSessionIdRef.current,
         articleId,
         totalPages,
         totalReadMs: readingStartTimeRef.current > 0
           ? Date.now() - readingStartTimeRef.current
           : 0,
+        isReread: isAnalyticsReread,
       });
     }
-  }, [reading.session.state, articleId, totalPages]);
+  }, [reading.isSessionHydrated, reading.session.state, articleId, totalPages]);
 
   useEffect(() => {
     if (Platform.OS !== "web") return;
@@ -1211,6 +1254,10 @@ export default function ReadScreen() {
   }, []);
 
   const handleRestartReading = useCallback(() => {
+    analyticsSessionIdRef.current = createAnalyticsSessionId();
+    hasTrackedReadingStartRef.current = false;
+    readingStartTimeRef.current = 0;
+    completionTimeRef.current = 0;
     // Retire every callback owned by the completed/Q-card pager before moving
     // the session back to page zero. Directly parking all slots also cancels
     // any still-running timing/spring animation before the render commits.
@@ -1227,8 +1274,19 @@ export default function ReadScreen() {
     setDeferPrevMount(false);
     setCompleteScreenVisible(false);
     setIsInScreenReread(true);
+    if (mode === "basic") {
+      setActiveSession({
+        articleId,
+        inboxId,
+        entrySource,
+        mode,
+        userId,
+        analyticsSessionId: analyticsSessionIdRef.current,
+        analyticsIsReread: true,
+      });
+    }
     reading.restartReading();
-  }, [layout.containerWidth, reading.restartReading]);
+  }, [articleId, entrySource, inboxId, layout.containerWidth, mode, reading.restartReading, setActiveSession, userId]);
 
   // Callbacks invoked via runOnJS after UI-thread animation completes
   const finishPageTurnRef = useRef((
@@ -1681,7 +1739,13 @@ export default function ReadScreen() {
     })();
 
     // Navigation is intentionally independent of the background network chain.
-    trackArticleAction({ articleId, action: "save", msSinceComplete: Date.now() - completionTimeRef.current });
+    trackArticleAction({
+      sessionId: analyticsSessionIdRef.current,
+      articleId,
+      action: "save",
+      msSinceComplete: Date.now() - completionTimeRef.current,
+      isReread: isAnalyticsReread,
+    });
     clearActiveSession();
     applyAnsweredQuestionCardsToMemo();
     overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
@@ -1698,7 +1762,13 @@ export default function ReadScreen() {
       // 잠깐 보이는 점프가 생긴다. 실패 시에도 완독 화면에 남아 재시도한다.
       if (result.success) {
         await syncSpaceInboxRead();
-        trackArticleAction({ articleId, action: "skip", msSinceComplete: Date.now() - completionTimeRef.current });
+        trackArticleAction({
+          sessionId: analyticsSessionIdRef.current,
+          articleId,
+          action: "skip",
+          msSinceComplete: Date.now() - completionTimeRef.current,
+          isReread: isAnalyticsReread,
+        });
         if (!isListEntry) {
           // 수신함 경로: 읽기 완료 후 수신함 목록 갱신
           invalidateInbox(queryClient);
@@ -1815,7 +1885,6 @@ export default function ReadScreen() {
     const pageNum = currentPage;
     const author = authorName ?? "";
     const title = article?.title ?? "";
-    trackMemoCreatedDuringReading({ articleId, page: currentPage });
     // Route quote text into the thoughts sheet's compose field via pendingQuote.
     // The user can edit/augment the quote before saving — no immediate creation.
     const meta = [author, title].filter(Boolean).join(", ");
@@ -2215,6 +2284,16 @@ export default function ReadScreen() {
           interactive={isThoughtsOpen}
           articleId={articleId}
           pendingQuote={thoughtsQuote}
+          onReadingThoughtCreated={(thought, content) => {
+            trackMemoCreatedDuringReading({
+              sessionId: analyticsSessionIdRef.current,
+              thoughtId: thought.id,
+              articleId,
+              page: currentPage,
+              memoLength: getReadingThoughtMemoLength(content),
+              isReread: isAnalyticsReread,
+            });
+          }}
           cardSheetHAnim={cardSheetHAnim}
           closeHandleRef={thoughtsCloseHandleRef}
         />

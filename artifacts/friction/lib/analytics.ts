@@ -78,6 +78,9 @@ function kstDayOfWeek(): number {
   return new Date(Date.now() + 9 * 3600000).getUTCDay();
 }
 
+export function createAnalyticsSessionId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 function captureApiOperationalEvent(event: ApiRequestTelemetry): void {
   // Dev-only diagnostic log. Helps trace question-queue failures on real
   // devices where debuggers are not attached. No PII — route strips entity
@@ -156,12 +159,15 @@ export function trackPageTurn(params: {
 // resumed_from_page > 0 means the user is continuing from a saved position.
 
 export function trackReadingStart(params: {
+  sessionId: string;
   articleId: string;
   totalPages: number;
   resumedFromPage: number;
+  isReread: boolean;
 }): void {
   posthog?.capture("reading_start", {
-    article_id: params.articleId,
+    $insert_id: `reading-start:${params.sessionId}`,
+    ...readingProperties(params),
     total_pages: params.totalPages,
     resumed_from_page: params.resumedFromPage,
     hour_kst: kstHour(),
@@ -169,17 +175,31 @@ export function trackReadingStart(params: {
   });
 }
 
-// ── 4. Reading Complete ───────────────────────────────────────────────────────
-// Fired when the user reaches the last page and the completion sheet opens.
-// total_read_ms = wall-clock time from reading_start to completion.
-
+export function trackReadingResume(params: {
+  sessionId: string;
+  articleId: string;
+  totalPages: number;
+  resumedFromPage: number;
+  isReread: boolean;
+}): void {
+  posthog?.capture("reading_resume", {
+    $insert_id: `reading-resume:${params.sessionId}`,
+    ...readingProperties(params),
+    total_pages: params.totalPages,
+    resumed_from_page: params.resumedFromPage,
+    hour_kst: kstHour(),
+  });
+}
 export function trackReadingComplete(params: {
+  sessionId: string;
   articleId: string;
   totalPages: number;
   totalReadMs: number;
+  isReread: boolean;
 }): void {
   posthog?.capture("reading_complete", {
-    article_id: params.articleId,
+    $insert_id: `reading-complete:${params.sessionId}`,
+    ...readingProperties(params),
     total_pages: params.totalPages,
     total_read_ms: params.totalReadMs,
     hour_kst: kstHour(),
@@ -192,12 +212,15 @@ export function trackReadingComplete(params: {
 // ms_since_complete = decision latency after the completion sheet appeared.
 
 export function trackArticleAction(params: {
+  sessionId: string;
   articleId: string;
   action: "save" | "skip";
   msSinceComplete: number;
+  isReread: boolean;
 }): void {
   posthog?.capture("article_action", {
-    article_id: params.articleId,
+    $insert_id: `article-action:${params.sessionId}`,
+    ...readingProperties(params),
     action: params.action,
     ms_since_complete: params.msSinceComplete,
     hour_kst: kstHour(),
@@ -251,12 +274,18 @@ export function trackSentenceCollected(params: {
 // Fired when the user inserts a quoted sentence into the memo via [메모].
 
 export function trackMemoCreatedDuringReading(params: {
+  sessionId: string;
+  thoughtId: string;
   articleId: string;
   page: number;
+  memoLength: number;
+  isReread: boolean;
 }): void {
   posthog?.capture("memo_created_during_reading", {
-    article_id: params.articleId,
+    $insert_id: `reading-memo:${params.thoughtId}`,
+    ...readingProperties(params),
     page: params.page,
+    memo_length: params.memoLength,
     hour_kst: kstHour(),
   });
 }
@@ -276,5 +305,46 @@ export function trackArticlePublished(params: {
     page_count: params.pageCount,
     hour_kst: kstHour(),
     day_of_week: kstDayOfWeek(),
+  });
+}
+
+export function trackInboxLetterImpression(params: {
+  viewSessionId: string;
+  inboxId: string;
+  articleId: string;
+  hasReadBefore: boolean;
+}): void {
+  posthog?.capture("inbox_letter_impression", {
+    $insert_id: `inbox-impression:${params.viewSessionId}:${params.inboxId}`,
+    inbox_id: params.inboxId,
+    article_id: params.articleId,
+    has_read_before: params.hasReadBefore,
+    hour_kst: kstHour(),
+  });
+}
+
+function readingProperties(params: {
+  sessionId: string;
+  articleId: string;
+  isReread: boolean;
+}) {
+  return {
+    reading_session_id: params.sessionId,
+    article_id: params.articleId,
+    is_reread: params.isReread,
+  };
+}
+
+export function trackInboxLetterOpened(params: {
+  sessionId: string;
+  inboxId: string;
+  articleId: string;
+  isReread: boolean;
+}): void {
+  posthog?.capture("inbox_letter_opened", {
+    $insert_id: `letter-open:${params.sessionId}`,
+    ...readingProperties(params),
+    inbox_id: params.inboxId,
+    hour_kst: kstHour(),
   });
 }

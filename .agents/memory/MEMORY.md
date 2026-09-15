@@ -1,4 +1,3 @@
-// hint: Logic changed on both sides. Requires understanding intent of each change.
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
 - [Expo notifications foreground handler](friction-expo-notifications-foreground-handler.md) — no `setNotificationHandler` means foreground pushes are silently suppressed; a plausible-looking plugin option (`iosDisplayInForeground`) may not even exist in the installed version.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
@@ -157,3 +156,4 @@
 - [ProseMirror default scroll authority](friction-prosemirror-default-scroll-authority.md) — a rich-text engine's own default caret-follow scroll can override app-level correction unless unified via its official override hook.
 - [Bounded autosave persistence queues](friction-bounded-autosave-queues.md) — coalesce only not-yet-started dirty snapshots; deletion and transition writes remain strict durability barriers.
 - [CardSelectOverlay meta label overload](friction-letter-overlay-meta-label-overload.md) — `collectionName` is one shared label routed by whichever of `collectionId`/`spaceId` accompanies it; put a Space name there with `spaceId` set, not `collectionId`.
+- [Reading analytics session identity](friction-reading-analytics-session.md) — persist funnel session IDs and use deterministic event IDs so restore/retry cannot duplicate or corrupt events.
