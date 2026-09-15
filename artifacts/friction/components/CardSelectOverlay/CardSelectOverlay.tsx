@@ -613,6 +613,12 @@ export default function CardSelectOverlay({
       activeIndexRef.current = initialIndex;
       carouselX.value = -initialIndex * SLOT_W;
       detailsFade.value = 1;
+      // A prior session's swipe-close leaves this ref stuck `true` (it is
+      // only ever reset to `false` by a gesture's onBegin or by
+      // restoreDetailsAfterDismiss on a cancelled drag, none of which run
+      // for a fresh open). Left stale, the next session's non-drag close
+      // would wrongly skip requestClose's instant details-hide.
+      verticalDismissActiveRef.current = false;
       setActiveIndex(initialIndex);
       setRendered(true);
       closingRef.current = false;
@@ -712,28 +718,66 @@ export default function CardSelectOverlay({
 
     // Always include the track, even when the active index already equals
     // the initial index: it can sit between snap points after a drag.
+    //
+    // Only `progress` drives completion below. Reanimated's valueSetter
+    // short-circuits `withTiming(target, ...)` and fires its callback
+    // synchronously (before any frame runs) whenever the shared value is
+    // already at that target (see valueSetter.ts: `mutable._value ===
+    // animation.current` skips onStart/onFrame entirely). `swipeY` is
+    // already 0 on every non-drag close trigger (backdrop tap, hardware
+    // back, info-bar nav), so attaching a completion callback to it used to
+    // call `finishCloseWithIndex` immediately -- unmounting the Modal before
+    // `progress`'s real shrink-back animation had rendered a single frame.
+    // A swipe-triggered close never hits this because swipeY starts > 0.
+    // `progress` always starts at ~1 and targets 0, so it never
+    // short-circuits and is a safe single source of truth for completion.
     carouselX.value = withTiming(-initIdx * SLOT_W, {
       duration: closeDuration,
       easing: REANIMATED_TRANSITION_EASING,
     });
-    swipeY.value = withTiming(
-      0,
-      { duration: closeDuration, easing: REANIMATED_TRANSITION_EASING },
-      (finished) => {
-        if (finished) runOnJS(finishCloseWithIndex)(initIdx);
-      },
-    );
+    swipeY.value = withTiming(0, {
+      duration: closeDuration,
+      easing: REANIMATED_TRANSITION_EASING,
+    });
 
     // Same duration/curve as the pair above, run on the UI thread.
     progress.value = withTiming(
       0,
       { duration: closeDuration, easing: REANIMATED_TRANSITION_EASING },
       (finished) => {
-        if (finished) runOnJS(finishClose)();
+        if (finished) runOnJS(finishCloseWithIndex)(initIdx);
       },
     );
   };
-  const requestClose = useCallback(() => runCloseRef.current(), []);
+  // Non-drag close triggers (backdrop tap, hardware back, info-bar
+  // author/collection/space nav taps) never run the swipe gesture's early
+  // `beginVerticalDismiss` fade, so without this the info bar/CTA layer
+  // would still be fully opaque and actively cross-fading via
+  // `progressDetailsAnimatedStyle` for the entire shrink-back transform —
+  // extra concurrent rendering work on top of the hero scale/translate that
+  // is the likely source of visible stutter (vs. the swipe dismiss, where
+  // that layer is already invisible by the time the close animation runs).
+  //
+  // The swipe gesture gets to fade it gracefully because the fade starts the
+  // moment a downward drag is detected -- well before release -- so it is
+  // already fully faded by the time the shrink-back transform begins, with
+  // zero added delay at release. A non-drag trigger has no such lead time:
+  // animating the same fade here would force the shrink-back to wait for it
+  // to finish first (visible pause) or run concurrently for its own duration
+  // (reintroducing the exact overlap this fix removes). Instead, snap this
+  // secondary layer to invisible in the same tick, with no animation, so the
+  // shrink-back starts immediately -- matching the swipe dismiss's instant,
+  // already-invisible starting state exactly, with no artificial delay.
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    if (!verticalDismissActiveRef.current) {
+      // The swipe gesture already faded this layer out before releasing;
+      // only non-drag triggers need to hide it here.
+      cancelAnimation(detailsFade);
+      detailsFade.value = 0;
+    }
+    runCloseRef.current();
+  }, [detailsFade]);
 
   // ── Envelope opening animation ────────────────────────────────────────────
   const handleEnvelopeOpen = useCallback(() => {

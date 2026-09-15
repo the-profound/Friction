@@ -117,6 +117,46 @@ rubber-band curve before assigning it to the card, but keep dismissal
 thresholds on raw distance/velocity so resistance does not make the gesture
 unreliable.
 
+
+### Non-drag close triggers (backdrop tap, hardware back, nav-away taps)
+
+These never ran the drag gesture's early fade, so naively animating the same
+fade for them at close time either lets that layer keep cross-fading for the
+whole shrink transform (visible jank) or forces the shrink to wait for the
+fade to finish first (a dead pause that reads as "nothing happened, then it
+just vanished").
+
+**Why:** the drag path gets a graceful fade for free because it starts the
+moment a downward drag begins, long before release — by release time the
+layer is already invisible with zero added delay. A non-drag trigger has no
+such lead time to borrow from.
+
+**How to apply:** for non-drag triggers, snap the detail/CTA layer straight to
+its final hidden value (cancel any in-flight animation, set the value
+directly, no `withTiming`) in the same tick as starting the shrink-back — do
+not animate it and do not delay the shrink-back behind it. The layer is small
+and secondary next to the dominant hero transform, so an instant snap next to
+a large simultaneous animation is not perceptible as a pop.
+
+
+## Completion-source safety
+
+Reanimated's `valueSetter` can short-circuit a `withTiming(target, ...)` call
+when the shared value already equals its target, invoking that animation's
+completion callback synchronously before a frame runs. A close routine must not
+attach unmount or finalization to a value that can legitimately already be at
+its target on some trigger path: `swipeY` is zero for backdrop, hardware-back,
+and info-bar navigation closes, while it is nonzero for a swipe dismissal.
+
+**Why:** a callback on that already-settled value can unmount the Modal before
+the progress-driven shrink-back renders, making a close look like an abrupt
+snap even though the hero animation was configured with a normal duration.
+
+**How to apply:** choose one close-progress value that always starts away from
+its target as the sole completion source, and use other shared values only for
+their visual animation. Keep session-reset refs explicit on every fresh open
+when a previous gesture can leave them active.
+
 ## Content parity
 
 Any field the overlay shows must also be shown by the source card, or the card
