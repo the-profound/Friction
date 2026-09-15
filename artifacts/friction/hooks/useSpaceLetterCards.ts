@@ -3,7 +3,9 @@
  *
  * Adapter that converts SpaceLetter list API responses (from the space detail
  * screen) into LetterCardViewModel. Encodes space-specific display rules:
- * - Author identity is masked in anonymous spaces (displayName shown instead)
+ * - Author display name is masked in anonymous spaces (shows anonymous
+ *   display name/nickname instead), but authorId always carries the real
+ *   author id (server never hides it) so author links keep working.
  * - Space name is the collection label (no personal collection)
  */
 
@@ -34,7 +36,10 @@ export function spaceLetterToViewModel(
     visibility: null,
     cover: ((letter as any).articleCover ?? null) as import("@workspace/api-client-react").ArticleCover | null,
     authorName,
-    authorId: isAnonymousSpace ? null : letter.authorId ?? null,
+    // Server always returns the real author id regardless of anonymity;
+    // only the displayed authorName is masked in anonymous spaces. Tapping
+    // still navigates to the real author's profile.
+    authorId: letter.authorId ?? null,
     date: letter.createdAt,
     isRead: letter.isRead,
     collectionId: null,
