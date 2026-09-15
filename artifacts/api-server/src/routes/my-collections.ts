@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, count, sql } from "drizzle-orm";
 import { db, myCollectionsTable, myCollectionArticlesTable, articlesTable, usersTable } from "@workspace/db";
+import { resolveMyCollectionArticleAuthorIdentity } from "../lib/myCollectionArticleIdentity";
 
 // Mirrors articleCollectionNameSubquery in articles.ts — team collection wins,
 // personal collection is the fallback (same resolution order as GET /articles/:id).
@@ -31,6 +32,61 @@ const articleCollectionIdSubquery = sql<string | null>`(
   FROM team_collection_articles tca
   WHERE tca.article_id = ${articlesTable.id}
   ORDER BY tca.added_at ASC
+  LIMIT 1
+)`;
+
+// Personal collections (notably the built-in "인상깊은 편지" collection) can hold
+// letters authored by other users. When such a letter originated from a Space,
+// these three subqueries resolve that Space's name/anonymity/safe display name
+// so the route can avoid ever exposing a real account nickname for a letter the
+// collection owner did not author themselves in an anonymous Space — mirrors the
+// masking rule in GET /users/:id/space-letters and GET /spaces/:id/letters.
+const articleSpaceNameSubquery = sql<string | null>`(
+  SELECT s.name
+  FROM space_letters sl
+  JOIN spaces s ON sl.space_id = s.id
+  WHERE sl.source_article_id = ${articlesTable.id}
+  ORDER BY sl.created_at ASC
+  LIMIT 1
+)`;
+
+// Paired with articleSpaceNameSubquery above (identical FROM/JOIN/WHERE/ORDER
+// BY/LIMIT) so the name and ID always resolve from the same space_letters
+// row — never resolve one from this route and the other from a client-side
+// map keyed by different selection criteria, or the displayed Space name can
+// point at a different Space's ID.
+const articleSpaceIdSubquery = sql<string | null>`(
+  SELECT s.id
+  FROM space_letters sl
+  JOIN spaces s ON sl.space_id = s.id
+  WHERE sl.source_article_id = ${articlesTable.id}
+  ORDER BY sl.created_at ASC
+  LIMIT 1
+)`;
+
+// The same article can back more than one space_letters row (e.g. resubmitted
+// into a second space). Any one of them being anonymous is enough to require
+// masking — picking only the earliest row would let a later anonymous
+// submission's real nickname leak through the earliest, non-anonymous one.
+const articleSpaceIsAnonymousSubquery = sql<boolean | null>`(
+  SELECT bool_or(s.is_anonymous)
+  FROM space_letters sl
+  JOIN spaces s ON sl.space_id = s.id
+  WHERE sl.source_article_id = ${articlesTable.id}
+)`;
+
+// Once masking is required, pull the safe alias specifically from an
+// anonymous match (never from a non-anonymous one, which could have a
+// different, non-masked nickname value for the same author/article).
+const articleSpaceAuthorSpaceNicknameSubquery = sql<string | null>`(
+  SELECT sp.space_nickname
+  FROM space_letters sl
+  JOIN spaces s ON sl.space_id = s.id
+  LEFT JOIN space_participations sp
+    ON sp.space_id = sl.space_id AND sp.user_id = sl.author_id
+  WHERE sl.source_article_id = ${articlesTable.id}
+    AND s.is_anonymous = true
+  ORDER BY sl.created_at ASC
   LIMIT 1
 )`;
 import { CreateMyCollectionBody, UpdateMyCollectionBody, AddArticleToMyCollectionBody } from "@workspace/api-zod";
@@ -196,7 +252,27 @@ router.delete("/my-collections/:id", async (req, res) => {
   res.status(204).send();
 });
 
-router.get("/my-collections/:id/articles", async (req, res) => {
+router.get("/my-collections/:id/articles", requireAuth, async (req, res) => {
+  // Needed to tell "the owner's own letter" apart from "someone else's letter
+  // the owner saved" — only the latter can require anonymous-Space masking.
+  // Also the sole access-control check: this endpoint can return a foreign
+  // author's real identity metadata for non-anonymous letters, so only the
+  // collection's own owner may list its contents — there is no "public
+  // collection browsing" flow for this route today.
+  const [collection] = await db
+    .select({ ownerId: myCollectionsTable.ownerId })
+    .from(myCollectionsTable)
+    .where(eq(myCollectionsTable.id, req.params.id));
+
+  if (!collection) {
+    res.status(404).json({ error: "Collection not found" });
+    return;
+  }
+  if (collection.ownerId !== req.user!.id) {
+    res.status(403).json({ error: "Cannot view another user's collection" });
+    return;
+  }
+
   const rows = await db
     .select({
       id: myCollectionArticlesTable.id,
@@ -207,24 +283,47 @@ router.get("/my-collections/:id/articles", async (req, res) => {
       authorNickname: usersTable.nickname,
       collectionName: articleCollectionNameSubquery,
       collectionId: articleCollectionIdSubquery,
+      spaceName: articleSpaceNameSubquery,
+      spaceId: articleSpaceIdSubquery,
+      spaceIsAnonymous: articleSpaceIsAnonymousSubquery,
+      spaceAuthorSpaceNickname: articleSpaceAuthorSpaceNicknameSubquery,
     })
     .from(myCollectionArticlesTable)
     .leftJoin(articlesTable, eq(myCollectionArticlesTable.articleId, articlesTable.id))
     .leftJoin(usersTable, eq(articlesTable.authorId, usersTable.id))
     .where(eq(myCollectionArticlesTable.myCollectionId, req.params.id));
 
-  res.json(rows.map((row) => ({
-    id: row.id,
-    myCollectionId: row.myCollectionId,
-    articleId: row.articleId,
-    addedAt: row.addedAt,
-    article: row.article ? {
-      ...row.article,
-      authorNickname: row.authorNickname ?? null,
-      collectionName: row.collectionName ?? null,
-      collectionId: row.collectionId ?? null,
-    } : null,
-  })));
+  res.json(rows.map((row) => {
+    const { authorNickname: safeAuthorNickname, authorIdentityMasked } =
+      resolveMyCollectionArticleAuthorIdentity({
+        articleAuthorId: row.article?.authorId ?? null,
+        collectionOwnerId: collection?.ownerId ?? null,
+        rawAuthorNickname: row.authorNickname ?? null,
+        spaceIsAnonymous: row.spaceIsAnonymous,
+        spaceAuthorSpaceNickname: row.spaceAuthorSpaceNickname,
+      });
+
+    return {
+      id: row.id,
+      myCollectionId: row.myCollectionId,
+      articleId: row.articleId,
+      addedAt: row.addedAt,
+      article: row.article ? {
+        ...row.article,
+        // Never return the real author ID alongside a masked nickname: the
+        // client can resolve a nickname from an ID just as easily as reading
+        // it directly, so a masked entry must hide identity end-to-end, not
+        // rely on the UI choosing not to use the ID.
+        authorId: authorIdentityMasked ? null : row.article.authorId,
+        authorNickname: safeAuthorNickname,
+        collectionName: row.collectionName ?? null,
+        collectionId: row.collectionId ?? null,
+        spaceName: row.spaceName ?? null,
+        spaceId: row.spaceId ?? null,
+        authorIdentityMasked,
+      } : null,
+    };
+  }));
 });
 
 router.post("/my-collections/:id/articles", async (req, res) => {

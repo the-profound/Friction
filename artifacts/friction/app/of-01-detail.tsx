@@ -43,6 +43,7 @@ import ArticleCardItem from "@/components/ArticleCardItem/ArticleCardItem";
 import ArticleListItem from "@/components/ArticleListItem/ArticleListItem";
 
 import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
+import { myArticleToViewModel } from "@/hooks/useMyLetterCards";
 import SwipeableRow, { SwipeableRowHandle } from "@/components/SwipeableRow/SwipeableRow";
 
 type FolderView = "card" | "content";
@@ -105,11 +106,13 @@ export default function PersonalCollectionDetailScreen() {
   const [view, setView] = useState<FolderView>("card");
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  const { openLetterOverlay, renderLetterOverlay } = useLetterSelectionOverlay(userId);
+  const { openLetterOverlay, renderLetterOverlay, isSourceHidden, spaceLetterByArticleId } =
+    useLetterSelectionOverlay(userId);
 
   const { width: windowWidth } = useWindowDimensions();
   const openRowRef = useRef<SwipeableRowHandle | null>(null);
   const rowRefs = useRef<Map<string, SwipeableRowHandle>>(new Map());
+  const cardSlotRefs = useRef<Map<string, View | null>>(new Map());
 
   const collectionQuery = useGetMyCollection(id ?? "");
   const collection = collectionQuery.data;
@@ -361,15 +364,38 @@ export default function PersonalCollectionDetailScreen() {
   const renderGridRow = useCallback(
     ({ item: rowItems }: { item: MyCollectionArticleWithDetails[] }) => (
       <View style={styles.gridRow}>
-        {rowItems.map((entry) => (
-          <View key={entry.articleId} style={[styles.gridCell, { width: cellWidth }]}>
-            <CanonicalCardSlot width={cellWidth} height={cellHeight}>
-              <ArticleCardItem
-                title={entry.article?.title ?? "제목 없음"}
-                cover={entry.article?.cover}
-                carouselShadow
-                onPress={() => {
-                  if (entry.article && entry.article.authorId === userId) {
+        {rowItems.map((entry) => {
+          const hidden = isSourceHidden(entry.articleId);
+          // Same cover metadata as the 마이 탭 / 수신자만 볼 수 있는 편지 탭 grids:
+          // sender name and the letter's original collection/space name.
+          const vm = entry.article
+            ? myArticleToViewModel(entry.article, spaceLetterByArticleId.get(entry.articleId) ?? null)
+            : null;
+          return (
+            <View
+              key={entry.articleId}
+              ref={(ref) => {
+                cardSlotRefs.current.set(entry.articleId, ref);
+              }}
+              style={[styles.gridCell, { width: cellWidth, opacity: hidden ? 0 : 1 }]}
+            >
+              <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+                <ArticleCardItem
+                  title={entry.article?.title ?? "제목 없음"}
+                  authorName={vm?.authorName ?? undefined}
+                  // Only the originating Space name belongs on this cover — this
+                  // screen is itself one specific personal collection, so
+                  // repeating that same collection's own name on every card
+                  // (vm?.collectionName) would be redundant, not informative.
+                  spaceName={vm?.spaceName}
+                  cover={entry.article?.cover}
+                  carouselShadow
+                  onPress={() => {
+                    if (!entry.article) return;
+                    // Always opens the letter selection overlay, matching the
+                    // list view's behaviour — reading happens only via the
+                    // overlay's "읽기" button, regardless of authorship.
+                    const slotRef = cardSlotRefs.current.get(entry.articleId);
                     openLetterOverlay(entry.article, {
                       // This grid renders with the restrained carousel shadow
                       // token; the overlay must open/close using the same
@@ -377,26 +403,50 @@ export default function PersonalCollectionDetailScreen() {
                       // standard token right at the card's rounded corners.
                       originUsesCarouselShadow: true,
                       meta: {
-                        collectionName: collection?.name ?? null,
-                        collectionId: id ?? null,
+                        // Show the letter's originating Space, not this
+                        // browsing collection's own name (always redundant
+                        // here). Falls back to the collection name only when
+                        // the letter has no Space association at all.
+                        collectionName: vm?.spaceName ?? collection?.name ?? null,
+                        collectionId: vm?.spaceName ? null : (id ?? null),
+                        spaceId: vm?.spaceId ?? null,
                         date: entry.addedAt,
+                        // authorId must stay null for a masked anonymous-Space
+                        // author, or the overlay's info bar could still link
+                        // through to their real profile.
+                        authorName: vm?.authorName ?? null,
+                        authorId: vm?.authorId ?? null,
                       },
+                      measureRef: slotRef
+                        ? (slotRef as unknown as {
+                            measureInWindow: (
+                              cb: (x: number, y: number, w: number, h: number) => void,
+                            ) => void;
+                          })
+                        : null,
+                      fallbackOrigin: { x: 0, y: 0, width: cellWidth, height: cellHeight },
                       currentCollectionId: id,
                     });
-                  } else if (entry.article) {
-                    router.push({ pathname: "/read" as never, params: { articleId: entry.article.id, mode: "re_read" } });
-                  }
-                }}
-              />
-            </CanonicalCardSlot>
-          </View>
-        ))}
+                  }}
+                />
+              </CanonicalCardSlot>
+            </View>
+          );
+        })}
         {Array.from({ length: GRID_COLS - rowItems.length }).map((_, i) => (
           <View key={`filler-${i}`} style={{ width: cellWidth }} />
         ))}
       </View>
     ),
-    [cellWidth, cellHeight, userId, openLetterOverlay, collection?.name, id, router],
+    [
+      cellWidth,
+      cellHeight,
+      isSourceHidden,
+      spaceLetterByArticleId,
+      openLetterOverlay,
+      collection?.name,
+      id,
+    ],
   );
 
   const renderSelectionItem = useCallback(
@@ -474,11 +524,23 @@ export default function PersonalCollectionDetailScreen() {
           onPress={() => {
             closeOpenRow();
             if (item.article) {
+              // Same viewmodel + info-bar contract as the card grid: show the
+              // letter's originating Space (falling back to this browsing
+              // collection's own name only when it has none), and pass
+              // authorName/authorId/spaceId so the overlay's info bar can
+              // link to the author and Space detail pages.
+              const vm = myArticleToViewModel(
+                item.article,
+                spaceLetterByArticleId.get(item.articleId) ?? null,
+              );
               openLetterOverlay(item.article, {
                 meta: {
-                  collectionName: collection?.name ?? null,
-                  collectionId: id ?? null,
+                  collectionName: vm.spaceName ?? collection?.name ?? null,
+                  collectionId: vm.spaceName ? null : (id ?? null),
+                  spaceId: vm.spaceId ?? null,
                   date: item.addedAt,
+                  authorName: vm.authorName ?? null,
+                  authorId: vm.authorId ?? null,
                 },
                 currentCollectionId: id,
               });
@@ -487,7 +549,7 @@ export default function PersonalCollectionDetailScreen() {
         />
       </SwipeableRow>
     ),
-    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router, userId, id, openLetterOverlay, collection?.name],
+    [closeOpenRow, handleRemoveArticle, handleSwipeOpen, router, userId, id, openLetterOverlay, collection?.name, spaceLetterByArticleId],
   );
 
   if (!id) {

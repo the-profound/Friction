@@ -143,6 +143,78 @@ describe("archive collection detail controls", () => {
   });
 });
 
+describe("archive collection detail card grid parity", () => {
+  const renderGridRow = collectionDetailScreen.slice(
+    collectionDetailScreen.indexOf("const renderGridRow"),
+    collectionDetailScreen.indexOf("const renderSelectionItem"),
+  );
+
+  it("shows sender and the letter's originating space name on the card cover, matching the 마이 탭 / 수신자만 볼 수 있는 편지 탭 grids", () => {
+    expect(renderGridRow).toContain(
+      "myArticleToViewModel(entry.article, spaceLetterByArticleId.get(entry.articleId) ?? null)",
+    );
+    expect(renderGridRow).toContain("authorName={vm?.authorName ?? undefined}");
+    expect(renderGridRow).toContain("spaceName={vm?.spaceName}");
+    // Never repeat this browsing collection's own name on every card cover —
+    // vm?.collectionName resolves to whichever personal collection the
+    // article was first saved to, which inside this exact collection's own
+    // detail screen is always redundant (or, worse, a stray different
+    // collection name if the article was saved elsewhere first).
+    expect(renderGridRow).not.toContain("collectionName={vm?.collectionName}");
+  });
+
+  it("shows the letter's originating space (not this collection's own name) and a live spaceId in the overlay info bar", () => {
+    expect(renderGridRow).toContain("collectionName: vm?.spaceName ?? collection?.name ?? null");
+    expect(renderGridRow).toContain("collectionId: vm?.spaceName ? null : (id ?? null)");
+    expect(renderGridRow).toContain("spaceId: vm?.spaceId ?? null");
+  });
+
+  it("always opens the letter selection overlay on tap, regardless of authorship", () => {
+    expect(renderGridRow).not.toContain("entry.article.authorId === userId");
+    expect(renderGridRow).not.toContain('pathname: "/read"');
+    expect(renderGridRow).toContain("openLetterOverlay(entry.article,");
+  });
+
+  it("hides the tapped card slot while the overlay is open, like the other 3-column grids", () => {
+    expect(renderGridRow).toContain("isSourceHidden(entry.articleId)");
+    expect(renderGridRow).toContain("opacity: hidden ? 0 : 1");
+  });
+
+  it("measures the tapped card slot for the overlay's hero origin", () => {
+    expect(renderGridRow).toContain("cardSlotRefs.current.get(entry.articleId)");
+    expect(renderGridRow).toContain("measureRef: slotRef");
+  });
+
+  it("passes the masking-aware authorName/authorId into the overlay meta instead of the raw article fields", () => {
+    // vm.authorId is null whenever the server marked this entry's author
+    // identity as masked (foreign letter from an anonymous space) — passing
+    // entry.article.authorId directly here would leak the real author via the
+    // overlay's "navigate to author" link even when the name itself is safe.
+    expect(renderGridRow).toContain("authorName: vm?.authorName ?? null");
+    expect(renderGridRow).toContain("authorId: vm?.authorId ?? null");
+    expect(renderGridRow).not.toContain("authorId: entry.article.authorId");
+    expect(renderGridRow).not.toContain("authorId: entry.article?.authorId");
+  });
+});
+
+describe("archive collection detail list view overlay parity", () => {
+  const renderNormalItem = collectionDetailScreen.slice(
+    collectionDetailScreen.indexOf("const renderNormalItem"),
+    collectionDetailScreen.indexOf("if (!id) {"),
+  );
+
+  it("builds the same viewmodel as the card grid so the overlay shows author/space info consistently across both views", () => {
+    expect(renderNormalItem).toContain(
+      "myArticleToViewModel(\n                item.article,\n                spaceLetterByArticleId.get(item.articleId) ?? null,\n              )",
+    );
+    expect(renderNormalItem).toContain("collectionName: vm.spaceName ?? collection?.name ?? null");
+    expect(renderNormalItem).toContain("collectionId: vm.spaceName ? null : (id ?? null)");
+    expect(renderNormalItem).toContain("spaceId: vm.spaceId ?? null");
+    expect(renderNormalItem).toContain("authorName: vm.authorName ?? null");
+    expect(renderNormalItem).toContain("authorId: vm.authorId ?? null");
+  });
+});
+
 describe("archive collected sentence list", () => {
   const sentenceFilterAction = archiveScreen.slice(
     archiveScreen.indexOf('{activeSubTab === "personal" ? ('),

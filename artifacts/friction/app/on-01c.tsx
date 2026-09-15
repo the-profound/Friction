@@ -255,7 +255,11 @@ export default function ClosingScreen() {
       // 1) 이미 존재하는 편지 → 실명 공간만 PATCH (익명 공간은 서버가 RECIPIENT_ONLY 강제, PATCH 시 403)
       // 2) 아직 없는 편지 → createSpaceLetter POST body에 visibility 포함하여 생성
       // 실패해도 로컬 편지는 이미 완성(LETTER)됐으므로 내보내기 자체는 막지 않는다.
-      if (effectiveSpaceId) {
+      // authorId is only ever null on Article when a foreign, anonymous-space
+      // author's identity was masked (listMyCollectionArticles) — this is the
+      // caller's own just-finalized article, so it is always present here.
+      if (effectiveSpaceId && updated.authorId) {
+        const authorId = updated.authorId;
         try {
           // 익명 공간은 항상 RECIPIENT_ONLY로 제출 (토글 상태와 무관하게 서버 규칙 준수)
           const resolvedVisibility = isAnonymous
@@ -291,7 +295,7 @@ export default function ClosingScreen() {
             await createSpaceLetterMutation.mutateAsync({
               id: effectiveSpaceId,
               data: {
-                authorId: updated.authorId,
+                authorId,
                 sourceArticleId: articleId,
                 letterType: resolvedLetterType,
                 spaceRoundId: effectiveSpaceRoundId ?? null,

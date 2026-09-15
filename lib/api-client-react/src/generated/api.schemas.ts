@@ -134,13 +134,20 @@ export interface ArticleCover {
 
 export interface Article {
   id: string;
-  authorId: string;
+  /** Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly. */
+  authorId: string | null;
   /** Author's nickname. Populated by listArticles when joining users; may be null on other endpoints. */
   authorNickname?: string | null;
   /** Name of the collection this article belongs to (team collection preferred, personal collection fallback). Populated by getArticle; may be null on other endpoints. */
   collectionName?: string | null;
   /** ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints. */
   collectionId?: string | null;
+  /** Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname. */
+  spaceName?: string | null;
+  /** ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints. */
+  spaceId?: string | null;
+  /** True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true. */
+  authorIdentityMasked?: boolean | null;
   title: string;
   content: string;
   status: ArticleStatus;

@@ -297,7 +297,13 @@ export const listArticlesResponseCoverFontFamilyDefault = `sans`;
 
 export const ListArticlesResponseItem = zod.object({
   id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
+  authorId: zod
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+    ),
   authorNickname: zod
     .string()
     .nullish()
@@ -316,6 +322,25 @@ export const ListArticlesResponseItem = zod.object({
     .nullish()
     .describe(
       "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+    ),
+  authorIdentityMasked: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -370,7 +395,13 @@ export const getArticleResponseCoverFontFamilyDefault = `sans`;
 
 export const GetArticleResponse = zod.object({
   id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
+  authorId: zod
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+    ),
   authorNickname: zod
     .string()
     .nullish()
@@ -389,6 +420,25 @@ export const GetArticleResponse = zod.object({
     .nullish()
     .describe(
       "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+    ),
+  authorIdentityMasked: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -493,7 +543,13 @@ export const updateArticleResponseCoverFontFamilyDefault = `sans`;
 
 export const UpdateArticleResponse = zod.object({
   id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
+  authorId: zod
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+    ),
   authorNickname: zod
     .string()
     .nullish()
@@ -512,6 +568,25 @@ export const UpdateArticleResponse = zod.object({
     .nullish()
     .describe(
       "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+    ),
+  authorIdentityMasked: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -619,7 +694,13 @@ export const closeArticleResponseCoverFontFamilyDefault = `sans`;
 
 export const CloseArticleResponse = zod.object({
   id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
+  authorId: zod
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+    ),
   authorNickname: zod
     .string()
     .nullish()
@@ -638,6 +719,25 @@ export const CloseArticleResponse = zod.object({
     .nullish()
     .describe(
       "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+    ),
+  authorIdentityMasked: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -767,7 +867,13 @@ export const transitionArticleStatusResponseCoverFontFamilyDefault = `sans`;
 
 export const TransitionArticleStatusResponse = zod.object({
   id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
+  authorId: zod
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+    ),
   authorNickname: zod
     .string()
     .nullish()
@@ -786,6 +892,25 @@ export const TransitionArticleStatusResponse = zod.object({
     .nullish()
     .describe(
       "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+    ),
+  authorIdentityMasked: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -897,7 +1022,13 @@ export const finalizeArticleResponseCoverFontFamilyDefault = `sans`;
 
 export const FinalizeArticleResponse = zod.object({
   id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
+  authorId: zod
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+    ),
   authorNickname: zod
     .string()
     .nullish()
@@ -916,6 +1047,25 @@ export const FinalizeArticleResponse = zod.object({
     .nullish()
     .describe(
       "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+    ),
+  authorIdentityMasked: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
     ),
   title: zod.string(),
   content: zod.string(),
@@ -1041,7 +1191,13 @@ export const ListInboxResponseItem = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -1060,6 +1216,25 @@ export const ListInboxResponseItem = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -1171,7 +1346,13 @@ export const GetInboxItemResponse = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -1190,6 +1371,25 @@ export const GetInboxItemResponse = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -1307,7 +1507,13 @@ export const MarkInboxOpenedResponse = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -1326,6 +1532,25 @@ export const MarkInboxOpenedResponse = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -1437,7 +1662,13 @@ export const MarkInboxReadResponse = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -1456,6 +1687,25 @@ export const MarkInboxReadResponse = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -1690,7 +1940,13 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -1709,6 +1965,25 @@ export const ListMyCollectionArticlesResponseItem = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -2202,7 +2477,13 @@ export const ListTeamArticlesResponseItem = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -2221,6 +2502,25 @@ export const ListTeamArticlesResponseItem = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -4600,7 +4900,13 @@ export const ListSendRecordsResponseItem = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -4619,6 +4925,25 @@ export const ListSendRecordsResponseItem = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -4779,7 +5104,13 @@ export const GetSendRecordResponse = zod.object({
   article: zod
     .object({
       id: zod.string().uuid(),
-      authorId: zod.string().uuid(),
+      authorId: zod
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+        ),
       authorNickname: zod
         .string()
         .nullish()
@@ -4798,6 +5129,25 @@ export const GetSendRecordResponse = zod.object({
         .nullish()
         .describe(
           "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+        ),
+      spaceName: zod
+        .string()
+        .nullish()
+        .describe(
+          "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+        ),
+      spaceId: zod
+        .string()
+        .uuid()
+        .nullish()
+        .describe(
+          "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+        ),
+      authorIdentityMasked: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
         ),
       title: zod.string(),
       content: zod.string(),
@@ -5259,7 +5609,13 @@ export const promoteThoughtResponseCoverFontFamilyDefault = `sans`;
 
 export const PromoteThoughtResponse = zod.object({
   id: zod.string().uuid(),
-  authorId: zod.string().uuid(),
+  authorId: zod
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      "Author's user ID. Null when authorIdentityMasked is true — a masked entry must never expose the real author's ID, since a client could resolve their nickname from it just as easily as reading it directly.",
+    ),
   authorNickname: zod
     .string()
     .nullish()
@@ -5278,6 +5634,25 @@ export const PromoteThoughtResponse = zod.object({
     .nullish()
     .describe(
       "ID of the team collection this article was delivered through, used for navigation to the collection detail. Null for personal-only or 1:1 articles. Populated by getArticle; may be null on other endpoints.",
+    ),
+  spaceName: zod
+    .string()
+    .nullish()
+    .describe(
+      "Name of the Space this article was sent through, if any. Populated by listMyCollectionArticles; may be null on other endpoints. When the source Space is anonymous and the article was not authored by the collection owner, authorNickname is replaced by the Space's safe per-member display name instead of the real account nickname.",
+    ),
+  spaceId: zod
+    .string()
+    .uuid()
+    .nullish()
+    .describe(
+      "ID of the Space named by spaceName above, resolved from the same underlying space_letters row so the two always describe the same Space. Used for navigation to the Space detail page. Populated by listMyCollectionArticles; may be null on other endpoints.",
+    ),
+  authorIdentityMasked: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when authorNickname above is a safe anonymous-Space display name rather than the author's real account nickname. Populated by listMyCollectionArticles; null on other endpoints. Clients must not offer navigation to the author's profile (authorId) when this is true.",
     ),
   title: zod.string(),
   content: zod.string(),
