@@ -6,6 +6,70 @@ import {
   type ApiRequestTelemetry,
 } from "@workspace/api-client-react";
 
+const capturedOutcomeKeys = new Set<string>();
+
+function appContext() {
+  return {
+    platform: Platform.OS,
+    app_version: Constants.expoConfig?.version ?? null,
+    build_number:
+      Platform.OS === "android"
+        ? Constants.expoConfig?.android?.versionCode != null
+          ? String(Constants.expoConfig.android.versionCode)
+          : null
+        : Constants.expoConfig?.ios?.buildNumber ?? null,
+  };
+}
+
+function captureOutcomeOnce(
+  event: "draft_saved" | "article_published" | "send_completed",
+  outcomeKey: string,
+  properties: Record<string, string | number | null>,
+): void {
+  const key = `${event}:${outcomeKey}`;
+  if (capturedOutcomeKeys.has(key)) return;
+  if (!posthog) return;
+  capturedOutcomeKeys.add(key);
+  posthog.capture(event, { ...properties, ...appContext() });
+}
+
+export function trackWritingStarted(params: {
+  writingSessionId: string;
+  entityId?: string;
+  entityMode: "draft" | "dividing";
+}): void {
+  posthog?.capture("writing_started", {
+    writing_session_id: params.writingSessionId,
+    entity_id: params.entityId ?? null,
+    entity_mode: params.entityMode,
+    ...appContext(),
+  });
+}
+
+export function trackDraftSaved(params: {
+  entityId: string;
+  entityMode: "draft" | "dividing";
+  revision: string;
+}): void {
+  captureOutcomeOnce("draft_saved", `${params.entityId}:${params.revision}`, {
+    entity_id: params.entityId,
+    entity_mode: params.entityMode,
+    revision: params.revision,
+  });
+}
+
+export function trackSendCompleted(params: {
+  sendRecordId: string;
+  articleId: string;
+  targetType: "person" | "reply" | "space" | "group";
+}): void {
+  captureOutcomeOnce("send_completed", params.sendRecordId, {
+    send_record_id: params.sendRecordId,
+    article_id: params.articleId,
+    target_type: params.targetType,
+  });
+}
+
 function kstHour(): number {
   return new Date(Date.now() + 9 * 3600000).getUTCHours();
 }
@@ -206,7 +270,7 @@ export function trackArticlePublished(params: {
   charCount: number;
   pageCount: number;
 }): void {
-  posthog?.capture("article_published", {
+  captureOutcomeOnce("article_published", params.articleId, {
     article_id: params.articleId,
     char_count: params.charCount,
     page_count: params.pageCount,

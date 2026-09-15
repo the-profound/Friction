@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useSendArticle as useSendArticleMutation } from "@workspace/api-client-react";
 import { canSendArticle, canSendToNeighbor, getNextDeliverySlot, formatDeliveryTime } from "./deliverySync";
 import type { ArticleStatus } from "./policies";
+import { trackSendCompleted } from "./analytics";
 
 export interface SendResult {
   success: boolean;
@@ -31,6 +32,11 @@ export function useSendArticleFlow({ senderId }: UseSendArticleOptions) {
       try {
         const result = await sendMutation.mutateAsync({
           data: { senderId, recipientId, articleId },
+        });
+        trackSendCompleted({
+          sendRecordId: result.id,
+          articleId,
+          targetType: "person",
         });
 
         const serverSlot = (result as { deliverySlot?: string })?.deliverySlot;

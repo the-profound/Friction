@@ -150,6 +150,10 @@ import {
 } from "@/lib/readingMemoToolbar";
 import { resolveFloatingChromeOffset } from "@/lib/floatingChromeOffset";
 import {
+  trackDraftSaved,
+  trackWritingStarted,
+} from "@/lib/analytics";
+import {
   MEMO_TOOLBAR_OCCUPIED_HEIGHT,
   resolveEditorBottomVisibility,
 } from "@/lib/editorViewport";
@@ -523,6 +527,20 @@ export default function WritingScreen() {
   // edit. This is intentionally cleared only for an exact match: a real edit
   // that happens before the export still needs to be autosaved.
   const serverInjectionPendingRef = useRef(false);
+  const writingStartedRef = useRef(false);
+  const writingSessionIdRef = useRef(
+    `writing_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+  );
+
+  const trackFirstMeaningfulEdit = useCallback(() => {
+    if (writingStartedRef.current) return;
+    writingStartedRef.current = true;
+    trackWritingStarted({
+      writingSessionId: writingSessionIdRef.current,
+      entityId: thoughtIdRef.current ?? id,
+      entityMode: isThoughtModeRef.current ? "draft" : "dividing",
+    });
+  }, [id]);
 
   const nextExportRequestId = useCallback((kind: "export" | "autosave") => {
     exportRequestSeqRef.current += 1;
@@ -1110,6 +1128,10 @@ export default function WritingScreen() {
         type: "error",
       });
     },
+    onSaveSuccess: ({ entityId, entityMode, revision }) => {
+      if (!entityId || !entityMode || !revision) return;
+      trackDraftSaved({ entityId, entityMode, revision });
+    },
     isRetryableError: (error) => {
       if ((error as { autosaveConflict?: unknown })?.autosaveConflict === true) {
         return false;
@@ -1142,12 +1164,13 @@ export default function WritingScreen() {
           }) ?? undefined
         : undefined;
       if (!isThoughtModeRef.current || isMeaningfulThoughtMarkdown(md)) {
+        trackFirstMeaningfulEdit();
         markDirty(titleRef.current, md, documentSnapshot);
       } else {
         void discardAutosave();
       }
     },
-    [discardAutosave, markDirty],
+    [discardAutosave, markDirty, trackFirstMeaningfulEdit],
   );
 
   const handleEditorError = useCallback(
@@ -1355,11 +1378,12 @@ export default function WritingScreen() {
 
   const handleTitleChange = useCallback(
     (text: string) => {
+      trackFirstMeaningfulEdit();
       setTitle(text);
       titleRef.current = text;
       markTitleDirty(text, contentRef.current);
     },
-    [markTitleDirty],
+    [markTitleDirty, trackFirstMeaningfulEdit],
   );
 
   // ── 분할 측정/검증 (dividing) ──────────────────────────────────────────────

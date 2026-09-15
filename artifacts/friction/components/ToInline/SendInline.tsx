@@ -66,6 +66,7 @@ import {
   createSubmissionLock,
   runAuthenticatedMutation,
 } from "@/lib/authenticatedMutation";
+import { trackSendCompleted } from "@/lib/analytics";
 
 type SendMode = "person" | "reply" | "space";
 const sendSubmissionLock = createSubmissionLock();
@@ -395,6 +396,11 @@ export function SendInline({
         const result = await runAuthenticatedMutation<SendRecordWithDetails>({
           prepareSession: prepareAuthSession,
           mutate: () => sendArticle.mutateAsync({ data: body }),
+        });
+        trackSendCompleted({
+          sendRecordId: result.id,
+          articleId: result.articleId,
+          targetType: mode,
         });
         setConfirmVisible(false);
         setRetryEnvelope(null);

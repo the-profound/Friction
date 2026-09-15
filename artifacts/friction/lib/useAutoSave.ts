@@ -131,6 +131,11 @@ interface UseAutoSaveOptions {
     creationGeneration?: number;
   }) => void;
   onRestoreConflict?: () => void;
+  onSaveSuccess?: (data: {
+    entityId?: string;
+    entityMode?: AutoSaveEntityMode;
+    revision?: string;
+  }) => void;
 }
 
 async function persistQueue(key: string, data: PendingPayload | null): Promise<void> {
@@ -188,6 +193,7 @@ export function useAutoSave({
   onCleanup,
   onRestore,
   onRestoreConflict,
+  onSaveSuccess,
 }: UseAutoSaveOptions) {
   const [status, setStatus] = useState<AutoSaveStatus>("idle");
   const [isDirty, setIsDirty] = useState(false);
@@ -251,6 +257,8 @@ export function useAutoSave({
   onRestoreRef.current = onRestore;
   const onRestoreConflictRef = useRef(onRestoreConflict);
   onRestoreConflictRef.current = onRestoreConflict;
+  const onSaveSuccessRef = useRef(onSaveSuccess);
+  onSaveSuccessRef.current = onSaveSuccess;
   const restoreContextRef = useRef(restoreContext);
   restoreContextRef.current = restoreContext;
   const acknowledgedServerRef = useRef<AutoSaveRestoreContext | undefined>(
@@ -431,6 +439,11 @@ export function useAutoSave({
           };
         }
         saved = true;
+        onSaveSuccessRef.current?.({
+          entityId: latestDataRef.current.entityId,
+          entityMode: latestDataRef.current.entityMode,
+          revision: savedBaseline?.serverUpdatedAt,
+        });
         if (id >= latestCompletedRef.current) {
           latestCompletedRef.current = id;
           retryCountRef.current = 0;
