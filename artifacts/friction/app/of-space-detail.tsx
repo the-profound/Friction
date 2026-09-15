@@ -784,7 +784,7 @@ function RoundSection({
           now={now}
           onSchedule={onScheduleSlot}
           isScheduled={item.kind === "scheduled"}
-          schedulingDisabled={roundStatus === "COMPLETED" || isSpaceArchived}
+          schedulingDisabled={isSpaceArchived}
           withdrawnLetter={
             item.kind === "scheduled"
               ? null

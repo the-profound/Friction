@@ -125,8 +125,11 @@ describe("space scheduled-send role policy", () => {
     expect(createRoute).toContain("normalizedScheduledAt = computeDeliverySlot()");
     expect(createRoute).toContain("lockAndCheckPendingCenterReservation");
     expect(createRoute).toContain("hasSentCenterSlotUse");
-    expect(createRoute).toContain("getSpaceRoundStatusForPeriod(lockedRound)");
     expect(createRoute).toContain('lockedSpace.status === "ARCHIVED"');
+    expect(createRoute).toContain("!lockedRound");
+    expect(createRoute).not.toContain(
+      'getSpaceRoundStatusForPeriod(lockedRound) === "COMPLETED"',
+    );
     expect(createRoute).toContain("reservedDate: reservationIdentity.reservedDate");
     expect(validationHelper).toContain("if (!slot.scheduledDate)");
     expect(validationHelper).toContain("requestedSlotId !== slot.id");

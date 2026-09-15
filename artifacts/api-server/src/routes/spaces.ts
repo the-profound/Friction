@@ -39,7 +39,6 @@ import {
 import { processDueScheduledSends } from "../lib/scheduledSendProcessor";
 import { getCorrelationId } from "../lib/operationalTelemetry";
 import {
-  getSpaceRoundStatusForPeriod,
   synchronizeSpaceRoundStatuses,
 } from "../lib/spaceRoundStatus";
 import {
@@ -3315,11 +3314,10 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
           if (
             !lockedSpace ||
             lockedSpace.status === "ARCHIVED" ||
-            !lockedRound ||
-            getSpaceRoundStatusForPeriod(lockedRound) === "COMPLETED"
+            !lockedRound
           ) {
             throw Object.assign(
-              new Error("완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다."),
+              new Error("존재하지 않거나 종료된 공간의 슬롯은 보충 발신할 수 없습니다."),
               { statusCode: 409 },
             );
           }

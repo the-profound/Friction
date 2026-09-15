@@ -22,7 +22,6 @@ import {
 } from "@workspace/db";
 import { and, eq, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { logger } from "./logger";
-import { getSpaceRoundStatusForPeriod } from "./spaceRoundStatus";
 import {
   createCorrelationId,
   logOperationalMetric,
@@ -211,11 +210,10 @@ async function processOneScheduledSend(
       if (
         !lockedSpace ||
         lockedSpace.status === "ARCHIVED" ||
-        !lockedRound ||
-        getSpaceRoundStatusForPeriod(lockedRound, now) === "COMPLETED"
+        !lockedRound
       ) {
         recoveryLifecycleFailure =
-          "완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다.";
+          "존재하지 않거나 종료된 공간의 슬롯은 보충 발신할 수 없습니다.";
       }
     }
     if (recoveryLifecycleFailure) {

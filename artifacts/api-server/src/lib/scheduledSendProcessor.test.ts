@@ -505,13 +505,13 @@ describe("space scheduled-send delivery", () => {
     expect(state.updates).toEqual([
       expect.objectContaining({
         status: "FAILED",
-        failureReason: "완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다.",
+        failureReason: "존재하지 않거나 종료된 공간의 슬롯은 보충 발신할 수 없습니다.",
       }),
     ]);
     expect(state.inserts).toHaveLength(0);
   });
 
-  it("rejects legacy catch-up recovery after its reserved round completes", async () => {
+  it("recovers and delivers a legacy catch-up after its reserved round completes", async () => {
     const failedCatchUp = dueSend({
       status: "FAILED",
       failureReason: "예약 당시의 회차·슬롯·날짜 정보가 완전하지 않거나 일치하지 않습니다.",
@@ -531,20 +531,23 @@ describe("space scheduled-send delivery", () => {
         startsAt: new Date("2019-12-01T00:00:00.000Z"),
         endsAt: new Date("2020-01-31T00:00:00.000Z"),
       }],
+      [{ id: "slot-1", spaceRoundId: "round-1", assignedUserId: "author-1", scheduledDate: "2019-12-30" }],
+      [failedCatchUp],
+      [readableArticle], [], [{ userId: "participant-1" }],
     );
 
     await expect(processDueScheduledSends()).resolves.toEqual({
-      sentCount: 0,
-      failedCount: 1,
-      affectedSlots: [],
+      sentCount: 1,
+      failedCount: 0,
+      affectedSlots: [new Date("2020-01-01T21:00:00.000Z")],
     });
-    expect(state.updates).toEqual([
+    expect(state.updates).toContainEqual(
       expect.objectContaining({
-        status: "FAILED",
-        failureReason: "완료되거나 보관된 공간의 슬롯은 보충 발신할 수 없습니다.",
+        status: "SENT",
+        failureReason: null,
       }),
-    ]);
-    expect(state.inserts).toHaveLength(0);
+    );
+    expect(state.inserts.some((entry) => entry.table === state.tables.inbox)).toBe(true);
   });
 
   it("retires the legacy reason when recovery finds a newly unreadable article", async () => {

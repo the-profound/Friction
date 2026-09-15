@@ -25,6 +25,13 @@ describe("past assigned CENTER slot catch-up flow", () => {
     expect(detailSource).toContain('catchUp: "1"');
   });
 
+  it("keeps catch-up available after round completion but hides it after space archival", () => {
+    expect(detailSource).toContain("schedulingDisabled={isSpaceArchived}");
+    expect(detailSource).not.toContain(
+      'schedulingDisabled={roundStatus === "COMPLETED" || isSpaceArchived}',
+    );
+  });
+
   it("revalidates the exact expired owner slot and excludes used rounds", () => {
     expect(scheduleSource).toContain("const catchUpCenterSlots = useMemo(");
     expect(scheduleSource).toContain("!isKstSlotReservable(s.date, now)");
