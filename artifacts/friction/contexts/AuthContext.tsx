@@ -31,6 +31,12 @@ import {
   type SignupFailure,
 } from "@/lib/signupDiagnostics";
 import { customFetch, setAuthRefreshCallback } from "@workspace/api-client-react";
+import { AnalyticsIdentityCoordinator } from "@/lib/analyticsIdentity";
+import {
+  getPostHogIdentitySnapshot,
+  identifyPostHogUser,
+  resetPostHogUser,
+} from "@/lib/posthog";
 
 export type AuthFlowError = AuthError | {
   message: string;
@@ -125,6 +131,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const currentSessionRef = useRef<Session | null>(null);
   const restoreReadyRef = useRef<Promise<void>>(Promise.resolve());
   const resolveRestoreReadyRef = useRef<(() => void) | null>(null);
+  const analyticsIdentityRef = useRef(
+    new AnalyticsIdentityCoordinator({
+      identify: identifyPostHogUser,
+      reset: resetPostHogUser,
+      getIdentity: getPostHogIdentitySnapshot,
+    }),
+  );
 
   // Supabase fires onAuthStateChange synchronously as part of
   // supabase.auth.signUp() *before* our own signUp() function below gets a
@@ -396,6 +409,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void nativeAutoRefreshRef.current.stop().catch(() => undefined);
     }
   }, [session]);
+
+  useEffect(() => {
+    if (isLoading || configurationError) return;
+    analyticsIdentityRef.current.publishUser(session?.user.id ?? null);
+  }, [configurationError, isLoading, session?.user.id]);
 
   useEffect(() => {
     if (configurationError || Platform.OS === "web") return;

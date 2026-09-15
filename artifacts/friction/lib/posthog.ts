@@ -27,6 +27,51 @@ if (token) {
   console.warn("[PostHog] EXPO_PUBLIC_POSTHOG_TOKEN is not set. Analytics disabled.");
 }
 
+function runPostHogOperation(operation: (client: PostHog) => unknown): void {
+  if (!posthog) return;
+  try {
+    const result = operation(posthog);
+    if (
+      result &&
+      typeof result === "object" &&
+      "catch" in result &&
+      typeof result.catch === "function"
+    ) {
+      void result.catch(() => undefined);
+    }
+  } catch {
+    // Analytics must never block or break authentication and navigation.
+  }
+}
+
+export function identifyPostHogUser(userId: string): void {
+  runPostHogOperation((client) => client.identify(userId));
+}
+
+export function resetPostHogUser(): void {
+  runPostHogOperation((client) => client.reset());
+}
+
+export interface PostHogIdentitySnapshot {
+  distinctId: string;
+  anonymousId: string;
+}
+
+export function getPostHogIdentitySnapshot(): PostHogIdentitySnapshot | null {
+  if (!posthog) return null;
+  try {
+    const distinctId = posthog.getDistinctId();
+    const anonymousId = posthog.getAnonymousId();
+    // Before the React Native client has hydrated persisted storage, both
+    // accessors return empty strings. Treat that as unavailable so callers
+    // isolate accounts instead of identifying over an unknown persisted user.
+    if (!distinctId || !anonymousId) return null;
+    return { distinctId, anonymousId };
+  } catch {
+    return null;
+  }
+}
+
 export function captureException(error: unknown): void {
   if (!posthog) return;
   const errorClass =
