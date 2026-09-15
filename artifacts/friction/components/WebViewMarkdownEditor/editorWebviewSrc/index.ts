@@ -2668,11 +2668,13 @@ function spellFindRange(
     document.addEventListener("touchcancel", releaseTouchAndRetryCorrection, { passive: true });
 
     // ── Selection handle drag detection ──
-    // When the user drags an OS selection handle (the blue teardrop), the
-    // WebView's own scroll fires before the selection can expand, collapsing
-    // it. We detect: active selection + touch movement > DRAG_THRESHOLD, then
-    // post onSelHandleDragStart so the native side can temporarily disable
-    // WebView scrollEnabled. On touch end/cancel we post onSelHandleDragEnd.
+    // When the user drags an OS selection handle (the blue teardrop), keep
+    // WKWebView scrolling enabled: toggling React Native's scrollEnabled during
+    // an active iOS selection gesture can rebuild native scroll state and jump
+    // the document to the top. The WebView remains the single scroll owner.
+    // Track the moving endpoint here and use only the margin-aware correction
+    // path for edge auto-scroll. RN receives start/end solely to suppress
+    // surrounding gestures while text selection is active.
     var selHandleHasActiveSelection = false;
     var selHandleDragStartX = 0;
     var selHandleDragStartY = 0;
@@ -2720,26 +2722,22 @@ function spellFindRange(
       }
     }, { passive: true });
 
-    document.addEventListener("touchend", function () {
+    const finishSelectionHandleDrag = function () {
+      // Invalidate the drag session's delayed rAF/180ms passes before changing
+      // any session state. Otherwise a queued pass can run against a cleared
+      // endpoint and fall back to selection.head, moving toward the stationary
+      // endpoint or a stale top-of-document coordinate.
+      viewportCorrectionGeneration++;
       if (selectionHandleDragging) {
         selectionHandleDragging = false;
         postToRN({ type: "onSelHandleDragEnd" });
       }
-      // Cancel the drag session's delayed rAF/180ms passes before forgetting
-      // which endpoint moved. Otherwise they fall back to selection.head and
-      // can jump to the stationary endpoint after an anchor-handle drag.
-      viewportCorrectionGeneration++;
       activeSelectionEndpoint = null;
-    }, { passive: true });
+      pendingViewportCorrectionAfterTouch = false;
+    };
 
-    document.addEventListener("touchcancel", function () {
-      if (selectionHandleDragging) {
-        selectionHandleDragging = false;
-        postToRN({ type: "onSelHandleDragEnd" });
-      }
-      viewportCorrectionGeneration++;
-      activeSelectionEndpoint = null;
-    }, { passive: true });
+    document.addEventListener("touchend", finishSelectionHandleDrag, { passive: true });
+    document.addEventListener("touchcancel", finishSelectionHandleDrag, { passive: true });
 
     // While an hr-control panel is active, intercept touches outside any
     // .hr-wrapper so the text editor cannot gain focus and the keyboard

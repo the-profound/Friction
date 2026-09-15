@@ -70,7 +70,6 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
     // 시점의 값을 다시 초기값으로 받아 문제 없다 — 같은 인스턴스에서 이 값이
     // 뒤늦게 갱신될 필요는 없다.
     const initialHideTitleRef = useRef(hideTitle);
-    const [scrollLocked, setScrollLocked] = useState(false);
     const autoSplitResolversRef = useRef<Array<(r: { hadConsecutiveImages: boolean }) => void>>([]);
     const bodyFontsReadyRef = useRef(false);
     const loadSequenceRef = useRef(0);
@@ -280,11 +279,9 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
               onSelectionUpdate?.(data.payload);
               break;
             case "onSelHandleDragStart":
-              setScrollLocked(true);
               onTextSelectionActiveChange?.(true);
               break;
             case "onSelHandleDragEnd":
-              setScrollLocked(false);
               onTextSelectionActiveChange?.(false);
               break;
             case "onAutoSplitComplete": {
@@ -425,7 +422,7 @@ const WebViewMarkdownEditor = forwardRef<WebViewMarkdownEditorRef, WebViewMarkdo
           allowFileAccess={false}
           allowUniversalAccessFromFileURLs={false}
           mediaPlaybackRequiresUserAction
-          scrollEnabled={scrollEnabled && !scrollLocked}
+          scrollEnabled={scrollEnabled}
           bounces={false}
           automaticallyAdjustContentInsets={false}
           contentInsetAdjustmentBehavior={Platform.OS === "ios" ? "never" : undefined}

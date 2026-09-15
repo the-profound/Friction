@@ -109,7 +109,27 @@ describe("WebView blank-surface tap and swipe-down gesture contracts", () => {
       /onSelectionUpdate[\s\S]{0,180}selectionHandleDragging[\s\S]{0,80}scheduleViewportCorrection\(true\)/,
     );
     expect(source).toMatch(
-      /selectionHandleDragging = false;[\s\S]{0,120}onSelHandleDragEnd[\s\S]{0,300}viewportCorrectionGeneration\+\+;[\s\S]{0,80}activeSelectionEndpoint = null/,
+      /finishSelectionHandleDrag[\s\S]{0,500}viewportCorrectionGeneration\+\+;[\s\S]{0,180}selectionHandleDragging = false;[\s\S]{0,120}onSelHandleDragEnd[\s\S]{0,160}activeSelectionEndpoint = null;[\s\S]{0,100}pendingViewportCorrectionAfterTouch = false/,
+    );
+  });
+
+  it("keeps native WebView scrolling stable instead of toggling scrollEnabled mid-selection", () => {
+    const component = readFileSync(
+      join(appRoot, "components/WebViewMarkdownEditor/WebViewMarkdownEditor.tsx"),
+      "utf8",
+    );
+    expect(component).toContain("scrollEnabled={scrollEnabled}");
+    expect(component).not.toContain("setScrollLocked");
+    expect(component).not.toContain("scrollEnabled={scrollEnabled && !scrollLocked}");
+  });
+
+  it("uses the same cancellation cleanup for selection drag end and cancel", () => {
+    const source = readEditorSource();
+    expect(source).toContain(
+      'document.addEventListener("touchend", finishSelectionHandleDrag, { passive: true });',
+    );
+    expect(source).toContain(
+      'document.addEventListener("touchcancel", finishSelectionHandleDrag, { passive: true });',
     );
   });
 });
