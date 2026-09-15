@@ -111,7 +111,7 @@ export function reportRenderError(
 }
 
 export type PersistedCrashLog = {
-  source: "fatal-js-error";
+  source: "fatal-js-error" | "editor-memory-risk";
   message: string;
   name?: string;
   isFatal: boolean;
@@ -121,6 +121,7 @@ export type PersistedCrashLog = {
   requestId?: string | null;
   appVersion?: string | null;
   buildNumber?: string | null;
+  editorMemory?: import("./editorMemoryDiagnostics").EditorMemoryDiagnostic;
   release?: {
     track: "development" | "preview" | "production";
     configurationState: "valid" | "invalid" | "unavailable";
@@ -171,6 +172,7 @@ function persistFatalError(error: unknown, isFatal: boolean): void {
       timestamp: new Date().toISOString(),
       platform: Platform.OS,
       platformVersion: Platform.Version,
+      editorMemory: globalThis.__frictionEditorMemoryDiagnostic,
       requestId:
         typeof (globalThis as typeof globalThis & { __frictionLastRequestId?: unknown })
           .__frictionLastRequestId === "string"
@@ -257,11 +259,12 @@ export async function uploadPendingCrashLogIfAny(): Promise<void> {
     const { getReleaseDiagnosticContext } = await import("./authDiagnostics");
     // Older app versions may have persisted raw message/stack data. Never
     // forward that legacy payload into an operational log.
+    const isEditorMemoryRisk = parsed.source === "editor-memory-risk";
     const safePayload: PersistedCrashLog = {
-      source: "fatal-js-error",
-      message: "fatal-js-error",
-      name: "FatalJavaScriptError",
-      isFatal: true,
+      source: isEditorMemoryRisk ? "editor-memory-risk" : "fatal-js-error",
+      message: isEditorMemoryRisk ? "editor-memory-risk" : "fatal-js-error",
+      name: isEditorMemoryRisk ? "EditorMemoryRisk" : "FatalJavaScriptError",
+      isFatal: !isEditorMemoryRisk,
       timestamp: typeof parsed.timestamp === "string" ? parsed.timestamp : new Date().toISOString(),
       platform: typeof parsed.platform === "string" ? parsed.platform : Platform.OS,
       platformVersion:
@@ -285,6 +288,14 @@ export async function uploadPendingCrashLogIfAny(): Promise<void> {
             Constants.expoConfig?.ios?.buildNumber ??
             null,
       release: getReleaseDiagnosticContext(),
+      ...(parsed.editorMemory
+        && typeof parsed.editorMemory === "object"
+        && ["autosave", "webview-command"].includes(parsed.editorMemory.operation as string)
+        && ["booting", "active", "reset", "unmounted"].includes(parsed.editorMemory.lifecycle as string)
+        && ["0", "1-16k", "16-64k", "64-256k", "256k+"].includes(parsed.editorMemory.sizeBucket as string)
+        && ["0", "1-2", "3-4", "5+"].includes(parsed.editorMemory.pendingBucket as string)
+          ? { editorMemory: parsed.editorMemory }
+          : {}),
     };
 
     const { customFetch } = await import("@workspace/api-client-react");

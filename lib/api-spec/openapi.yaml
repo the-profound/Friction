@@ -5946,11 +5946,11 @@ components:
       properties:
         source:
           type: string
-          enum: [fatal-js-error, render-error, auth-flow]
+          enum: [fatal-js-error, render-error, auth-flow, editor-memory-risk]
           description: Where this log came from, e.g. "fatal-js-error" or "render-error"
         message:
           type: string
-          pattern: "^(fatal-js-error|render-error|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$"
+          pattern: "^(fatal-js-error|render-error|editor-memory-risk|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$"
         name:
           type: string
           nullable: true
@@ -5995,6 +5995,24 @@ components:
           minimum: 0
           maximum: 64
           description: Bounded number of frames in the React component stack.
+        editorMemory:
+          type: object
+          additionalProperties: false
+          nullable: true
+          properties:
+            operation:
+              type: string
+              enum: [autosave, webview-command]
+            lifecycle:
+              type: string
+              enum: [booting, active, reset, unmounted]
+            sizeBucket:
+              type: string
+              enum: ["0", "1-16k", "16-64k", "64-256k", "256k+"]
+            pendingBucket:
+              type: string
+              enum: ["0", "1-2", "3-4", "5+"]
+          required: [operation, lifecycle, sizeBucket, pendingBucket]
         release:
           $ref: "#/components/schemas/ReleaseDiagnosticContext"
       required: [source, message]

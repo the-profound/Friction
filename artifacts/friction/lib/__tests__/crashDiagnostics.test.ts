@@ -6,6 +6,11 @@ import {
   getRenderDiagnosticDedupeKey,
   shouldSendRenderDiagnostic,
 } from "../renderErrorDiagnostics";
+import {
+  getEditorPendingBucket,
+  getEditorSizeBucket,
+  updateEditorMemoryDiagnostic,
+} from "../editorMemoryDiagnostics";
 
 describe("render error diagnostics privacy contract", () => {
   it.each([
@@ -74,5 +79,42 @@ describe("render error diagnostics privacy contract", () => {
     const key = `RND-RANGE:dedupe-test-${Date.now()}`;
     expect(shouldSendRenderDiagnostic(key)).toBe(true);
     expect(shouldSendRenderDiagnostic(key)).toBe(false);
+  });
+});
+
+describe("editor memory diagnostics privacy contract", () => {
+  it("stores only bounded operation, lifecycle, size, and queue buckets", () => {
+    const privateText = "private@example.com 비밀 원문 😀";
+    updateEditorMemoryDiagnostic({
+      operation: "autosave",
+      lifecycle: "active",
+      payloadChars: privateText.length,
+      pendingOperations: 2,
+    });
+
+    expect(globalThis.__frictionEditorMemoryDiagnostic).toEqual({
+      operation: "autosave",
+      lifecycle: "active",
+      sizeBucket: "1-16k",
+      pendingBucket: "1-2",
+    });
+    expect(JSON.stringify(globalThis.__frictionEditorMemoryDiagnostic)).not.toContain(
+      privateText,
+    );
+  });
+
+  it("bounds large Unicode payload and queue counts without inspecting content", () => {
+    expect(getEditorSizeBucket("한글😀".repeat(70_000).length)).toBe("256k+");
+    expect(getEditorPendingBucket(100_000)).toBe("5+");
+  });
+
+  it("defines a privacy-safe next-launch risk record without raw diagnostics", async () => {
+    const source = await import("node:fs").then(({ readFileSync }) =>
+      readFileSync(new URL("../editorMemoryDiagnostics.ts", import.meta.url), "utf8"),
+    );
+    expect(source).toContain('source: "editor-memory-risk"');
+    expect(source).toContain("editorMemory: diagnostic");
+    expect(source).not.toContain("error.message");
+    expect(source).not.toContain("error.stack");
   });
 });

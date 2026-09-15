@@ -1,6 +1,8 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ThoughtDocumentSnapshot } from "@workspace/api-zod";
+import { LatestSnapshotQueue } from "./latestSnapshotQueue";
+import { updateEditorMemoryDiagnostic } from "./editorMemoryDiagnostics";
 
 export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -139,6 +141,11 @@ async function persistQueue(key: string, data: PendingPayload | null): Promise<v
   }
 }
 
+type QueueWrite = {
+  keys: string[];
+  data: PendingPayload | null;
+};
+
 function rejectAfter<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   if (timeoutMs <= 0) return promise;
   return new Promise<T>((resolve, reject) => {
@@ -267,7 +274,29 @@ export function useAutoSave({
   const queueKey = storageKey ? `autosave_queue_${storageKey}` : null;
   const queueKeysRef = useRef<Set<string>>(new Set());
   if (queueKey) queueKeysRef.current.add(queueKey);
-  const queueWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const queueWriterRef = useRef<LatestSnapshotQueue<QueueWrite> | null>(null);
+  if (!queueWriterRef.current) {
+    queueWriterRef.current = new LatestSnapshotQueue(
+      async ({ keys, data }) => {
+        const queued = data ? { ...data, aliasQueueKeys: keys } : null;
+        await Promise.all(keys.map((key) => persistQueue(key, queued)));
+      },
+      (stats) => {
+        updateEditorMemoryDiagnostic({
+          operation: "autosave",
+          lifecycle: "active",
+          pendingOperations:
+            (stats.active ? 1 : 0)
+            + (stats.pendingLatest ? 1 : 0)
+            + stats.barriers,
+          payloadChars:
+            latestDataRef.current.title.length
+            + latestDataRef.current.content.length,
+        });
+      },
+      () => setStatus("error"),
+    );
+  }
   const restoreAttemptedQueueKeyRef = useRef<string | null>(null);
 
   // Tracks the currently in-flight save promise so flush() can await it
@@ -306,18 +335,18 @@ export function useAutoSave({
   const writeQueue = useCallback((data: PendingPayload | null) => {
     const keys = Array.from(queueKeysRef.current);
     if (keys.length === 0) return Promise.resolve();
-    // Preserve call order across AsyncStorage writes. A delayed dirty write
-    // must never finish after a later successful remove and resurrect a stale
-    // payload on the next mount.
-    queueWriteRef.current = queueWriteRef.current.catch(() => undefined).then(async () => {
-      const queued = data ? { ...data, aliasQueueKeys: keys } : null;
-      await Promise.all(keys.map((key) => persistQueue(key, queued)));
-    });
-    // The caller gets a finite result, but the physical write remains in the
-    // serialized chain until it truly settles. A timed-out native write must
-    // never be overtaken by a newer set/remove operation.
-    return rejectAfter(queueWriteRef.current, storageTimeoutMs, "autosave queue write");
+    return rejectAfter(
+      queueWriterRef.current!.enqueueBarrier({ keys, data }),
+      storageTimeoutMs,
+      "autosave queue write",
+    );
   }, [storageTimeoutMs]);
+
+  const writeLatestQueue = useCallback((data: PendingPayload) => {
+    const keys = Array.from(queueKeysRef.current);
+    if (keys.length === 0) return;
+    queueWriterRef.current!.enqueueLatest({ keys, data });
+  }, []);
 
   const bindEntity = useCallback(async (entityId: string, nextStorageKey: string) => {
     const nextQueueKey = `autosave_queue_${nextStorageKey}`;
@@ -352,11 +381,10 @@ export function useAutoSave({
     savingRef.current = true;
     setStatus("saving");
     console.log(
-      "[useAutoSave doSave] id=%d epoch=%d contentLen=%d preview=%j",
+      "[useAutoSave doSave] id=%d epoch=%d contentLen=%d",
       id,
       epochSnapshot,
       data.content.length,
-      data.content.slice(0, 80),
     );
 
     const run = async () => {
@@ -372,7 +400,11 @@ export function useAutoSave({
         // A create idempotency key is useful only if it survives a process
         // death before the POST response. Never issue a server write until all
         // queue writes scheduled for this snapshot have completed durably.
-        await rejectAfter(queueWriteRef.current, storageTimeoutMs, "autosave queue barrier");
+        await rejectAfter(
+          queueWriterRef.current!.whenIdle(),
+          storageTimeoutMs,
+          "autosave queue barrier",
+        );
         const networkSave = onSaveRef.current(data);
         watchdog = setTimeout(() => {
           // Do not abandon the physical request or start a newer one. The
@@ -447,7 +479,7 @@ export function useAutoSave({
             latestDataRef.current.creationGeneration =
               (latestDataRef.current.creationGeneration ?? 1) + 1;
           }
-          void writeQueue({ ...latestDataRef.current }).catch(() => undefined);
+          writeLatestQueue(latestDataRef.current);
           if (isRetryableErrorRef.current?.(error) === false) {
             setStatus("error");
             return;
@@ -489,7 +521,7 @@ export function useAutoSave({
     const p = run();
     activeSaveRef.current = p;
     await p;
-  }, [clearRetryTimer, maxRetries, saveTimeoutMs, storageTimeoutMs, writeQueue]);
+  }, [clearRetryTimer, maxRetries, saveTimeoutMs, storageTimeoutMs, writeQueue, writeLatestQueue]);
 
   const runPendingCleanup = useCallback((entityId?: string): Promise<{ ok: boolean }> => {
     if (activeCleanupRef.current) return activeCleanupRef.current;
@@ -632,16 +664,14 @@ export function useAutoSave({
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
-      void writeQueue({ ...latestDataRef.current }).catch(() => {
-        setStatus("error");
-      });
+      writeLatestQueue(latestDataRef.current);
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
         doSave();
       }, debounceMs);
     },
-    [debounceMs, doSave, nextRecoveryMetadata, writeQueue],
+    [debounceMs, doSave, nextRecoveryMetadata, writeLatestQueue],
   );
 
   // Title-only dirty path: avoids re-passing the full body string on each
@@ -666,16 +696,14 @@ export function useAutoSave({
       dirtyEpochRef.current++;
       isDirtyRef.current = true;
       setIsDirty(true);
-      void writeQueue({ ...latestDataRef.current }).catch(() => {
-        setStatus("error");
-      });
+      writeLatestQueue(latestDataRef.current);
 
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
         doSave();
       }, debounceMs);
     },
-    [debounceMs, doSave, nextRecoveryMetadata, writeQueue],
+    [debounceMs, doSave, nextRecoveryMetadata, writeLatestQueue],
   );
 
   const persistLatest = useCallback(async () => {
@@ -747,13 +775,10 @@ export function useAutoSave({
   const commitTransition = useCallback(async (commit: AutoSaveTransitionCommit) => {
     // The old entity's recovery queue is no longer valid after the atomic
     // transition. Serialize its removal before binding the destination key.
-    try {
-      await writeQueue(null);
-    } catch {
-      // The serialized physical write still continues in queueWriteRef. The
-      // destination key is rebound below so future edits cannot target the old
-      // entity.
-    }
+    // Do not report the transition as locally committed if this durability
+    // barrier times out or fails. Otherwise a process death can restore the
+    // pre-transition snapshot from the old key.
+    await writeQueue(null);
     queueKeysRef.current = new Set([`autosave_queue_${commit.storageKey}`]);
     latestDataRef.current = {
       title: commit.title,

@@ -107,3 +107,34 @@ describe("render-error diagnostic privacy contract", () => {
     ).toBeNull();
   });
 });
+
+describe("editor-memory-risk diagnostic privacy contract", () => {
+  it("accepts only bounded memory-pressure metadata", () => {
+    const parsed = ReportClientLogBody.safeParse({
+      source: "editor-memory-risk",
+      message: "editor-memory-risk",
+      name: "EditorMemoryRisk",
+      isFatal: false,
+      editorMemory: {
+        operation: "autosave",
+        lifecycle: "active",
+        sizeBucket: "64-256k",
+        pendingBucket: "1-2",
+      },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects raw content and exact sizes", () => {
+    expect(ReportClientLogBody.safeParse({
+      source: "editor-memory-risk",
+      message: "editor-memory-risk",
+      editorMemory: {
+        operation: "autosave",
+        lifecycle: "active",
+        sizeBucket: "100000",
+        pendingBucket: "private body",
+      },
+    }).success).toBe(false);
+  });
+});

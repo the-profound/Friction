@@ -16,4 +16,5 @@ export const ClientLogBodySource = {
   "fatal-js-error": "fatal-js-error",
   "render-error": "render-error",
   "auth-flow": "auth-flow",
+  "editor-memory-risk": "editor-memory-risk",
 } as const;

@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  enqueuePreReadyCommand,
+  type WebViewCommand,
+} from "../webViewBridge";
+import {
   handleTitleEnter,
   insertTitleSoftBreak,
   shouldMoveTitleFocusToBody,
@@ -326,6 +330,45 @@ describe("on-01a editor hydration and initialization", () => {
 });
 
 describe("on-01a latest-snapshot autosave boundary", () => {
+  it("coalesces dirty recovery writes while preserving ordered barriers", () => {
+    const autoSave = readAutoSave();
+    expect(autoSave).toContain("new LatestSnapshotQueue");
+    expect(autoSave).toContain("enqueueLatest({ keys, data })");
+    expect(autoSave).toContain("enqueueBarrier({ keys, data })");
+    expect(autoSave).toContain("queueWriterRef.current!.whenIdle()");
+    expect(autoSave).not.toContain("queueWriteRef.current = queueWriteRef.current");
+  });
+
+  it("coalesces replaceable full-document commands before native WebView readiness", () => {
+    const bridge = readFileSync(join(appRoot, "lib/webViewBridge.ts"), "utf8");
+    expect(bridge).toContain('"setMarkdown",');
+    expect(bridge).toContain("queue.splice(existingIndex, 1)");
+    expect(bridge).toContain("queue.push(cmd)");
+  });
+
+  it("does not move a replacement WebView command across a stateful barrier", () => {
+    const queue: WebViewCommand[] = [];
+    enqueuePreReadyCommand(queue, { type: "setMarkdown", markdown: "A" });
+    enqueuePreReadyCommand(queue, { type: "toggleMark", mark: "bold" });
+    enqueuePreReadyCommand(queue, { type: "setMarkdown", markdown: "B" });
+    expect(queue).toEqual([
+      { type: "setMarkdown", markdown: "A" },
+      { type: "toggleMark", mark: "bold" },
+      { type: "setMarkdown", markdown: "B" },
+    ]);
+  });
+
+  it("keeps only the latest command within one barrier-free segment", () => {
+    const queue: WebViewCommand[] = [];
+    enqueuePreReadyCommand(queue, { type: "setMarkdown", markdown: "A" });
+    enqueuePreReadyCommand(queue, { type: "setTitle", title: "latest title" });
+    enqueuePreReadyCommand(queue, { type: "setMarkdown", markdown: "B" });
+    expect(queue).toEqual([
+      { type: "setTitle", title: "latest title" },
+      { type: "setMarkdown", markdown: "B" },
+    ]);
+  });
+
   it("treats an iOS inactive/background sequence as one writing suspension", () => {
     expect(entersWritingSuspension("active", "inactive")).toBe(true);
     expect(entersWritingSuspension("inactive", "background")).toBe(false);
@@ -611,8 +654,9 @@ describe("useAutoSave pending-content preservation", () => {
       autoSave.indexOf("} finally {", autoSave.indexOf("const run = async")),
     );
 
-    expect(autoSave).toContain("queueWriteRef.current = queueWriteRef.current.catch");
-    expect(autoSave).toContain("writeQueue({ ...latestDataRef.current });");
+    expect(autoSave).toContain("enqueueBarrier({ keys, data })");
+    expect(autoSave).toContain("enqueueLatest({ keys, data })");
+    expect(autoSave).toContain("writeLatestQueue(latestDataRef.current);");
     expect(failurePath).not.toContain("writeQueue(data)");
   });
 
@@ -691,7 +735,8 @@ describe("useAutoSave pending-content preservation", () => {
     expect(autoSave).toContain("watchdog = setTimeout(() => {");
     expect(autoSave).toContain('setStatus("error");');
     expect(autoSave).toContain('"autosave queue write"');
-    expect(autoSave).toContain("the physical write remains in the");
+    expect(autoSave).toContain("queueWriterRef.current!.enqueueBarrier");
+    expect(autoSave).toContain("queueWriterRef.current!.whenIdle()");
     expect(autoSave).toContain("const reportFailure = useCallback");
     expect(autoSave).toContain('setStatus("error");');
     expect(screen).toContain("reportFailure: reportAutosaveFailure");
@@ -741,7 +786,7 @@ describe("useAutoSave pending-content preservation", () => {
     expect(autoSave).toContain("creationId?: string;");
     expect(autoSave).toContain("const latestDataRef = useRef<PendingPayload>");
     expect(autoSave).toContain(
-      'await rejectAfter(queueWriteRef.current, storageTimeoutMs, "autosave queue barrier")',
+      "queueWriterRef.current!.whenIdle()",
     );
     expect(autoSave.indexOf("autosave queue barrier")).toBeLessThan(
       autoSave.indexOf("const networkSave = onSaveRef.current(data)"),

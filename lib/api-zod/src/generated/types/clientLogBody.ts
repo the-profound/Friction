@@ -5,6 +5,7 @@
  * Friction MVP 1.0.0 API
  * OpenAPI spec version: 0.1.0
  */
+import type { ClientLogBodyEditorMemory } from "./clientLogBodyEditorMemory";
 import type { ClientLogBodySource } from "./clientLogBodySource";
 import type { ReleaseDiagnosticContext } from "./releaseDiagnosticContext";
 
@@ -15,7 +16,7 @@ import type { ReleaseDiagnosticContext } from "./releaseDiagnosticContext";
 export interface ClientLogBody {
   /** Where this log came from, e.g. "fatal-js-error" or "render-error" */
   source: ClientLogBodySource;
-  /** @pattern ^(fatal-js-error|render-error|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$ */
+  /** @pattern ^(fatal-js-error|render-error|editor-memory-risk|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$ */
   message: string;
   /** @pattern ^[A-Za-z0-9_-]{1,64}$ */
   name?: string | null;
@@ -47,5 +48,6 @@ export interface ClientLogBody {
    * @maximum 64
    */
   componentDepth?: number | null;
+  editorMemory?: ClientLogBodyEditorMemory;
   release?: ReleaseDiagnosticContext;
 }

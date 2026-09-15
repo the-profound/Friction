@@ -21,6 +21,7 @@ import {
   handlePerfMessage,
   type WebViewPerfCategory,
 } from "./webviewPerf";
+import { updateEditorMemoryDiagnostic } from "./editorMemoryDiagnostics";
 
 export type WebViewCommand = { type: string } & Record<string, unknown>;
 
@@ -57,6 +58,41 @@ export interface WebViewBridge {
 
 let reqCounter = 0;
 
+const REPLACEABLE_PRE_READY_COMMANDS = new Set([
+  "setMarkdown",
+  "setTitle",
+  "setEditable",
+  "setBodyMetrics",
+  "setContentBottomPadding",
+  "setOverflowRanges",
+  "setOverflowProbeConfig",
+  "setBodyFontMode",
+]);
+
+export function enqueuePreReadyCommand(
+  queue: WebViewCommand[],
+  cmd: WebViewCommand,
+): void {
+  if (!REPLACEABLE_PRE_READY_COMMANDS.has(cmd.type)) {
+    queue.push(cmd);
+    return;
+  }
+  let barrierIndex = -1;
+  for (let index = queue.length - 1; index >= 0; index -= 1) {
+    if (!REPLACEABLE_PRE_READY_COMMANDS.has(queue[index].type)) {
+      barrierIndex = index;
+      break;
+    }
+  }
+  const existingIndex = queue.findIndex(
+    (queued, index) => index > barrierIndex && queued.type === cmd.type,
+  );
+  if (existingIndex >= 0) queue.splice(existingIndex, 1);
+  // Keep the replacement at its newest logical position. Stateful commands
+  // before the last barrier retain their exact relative order.
+  queue.push(cmd);
+}
+
 export function createWebViewBridge(
   opts: CreateWebViewBridgeOptions,
 ): WebViewBridge {
@@ -64,6 +100,7 @@ export function createWebViewBridge(
   const queue: WebViewCommand[] = [];
   const pending = new Map<string, PendingRequest>();
   let ready = false;
+  let queuedMarkdownChars = 0;
 
   function inject(cmd: WebViewCommand): void {
     const wrapped = attachPerf(category, cmd);
@@ -73,7 +110,16 @@ export function createWebViewBridge(
 
   function send(cmd: WebViewCommand): void {
     if (!ready) {
-      queue.push(cmd);
+      enqueuePreReadyCommand(queue, cmd);
+      if (cmd.type === "setMarkdown" && typeof cmd.markdown === "string") {
+        queuedMarkdownChars = cmd.markdown.length;
+      }
+      updateEditorMemoryDiagnostic({
+        operation: "webview-command",
+        lifecycle: "booting",
+        pendingOperations: queue.length,
+        payloadChars: queuedMarkdownChars,
+      });
       return;
     }
     inject(cmd);
@@ -118,12 +164,26 @@ export function createWebViewBridge(
     if (ready) return;
     ready = true;
     const drained = queue.splice(0);
+    queuedMarkdownChars = 0;
+    updateEditorMemoryDiagnostic({
+      operation: "webview-command",
+      lifecycle: "active",
+      pendingOperations: 0,
+      payloadChars: 0,
+    });
     for (const cmd of drained) inject(cmd);
   }
 
   function reset(reason?: string): void {
     ready = false;
     queue.length = 0;
+    queuedMarkdownChars = 0;
+    updateEditorMemoryDiagnostic({
+      operation: "webview-command",
+      lifecycle: "reset",
+      pendingOperations: 0,
+      payloadChars: 0,
+    });
     if (pending.size > 0) {
       const err = new Error(reason || "webViewBridge.reset()");
       for (const [, entry] of pending) {

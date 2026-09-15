@@ -5359,7 +5359,7 @@ export const ExpandThoughtsResponse = zod.object({
  * @summary Report a client-side diagnostic event
  */
 export const reportClientLogBodyMessageRegExp = new RegExp(
-  "^(fatal-js-error|render-error|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$",
+  "^(fatal-js-error|render-error|editor-memory-risk|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$",
 );
 export const reportClientLogBodyNameRegExp = new RegExp(
   "^[A-Za-z0-9_-]{1,64}$",
@@ -5385,7 +5385,12 @@ export const reportClientLogBodyReleaseApiHostMax = 253;
 export const ReportClientLogBody = zod
   .object({
     source: zod
-      .enum(["fatal-js-error", "render-error", "auth-flow"])
+      .enum([
+        "fatal-js-error",
+        "render-error",
+        "auth-flow",
+        "editor-memory-risk",
+      ])
       .describe(
         'Where this log came from, e.g. \"fatal-js-error\" or \"render-error\"',
       ),
@@ -5427,6 +5432,14 @@ export const ReportClientLogBody = zod
       .max(reportClientLogBodyComponentDepthMax)
       .nullish()
       .describe("Bounded number of frames in the React component stack."),
+    editorMemory: zod
+      .object({
+        operation: zod.enum(["autosave", "webview-command"]),
+        lifecycle: zod.enum(["booting", "active", "reset", "unmounted"]),
+        sizeBucket: zod.enum(["0", "1-16k", "16-64k", "64-256k", "256k+"]),
+        pendingBucket: zod.enum(["0", "1-2", "3-4", "5+"]),
+      })
+      .nullish(),
     release: zod
       .object({
         track: zod.enum(["development", "preview", "production"]),

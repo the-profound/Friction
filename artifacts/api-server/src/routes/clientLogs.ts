@@ -259,7 +259,13 @@ export function getSafeRenderErrorDiagnostic(input: {
 
 function safeDiagnosticLog(data: ClientLogBody) {
   const source =
-    data.source === "fatal-js-error" ? "fatal-js-error" : data.source === "auth-flow" ? "auth-flow" : "unknown";
+    data.source === "fatal-js-error"
+      ? "fatal-js-error"
+      : data.source === "auth-flow"
+        ? "auth-flow"
+        : data.source === "editor-memory-risk"
+          ? "editor-memory-risk"
+          : "unknown";
   const safeAuthMessage =
     typeof data.message === "string" &&
     /^phase=[a-z-]+;outcome=[a-z-]+$/.test(data.message)
@@ -314,8 +320,18 @@ function safeDiagnosticLog(data: ClientLogBody) {
 
   return {
     source,
-    message: source === "auth-flow" ? safeAuthMessage : "fatal-js-error",
-    name: source === "fatal-js-error" ? "FatalJavaScriptError" : safeName,
+    message:
+      source === "auth-flow"
+        ? safeAuthMessage
+        : source === "editor-memory-risk"
+          ? "editor-memory-risk"
+          : "fatal-js-error",
+    name:
+      source === "fatal-js-error"
+        ? "FatalJavaScriptError"
+        : source === "editor-memory-risk"
+          ? "EditorMemoryRisk"
+          : safeName,
     isFatal: source === "fatal-js-error" ? true : false,
     timestamp: safeTimestamp,
     platform: safePlatform,
@@ -323,6 +339,10 @@ function safeDiagnosticLog(data: ClientLogBody) {
     appVersion: safeAppVersion,
     buildNumber: safeBuildNumber,
     requestId: safeRequestId,
+    editorMemory:
+      source === "editor-memory-risk" && data.editorMemory
+        ? data.editorMemory
+        : null,
     release,
   };
 }

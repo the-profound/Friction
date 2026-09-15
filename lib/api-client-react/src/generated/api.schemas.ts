@@ -1656,7 +1656,54 @@ export const ClientLogBodySource = {
   "fatal-js-error": "fatal-js-error",
   "render-error": "render-error",
   "auth-flow": "auth-flow",
+  "editor-memory-risk": "editor-memory-risk",
 } as const;
+
+export type ClientLogBodyEditorMemoryOperation =
+  (typeof ClientLogBodyEditorMemoryOperation)[keyof typeof ClientLogBodyEditorMemoryOperation];
+
+export const ClientLogBodyEditorMemoryOperation = {
+  autosave: "autosave",
+  "webview-command": "webview-command",
+} as const;
+
+export type ClientLogBodyEditorMemoryLifecycle =
+  (typeof ClientLogBodyEditorMemoryLifecycle)[keyof typeof ClientLogBodyEditorMemoryLifecycle];
+
+export const ClientLogBodyEditorMemoryLifecycle = {
+  booting: "booting",
+  active: "active",
+  reset: "reset",
+  unmounted: "unmounted",
+} as const;
+
+export type ClientLogBodyEditorMemorySizeBucket =
+  (typeof ClientLogBodyEditorMemorySizeBucket)[keyof typeof ClientLogBodyEditorMemorySizeBucket];
+
+export const ClientLogBodyEditorMemorySizeBucket = {
+  NUMBER_0: "0",
+  "1-16k": "1-16k",
+  "16-64k": "16-64k",
+  "64-256k": "64-256k",
+  "256k+": "256k+",
+} as const;
+
+export type ClientLogBodyEditorMemoryPendingBucket =
+  (typeof ClientLogBodyEditorMemoryPendingBucket)[keyof typeof ClientLogBodyEditorMemoryPendingBucket];
+
+export const ClientLogBodyEditorMemoryPendingBucket = {
+  NUMBER_0: "0",
+  "1-2": "1-2",
+  "3-4": "3-4",
+  "5+": "5+",
+} as const;
+
+export type ClientLogBodyEditorMemory = {
+  operation: ClientLogBodyEditorMemoryOperation;
+  lifecycle: ClientLogBodyEditorMemoryLifecycle;
+  sizeBucket: ClientLogBodyEditorMemorySizeBucket;
+  pendingBucket: ClientLogBodyEditorMemoryPendingBucket;
+} | null;
 
 export type ReleaseDiagnosticContextTrack =
   (typeof ReleaseDiagnosticContextTrack)[keyof typeof ReleaseDiagnosticContextTrack];
@@ -1698,7 +1745,7 @@ export interface ReleaseDiagnosticContext {
 export interface ClientLogBody {
   /** Where this log came from, e.g. "fatal-js-error" or "render-error" */
   source: ClientLogBodySource;
-  /** @pattern ^(fatal-js-error|render-error|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$ */
+  /** @pattern ^(fatal-js-error|render-error|editor-memory-risk|phase=[a-z-]+;outcome=[A-Za-z0-9_-]+;flow=af_[a-z0-9]{12,24})$ */
   message: string;
   /** @pattern ^[A-Za-z0-9_-]{1,64}$ */
   name?: string | null;
@@ -1730,6 +1777,7 @@ export interface ClientLogBody {
    * @maximum 64
    */
   componentDepth?: number | null;
+  editorMemory?: ClientLogBodyEditorMemory;
   release?: ReleaseDiagnosticContext;
 }
 
