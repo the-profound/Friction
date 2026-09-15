@@ -60,3 +60,59 @@ Sample output:
 
 ✅ Backfill complete.
 ```
+
+### `pnpm --filter @workspace/scripts run user-activity-report`
+
+Creates the Task #2272 activity report as Markdown on stdout. It uses only
+`SUPABASE_DB_URL` (never `DATABASE_URL`) and opens a repeatable-read,
+read-only transaction. Every report query is checked by a SQL guard before it
+is sent to PostgreSQL.
+
+The default cohort is accounts whose last sign-in is at or after
+`2026-09-01T00:00:00+09:00` and before the report end time (the current
+instant by default). The cutoff is inclusive and the end is exclusive:
+
+```bash
+SUPABASE_DB_URL='postgresql://...' \
+  pnpm --silent --filter @workspace/scripts run user-activity-report > activity-report.md
+```
+
+Supported environment configuration:
+
+- `REPORT_CUTOFF` — an ISO timestamp; defaults to
+  `2026-09-01T00:00:00+09:00`.
+- `REPORT_END_AT` — an ISO timestamp; defaults to now.
+- `REPORT_TEST_USERS` — `exclude` (default) or `separate`.
+  Test/development accounts are classified from non-output account metadata.
+  `separate` retains a distinct test/dev segment; `exclude` removes those
+  accounts from user, overall, and weekly results.
+
+The Markdown contains aggregate overall counts, deterministic report-local ordinal
+per-user
+counts, Monday-start KST weekly counts, cohort linkage quality, no-activity
+counts, metric definitions, exclusions, limitations, and per-visible-segment
+reconciliation of overall totals against weekly sums. It never emits account
+attributes, direct identifiers, or authored payloads. Neighbor edges are
+deduplicated by edge identity, and every source is aggregated by user before
+being combined to prevent join multiplication. Byte-stable reruns require the
+same source snapshot, cutoff, end timestamp, and test-user policy.
+
+Metric time bases are: article creation; `LETTER` plus `letter_at`; send
+record `sent_at`; inbox visibility/opening timestamps; completed-read
+timestamp; thought creation; sentence creation; neighbor `accepted_at`; and
+approved participation creation. The report deliberately cannot infer login
+counts, reading sessions, approval transition time, or deleted-history events.
+The last-sign-in value is mutable, so a historical end can exclude an account
+whose later sign-in moved beyond that end; current deletion and status values
+can also cause historical rerun drift. Test/development classification is a
+heuristic based on maintained metadata and marker patterns and may
+misclassify accounts when those markers are absent or stale.
+
+Run focused tests with:
+
+```bash
+pnpm --filter @workspace/scripts run test:user-activity-report
+```
+
+The test command also runs the documented silent CLI invocation and checks the
+entire stdout as a Markdown report when `SUPABASE_DB_URL` is available.
