@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 const appRoot = join(__dirname, "../..");
 const readScreen = () =>
   readFileSync(join(appRoot, "app/user-profile/recipient-only-letters.tsx"), "utf8");
+const readMyTab = () => readFileSync(join(appRoot, "app/(tabs)/to.tsx"), "utf8");
 const readMypage = () => readFileSync(join(appRoot, "app/mypage.tsx"), "utf8");
 const readUserProfile = () =>
   readFileSync(join(appRoot, "app/user-profile/[userId].tsx"), "utf8");
@@ -34,13 +35,29 @@ describe("recipient-only-letters screen", () => {
     );
   });
 
-  it("labels personal-send cards with their source name instead of falling back to a blank collectionName", () => {
+  it("uses one source label for both Space and personal-send cards", () => {
     const screen = readScreen();
 
     expect(screen).toContain(
-      "const collectionName = sendRecordByArticleId[article.id]?.name ?? vm.collectionName;",
+      "const collectionName =\n            vm.spaceName ??\n            sendRecordByArticleId[article.id]?.name ??\n            vm.collectionName;",
     );
     expect(screen).toContain("collectionName={collectionName}");
+    expect(screen).not.toContain("spaceName={vm.spaceName}");
+    expect(screen).toContain(
+      "const displayCollectionName = vm.spaceName ?? rec?.name ?? null;",
+    );
+    expect(screen).toContain("collectionName: displayCollectionName");
+  });
+
+  it("keeps the grid and selection overlay labels aligned on all sent-letter grids", () => {
+    const screens = [readMyTab(), readUserProfile(), readScreen()];
+
+    for (const screen of screens) {
+      expect(screen).toContain("const displayCollectionName = vm.spaceName ?? rec?.name ?? null;");
+      expect(screen).toContain("collectionName: displayCollectionName");
+      expect(screen).toContain("collectionName={collectionName}");
+      expect(screen).not.toContain("spaceName={vm.spaceName}");
+    }
   });
 
   it("re-fetches send records on focus so newly-sent personal letters appear promptly", () => {

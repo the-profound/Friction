@@ -138,10 +138,12 @@ export default function RecipientOnlyLettersScreen() {
   const handleLetterPress = useCallback(
     (article: Article) => {
       const rec = sendRecordByArticleId[article.id];
+      const vm = profileArticleToViewModel(article);
+      const displayCollectionName = vm.spaceName ?? rec?.name ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
       openLetterOverlay(article, {
         meta: {
-          collectionName: rec?.name ?? null,
+          collectionName: displayCollectionName,
           collectionId: rec?.collectionId ?? null,
           spaceId: rec?.spaceId ?? null,
           date: rec?.deliverySlot ?? null,
@@ -165,11 +167,13 @@ export default function RecipientOnlyLettersScreen() {
       <View style={styles.gridRow}>
         {rowItems.map((article) => {
           const hidden = isSourceHidden(article.id);
-          // ViewModel extracts spaceName when the API embeds it on the article.
+          // A Space name is the single source for the card and overlay
+          // label. Personal/reply sends fall back to the send-record name.
           const vm = profileArticleToViewModel(article);
-          // Send-record name takes priority so personal sends show their
-          // collection label instead of an empty collectionName.
-          const collectionName = sendRecordByArticleId[article.id]?.name ?? vm.collectionName;
+          const collectionName =
+            vm.spaceName ??
+            sendRecordByArticleId[article.id]?.name ??
+            vm.collectionName;
           return (
             <View
               key={article.id}
@@ -186,7 +190,6 @@ export default function RecipientOnlyLettersScreen() {
                   title={vm.article?.title ?? "제목 없음"}
                   authorName={vm.authorName ?? undefined}
                   collectionName={collectionName}
-                  spaceName={vm.spaceName}
                   cover={vm.cover ?? undefined}
                   visibility="RECIPIENT_ONLY"
                   isActive

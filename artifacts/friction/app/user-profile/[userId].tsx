@@ -313,10 +313,12 @@ export default function UserProfileScreen() {
     (article: Article) => {
       captureScrollOffset();
       const rec = sendRecordByArticleId[article.id];
+      const vm = profileArticleToViewModel(article);
+      const displayCollectionName = vm.spaceName ?? rec?.name ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
       openLetterOverlay(article, {
         meta: {
-          collectionName: rec?.name ?? null,
+          collectionName: displayCollectionName,
           collectionId: rec?.collectionId ?? null,
           spaceId: rec?.spaceId ?? null,
           date: rec?.deliverySlot ?? null,
@@ -331,7 +333,14 @@ export default function UserProfileScreen() {
         originUsesCarouselShadow: true,
       });
     },
-    [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset, openLetterOverlay, profileUserId],
+    [
+      cellWidth,
+      cellHeight,
+      sendRecordByArticleId,
+      captureScrollOffset,
+      openLetterOverlay,
+      profileUserId,
+    ],
   );
 
   const handleSpacePress = useCallback(
@@ -393,10 +402,13 @@ export default function UserProfileScreen() {
           <View style={styles.gridRow}>
             {item.items.map((article) => {
               const isHidden = isSourceHidden(article.id);
-              // ViewModel separates spaceName from collectionName; send-record
-              // name takes priority as the user-visible folder label.
+              // A Space name is the single source for the card and overlay
+              // label. Personal/reply sends fall back to the send-record name.
               const vm = profileArticleToViewModel(article);
-              const collectionName = sendRecordByArticleId[article.id]?.name ?? vm.collectionName;
+              const collectionName =
+                vm.spaceName ??
+                sendRecordByArticleId[article.id]?.name ??
+                vm.collectionName;
               return (
                 <View
                   key={article.id}
@@ -417,7 +429,6 @@ export default function UserProfileScreen() {
                       title={vm.article?.title ?? "제목 없음"}
                       authorName={vm.authorName ?? undefined}
                       collectionName={collectionName}
-                      spaceName={vm.spaceName}
                       cover={vm.cover ?? undefined}
                       visibility="PUBLIC"
                       isActive

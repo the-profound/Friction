@@ -261,6 +261,11 @@ export default function MyScreen() {
     (article: Article) => {
       captureScrollOffset();
       const rec = sendRecordByArticleId[article.id];
+      const vm = myArticleToViewModel(
+        article,
+        spaceLetterByArticleId.get(article.id) ?? null,
+      );
+      const displayCollectionName = vm.spaceName ?? rec?.name ?? null;
       const slotRef = cardSlotRefs.current.get(article.id);
       const open = (origin: OriginLayout) => {
         openLetterOverlay(article, {
@@ -271,7 +276,7 @@ export default function MyScreen() {
           // card's rounded corners.
           originUsesCarouselShadow: true,
           meta: {
-            collectionName: rec?.name ?? null,
+            collectionName: displayCollectionName,
             collectionId: rec?.collectionId ?? null,
             spaceId: rec?.spaceId ?? null,
             date: rec?.deliverySlot ?? null,
@@ -285,7 +290,15 @@ export default function MyScreen() {
         open({ x: 0, y: 0, width: cellWidth, height: cellHeight });
       }
     },
-    [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset, openLetterOverlay, userId],
+    [
+      cellWidth,
+      cellHeight,
+      sendRecordByArticleId,
+      spaceLetterByArticleId,
+      captureScrollOffset,
+      openLetterOverlay,
+      userId,
+    ],
   );
 
   const handleSpacePress = useCallback(
@@ -390,10 +403,13 @@ export default function MyScreen() {
           <View style={styles.gridRow}>
             {item.items.map((article) => {
               const isHidden = isSourceHidden(article.id);
-              // ViewModel separates spaceName from collectionName; send-record
-              // name takes priority as it's the user-visible folder label.
+              // A Space name is the single source for the card and overlay
+              // label. Personal/reply sends fall back to the send-record name.
               const vm = myArticleToViewModel(article, spaceLetterByArticleId.get(article.id) ?? null);
-              const collectionName = sendRecordByArticleId[article.id]?.name ?? vm.collectionName;
+              const collectionName =
+                vm.spaceName ??
+                sendRecordByArticleId[article.id]?.name ??
+                vm.collectionName;
               return (
                 <View
                   key={article.id}
@@ -412,7 +428,6 @@ export default function MyScreen() {
                       title={vm.article?.title ?? "제목 없음"}
                       authorName={vm.authorName ?? undefined}
                       collectionName={collectionName}
-                      spaceName={vm.spaceName}
                       cover={vm.cover ?? undefined}
                       isActive
                       onPress={() => handleLetterPress(article)}
