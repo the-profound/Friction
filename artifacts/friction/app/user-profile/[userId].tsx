@@ -324,6 +324,11 @@ export default function UserProfileScreen() {
         measureRef: slotRef ?? null,
         fallbackOrigin: { x: 0, y: 0, width: cellWidth, height: cellHeight },
         currentAuthorId: profileUserId,
+        // The grid card renders with the restrained carousel shadow token;
+        // the overlay must open/close using the same token or the shadow
+        // visibly pops to the larger standard token right at the card's
+        // rounded corners.
+        originUsesCarouselShadow: true,
       });
     },
     [cellWidth, cellHeight, sendRecordByArticleId, captureScrollOffset, openLetterOverlay, profileUserId],
@@ -405,7 +410,9 @@ export default function UserProfileScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={article.title || "제목 없음"}
                 >
-                  <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+                  {/* The slot's unclipped outer boundary owns the restrained shadow while
+                      its same-sized inner boundary clips the projected cover corners. */}
+                  <CanonicalCardSlot width={cellWidth} height={cellHeight} carouselShadow>
                     <ArticleCardItem
                       title={vm.article?.title ?? "제목 없음"}
                       authorName={vm.authorName ?? undefined}
@@ -806,7 +813,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: GRID_PAD,
   },
   gridCell: {
-    overflow: "hidden",
+    // No overflow clipping here: CanonicalCardSlot's own unclipped outer
+    // boundary must be free to paint the restrained carousel shadow beyond
+    // the card's bounds. CanonicalCardSlot's inner boundary still clips the
+    // projected cover corners on its own.
   },
   groupRow: {
     borderBottomWidth: 1,
