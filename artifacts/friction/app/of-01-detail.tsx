@@ -379,7 +379,7 @@ export default function PersonalCollectionDetailScreen() {
               }}
               style={[styles.gridCell, { width: cellWidth, opacity: hidden ? 0 : 1 }]}
             >
-              <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+              <CanonicalCardSlot width={cellWidth} height={cellHeight} carouselShadow>
                 <ArticleCardItem
                   title={entry.article?.title ?? "제목 없음"}
                   authorName={vm?.authorName ?? undefined}
@@ -389,7 +389,6 @@ export default function PersonalCollectionDetailScreen() {
                   // (vm?.collectionName) would be redundant, not informative.
                   spaceName={vm?.spaceName}
                   cover={entry.article?.cover}
-                  carouselShadow
                   onPress={() => {
                     if (!entry.article) return;
                     // Always opens the letter selection overlay, matching the

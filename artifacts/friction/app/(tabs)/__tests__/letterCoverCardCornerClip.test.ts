@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const appRoot = join(__dirname, "../..");
@@ -9,6 +9,61 @@ const read = (relativePath: string) =>
 const componentsRoot = join(appRoot, "..", "components");
 const readComponent = (relativePath: string) =>
   readFileSync(join(componentsRoot, relativePath), "utf8");
+
+/**
+ * Every `.tsx` screen under `app/`, as paths relative to `appRoot`. Used so
+ * regression coverage below applies to whichever screens actually use
+ * `CanonicalCardSlot`/`carouselShadow` today, instead of a maintained list of
+ * filenames that silently stops covering new or newly-fixed screens.
+ */
+function listAppScreenFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === "__tests__" || entry === "node_modules") continue;
+    const full = join(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) {
+      out.push(...listAppScreenFiles(full));
+    } else if (entry.endsWith(".tsx")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+const appScreenFiles = listAppScreenFiles(appRoot).map((f) =>
+  relative(appRoot, f),
+);
+
+/**
+ * Every `<CanonicalCardSlot ...>...</CanonicalCardSlot>` block in a source
+ * string, split into its opening-tag props and its body (the JSX between the
+ * opening and closing tags). Self-closing slots (no children) are skipped —
+ * shadow ownership only applies once a card is actually projected inside.
+ *
+ * This assumes (like the rest of this file's regexes) that a slot's opening
+ * tag never itself contains a bare `>` inside an attribute expression (e.g.
+ * an inline arrow function) — true for every usage in this codebase today.
+ */
+function findCanonicalCardSlotBlocks(
+  source: string,
+): { openProps: string; body: string }[] {
+  const blocks: { openProps: string; body: string }[] = [];
+  const openTagPattern = /<CanonicalCardSlot([\s\S]*?)>/g;
+  let match: RegExpExecArray | null;
+  while ((match = openTagPattern.exec(source))) {
+    const openProps = match[1];
+    if (openProps.trim().endsWith("/")) continue;
+    const bodyStart = match.index + match[0].length;
+    const closeIndex = source.indexOf("</CanonicalCardSlot>", bodyStart);
+    const body =
+      closeIndex === -1
+        ? source.slice(bodyStart)
+        : source.slice(bodyStart, closeIndex);
+    blocks.push({ openProps, body });
+  }
+  return blocks;
+}
 
 // Regression coverage for a corner-leak bug: the 기록 tab drew letter covers
 // directly (no outer wrapper owning the final radius+clip), and any grid that
@@ -32,31 +87,46 @@ describe("letter cover card corner clipping", () => {
   });
 
   it("opens the overlay with originUsesCarouselShadow wherever a letter grid uses the carousel shadow token", () => {
-    const filesWithCarouselShadowLetterCards = [
-      "(tabs)/on.tsx",
-      "(tabs)/index.tsx",
-      "(tabs)/to.tsx",
-      "of-01-detail.tsx",
-    ];
-
-    for (const relativePath of filesWithCarouselShadowLetterCards) {
+    // File-name-agnostic: any screen under app/ that opts a letter card into
+    // the restrained carousel shadow token — whether via CanonicalCardSlot's
+    // own `carouselShadow` prop (the only supported way to pair it with a
+    // card projected through the slot) or, for screens that don't use the
+    // slot at all, directly on ArticleCardItem — must open its
+    // CardSelectOverlay with the matching option. This intentionally has no
+    // hardcoded screen list, so a new screen (or another task's fix to an
+    // existing screen) that adopts this pattern is covered automatically.
+    for (const relativePath of appScreenFiles) {
       const source = read(relativePath);
-      expect(source).toContain("carouselShadow");
-      expect(source).toContain("originUsesCarouselShadow: true");
+      if (!/\bcarouselShadow\b/.test(source)) continue;
+
+      expect(
+        source,
+        `${relativePath} uses the restrained carousel shadow token but never opens its overlay with originUsesCarouselShadow: true — the shadow will visibly pop to the larger standard token when the overlay opens or closes.`,
+      ).toContain("originUsesCarouselShadow: true");
     }
   });
 
-  it("never clips the sent-letters grid cell that wraps the shadow-owning CanonicalCardSlot", () => {
-    // Regression: CanonicalCardSlot's outer boundary (the direct
-    // `carouselShadow` parent here) must be allowed to paint its shadow
-    // beyond the card's own bounds. An ancestor `overflow: "hidden"` (e.g.
-    // on the grid cell wrapper) silently clips that shadow off at the
-    // slot's edges, leaving the card looking shadowless despite the prop
-    // being wired correctly.
-    const toScreen = read("(tabs)/to.tsx");
-    const gridCellStyle = toScreen.match(/gridCell:\s*\{([^}]*)\}/)?.[1] ?? "";
+  it("keeps CanonicalCardSlot the sole shadow owner wherever a screen opts a projected card into the carousel shadow token", () => {
+    // The supported pattern is: CanonicalCardSlot itself draws the shadow on
+    // its unclipped outer boundary (and disables the child card's own
+    // shadow). A card that also declares its own `carouselShadow` while
+    // nested in such a slot is the retired pattern — the shadow is drawn a
+    // second time inside the slot's clipping boundary, where it gets cut off
+    // whenever the slot's static resting shadow (rather than the overlay's
+    // uncropped one) is what's visible.
+    for (const relativePath of appScreenFiles) {
+      const source = read(relativePath);
+      const slotBlocks = findCanonicalCardSlotBlocks(source);
 
-    expect(gridCellStyle).not.toContain("overflow");
+      for (const { openProps, body } of slotBlocks) {
+        if (!/\bcarouselShadow\b/.test(openProps)) continue;
+
+        expect(
+          body,
+          `${relativePath}: a CanonicalCardSlot using carouselShadow must be the sole shadow owner — its nested ArticleCardItem must not also declare carouselShadow.`,
+        ).not.toMatch(/<ArticleCardItem[\s\S]*?\bcarouselShadow\b/);
+      }
+    }
   });
 });
 
@@ -104,7 +174,9 @@ describe("card press-scale corner clipping", () => {
     // The unclipped outer node must own the shared transform, with the clip
     // nested beneath it so shadow, corners, and content move together.
     expect(source).toContain("useSharedValue(1)");
-    expect(source).toMatch(/transform:\s*\[\{\s*scale:\s*pressScale\.value\s*\}\]/);
+    expect(source).toMatch(
+      /transform:\s*\[\{\s*scale:\s*pressScale\.value\s*\}\]/,
+    );
     expect(source).toContain("RAnimated.View");
     expect(source).toContain('overflow: "visible"');
     expect(source).toContain("styles.clip");
@@ -118,7 +190,9 @@ describe("card press-scale corner clipping", () => {
 
     expect(slot).toContain("...Shadows.carouselCard");
     expect(slot).toContain("carouselShadow && styles.carouselShadow");
-    expect(slot).toMatch(/carouselShadow\s*\?\s*\{\s*noShadow:\s*true\s*\}\s*:\s*\{\}/);
+    expect(slot).toMatch(
+      /carouselShadow\s*\?\s*\{\s*noShadow:\s*true\s*\}\s*:\s*\{\}/,
+    );
 
     const outerStyle =
       slot.match(/outer:\s*\{([^}]*)\}/)?.[1] ?? "";
