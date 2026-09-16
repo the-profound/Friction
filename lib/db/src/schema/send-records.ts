@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -28,6 +28,15 @@ export const sendRecordsTable = pgTable("send_records", {
   spaceScheduledSendId: uuid("space_scheduled_send_id").references(() => spaceScheduledSendsTable.id),
   teamCollectionId: uuid("team_collection_id").references(() => teamCollectionsTable.id),
   targetType: sendRecordTargetTypeEnum("target_type").notNull().default("person"),
+  /**
+   * True only for a `reply` send whose source inbox letter (the letter being
+   * replied to) originated from an anonymous Space. Recorded durably at send
+   * time — instead of re-deriving it later from the source inbox row, which
+   * can be hard-deleted — so profile visibility can permanently treat these
+   * replies as recipient-only, matching the anonymous Space's own privacy
+   * guarantee. Never set for person/space/group sends.
+   */
+  isAnonymousSpaceReply: boolean("is_anonymous_space_reply").notNull().default(false),
   deliverySlot: timestamp("delivery_slot", { withTimezone: true }).notNull(),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
 });

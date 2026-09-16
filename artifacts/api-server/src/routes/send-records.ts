@@ -52,12 +52,25 @@ function sendValidationError(res: Response, message: string) {
   res.status(400).json({ error: message });
 }
 
+/**
+ * True for a send record that must never be visible to anyone but its own
+ * sender (the anonymous-Space-origin reply privacy guarantee from Task
+ * 2286). Client screens already filter these out of public display, but
+ * that is not an authorization boundary — this endpoint is queried directly
+ * by senderId (e.g. from another user's public profile screen), so the API
+ * itself must withhold these records from anyone other than the sender.
+ */
+function isRecipientOnlyForNonOwner(record: { isAnonymousSpaceReply: boolean | null }): boolean {
+  return record.isAnonymousSpaceReply === true;
+}
+
 router.get("/send-records", async (req, res) => {
   const { senderId } = req.query;
   if (!senderId || typeof senderId !== "string") {
     res.status(400).json({ error: "senderId is required" });
     return;
   }
+  const callerId = await resolveCallerId(req);
 
   const records = await db
     .select({
@@ -76,6 +89,7 @@ router.get("/send-records", async (req, res) => {
       spaceId: sendRecordsTable.spaceId,
       spaceScheduledSendId: sendRecordsTable.spaceScheduledSendId,
       collectionId: sendRecordsTable.teamCollectionId,
+      isAnonymousSpaceReply: sendRecordsTable.isAnonymousSpaceReply,
       deliverySlot: sendRecordsTable.deliverySlot,
       sentAt: sendRecordsTable.sentAt,
       article: articlesTable,
@@ -93,8 +107,13 @@ router.get("/send-records", async (req, res) => {
     .leftJoin(spacesTable, eq(sendRecordsTable.spaceId, spacesTable.id))
     .where(eq(sendRecordsTable.senderId, senderId));
 
+  const visibleRecords =
+    callerId === senderId
+      ? records
+      : records.filter((r) => !isRecipientOnlyForNonOwner(r));
+
   const now = new Date();
-  const enriched = records.map((r) => ({
+  const enriched = visibleRecords.map((r) => ({
     ...r,
     deliveryDate: kstDateString(new Date(r.deliverySlot)),
     isDelivered: new Date(r.deliverySlot) <= now,
@@ -121,6 +140,7 @@ router.get("/send-records/:id", async (req, res) => {
       spaceId: sendRecordsTable.spaceId,
       spaceScheduledSendId: sendRecordsTable.spaceScheduledSendId,
       collectionId: sendRecordsTable.teamCollectionId,
+      isAnonymousSpaceReply: sendRecordsTable.isAnonymousSpaceReply,
       deliverySlot: sendRecordsTable.deliverySlot,
       sentAt: sendRecordsTable.sentAt,
       article: articlesTable,
@@ -141,6 +161,15 @@ router.get("/send-records/:id", async (req, res) => {
   if (!records[0]) {
     res.status(404).json({ error: "Send record not found" });
     return;
+  }
+  if (isRecipientOnlyForNonOwner(records[0])) {
+    const callerId = await resolveCallerId(req);
+    if (callerId !== records[0].senderId) {
+      // Behave as if the record does not exist, matching the anonymous
+      // Space's own privacy guarantee: nobody but the sender can retrieve it.
+      res.status(404).json({ error: "Send record not found" });
+      return;
+    }
   }
   const now = new Date();
   res.json({
@@ -290,11 +319,20 @@ router.post("/send-records", async (req, res) => {
       let resolvedRecipientId = recipientId;
       let resolvedReplyToInboxId: string | undefined;
       let resolvedSpaceScheduledSendId: string | undefined;
+      let resolvedIsAnonymousSpaceReply = false;
 
       if (targetType === "reply") {
         const [sourceInbox] = await tx
-          .select()
+          .select({
+            id: inboxTable.id,
+            senderId: inboxTable.senderId,
+            sourceSpaceIsAnonymous: spacesTable.isAnonymous,
+          })
           .from(inboxTable)
+          .leftJoin(
+            spacesTable,
+            eq(inboxTable.sourceSpaceId, spacesTable.id),
+          )
           .where(
             and(
               eq(inboxTable.recipientId, senderId),
@@ -309,6 +347,9 @@ router.post("/send-records", async (req, res) => {
         const replyTarget = resolveReplyTarget(senderId, sourceInbox);
         resolvedRecipientId = replyTarget.recipientId;
         resolvedReplyToInboxId = replyTarget.replyToInboxId;
+        resolvedIsAnonymousSpaceReply = Boolean(
+          sourceInbox?.sourceSpaceIsAnonymous,
+        );
       } else if (targetType === "space") {
         const [space] = await tx
           .select({
@@ -425,6 +466,7 @@ router.post("/send-records", async (req, res) => {
           spaceId: targetType === "space" ? spaceId : undefined,
           spaceScheduledSendId: resolvedSpaceScheduledSendId,
           targetType,
+          isAnonymousSpaceReply: resolvedIsAnonymousSpaceReply,
           deliverySlot,
         })
         .returning();
@@ -447,6 +489,7 @@ router.post("/send-records", async (req, res) => {
           ),
           spaceId: sendRecordsTable.spaceId,
           spaceScheduledSendId: sendRecordsTable.spaceScheduledSendId,
+          isAnonymousSpaceReply: sendRecordsTable.isAnonymousSpaceReply,
           article: articlesTable,
           recipient: usersTable,
           collectionName: teamCollectionsTable.name,

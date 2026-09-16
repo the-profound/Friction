@@ -25,6 +25,8 @@ export interface SendRecordWithDetails {
   collectionId?: string | null;
   collectionName?: string | null;
   spaceName?: string | null;
+  /** True only for a reply send whose source inbox letter originated from an anonymous Space. Such replies are always treated as recipient-only in profile visibility, matching the anonymous Space's privacy guarantee. */
+  isAnonymousSpaceReply: boolean;
   deliverySlot: Date;
   /** KST calendar date corresponding to deliverySlot. */
   deliveryDate?: Date;

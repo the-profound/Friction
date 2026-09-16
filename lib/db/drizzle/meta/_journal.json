@@ -323,6 +323,13 @@
       "when": 1788824400000,
       "tag": "0046_add_letter_arrival_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1788824400001,
+      "tag": "0051_add_anonymous_space_reply_flag",
+      "breakpoints": true
     }
   ]
 }

@@ -51,7 +51,7 @@ import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import {
   buildSentLetterSourceMetadataByArticleId,
-  isSpaceSendRecord,
+  isPubliclyEligibleNonSpaceSendRecord,
   shouldDisplaySentLetter,
 } from "@/lib/sentLetterVisibility";
 
@@ -172,7 +172,7 @@ export default function UserProfileScreen() {
   const nonSpaceSentArticleIds = useMemo(() => {
     const ids = new Set<string>();
     for (const record of (sendRecordsQuery.data ?? []) as SendRecordWithDetails[]) {
-      if (!isSpaceSendRecord(record)) ids.add(record.articleId);
+      if (isPubliclyEligibleNonSpaceSendRecord(record)) ids.add(record.articleId);
     }
     return ids;
   }, [sendRecordsQuery.data]);

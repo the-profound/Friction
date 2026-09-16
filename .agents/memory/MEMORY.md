@@ -157,3 +157,4 @@
 - [Bounded autosave persistence queues](friction-bounded-autosave-queues.md) — coalesce only not-yet-started dirty snapshots; deletion and transition writes remain strict durability barriers.
 - [CardSelectOverlay meta label overload](friction-letter-overlay-meta-label-overload.md) — `collectionName` is one shared label routed by whichever of `collectionId`/`spaceId` accompanies it; put a Space name there with `spaceId` set, not `collectionId`.
 - [Reading analytics session identity](friction-reading-analytics-session.md) — persist funnel session IDs and use deterministic event IDs so restore/retry cannot duplicate or corrupt events.
+- [send-records API authorization gap](friction-send-records-api-authz-gap.md) — GET /send-records is unauthenticated, keyed only by senderId; recipient-only flags need server-side enforcement, not just client-side filtering.

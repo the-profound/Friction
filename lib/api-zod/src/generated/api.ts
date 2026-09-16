@@ -4890,6 +4890,11 @@ export const ListSendRecordsResponseItem = zod.object({
   collectionId: zod.string().uuid().nullish(),
   collectionName: zod.string().nullish(),
   spaceName: zod.string().nullish(),
+  isAnonymousSpaceReply: zod
+    .boolean()
+    .describe(
+      "True only for a reply send whose source inbox letter originated from an anonymous Space. Such replies are always treated as recipient-only in profile visibility, matching the anonymous Space's privacy guarantee.",
+    ),
   deliverySlot: zod.date(),
   deliveryDate: zod
     .date()
@@ -5094,6 +5099,11 @@ export const GetSendRecordResponse = zod.object({
   collectionId: zod.string().uuid().nullish(),
   collectionName: zod.string().nullish(),
   spaceName: zod.string().nullish(),
+  isAnonymousSpaceReply: zod
+    .boolean()
+    .describe(
+      "True only for a reply send whose source inbox letter originated from an anonymous Space. Such replies are always treated as recipient-only in profile visibility, matching the anonymous Space's privacy guarantee.",
+    ),
   deliverySlot: zod.date(),
   deliveryDate: zod
     .date()

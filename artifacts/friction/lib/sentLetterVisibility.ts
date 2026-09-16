@@ -13,6 +13,37 @@ export function isSpaceSendRecord(
   return record.targetType === "space" || Boolean(record.spaceId);
 }
 
+/**
+ * A person-to-person reply whose source inbox letter (the letter being
+ * replied to) originated from an anonymous Space. The server durably marks
+ * these at send time (`isAnonymousSpaceReply`) — they must be treated as
+ * recipient-only everywhere a sender's letters are shown publicly, matching
+ * the anonymous Space's own privacy guarantee, even though the reply itself
+ * has no space_letter row to carry a visibility flag.
+ */
+export function isAnonymousSpaceReplySendRecord(
+  record: Pick<SendRecordWithDetails, "targetType" | "isAnonymousSpaceReply">,
+) {
+  return record.targetType === "reply" && Boolean(record.isAnonymousSpaceReply);
+}
+
+/**
+ * A send record that is eligible to make a letter show up in the sender's
+ * public "보낸 편지" list, independent of any space visibility flag. Space
+ * sends are excluded here because their visibility is governed separately by
+ * their space_letter row (see `shouldDisplaySentLetter`).
+ */
+export function isPubliclyEligibleNonSpaceSendRecord(
+  record: Pick<
+    SendRecordWithDetails,
+    "targetType" | "spaceId" | "isAnonymousSpaceReply"
+  >,
+) {
+  return (
+    !isSpaceSendRecord(record) && !isAnonymousSpaceReplySendRecord(record)
+  );
+}
+
 function compareSendRecords(
   a: SendRecordWithDetails,
   b: SendRecordWithDetails,

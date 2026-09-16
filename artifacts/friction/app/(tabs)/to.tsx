@@ -46,7 +46,7 @@ import { useLetterSelectionOverlay } from "@/hooks/useLetterSelectionOverlay";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   buildSentLetterSourceMetadataByArticleId,
-  isSpaceSendRecord,
+  isPubliclyEligibleNonSpaceSendRecord,
   shouldDisplaySentLetter,
 } from "@/lib/sentLetterVisibility";
 
@@ -199,14 +199,17 @@ export default function MyScreen() {
   const nonSpaceSentArticleIds = useMemo(() => {
     const ids = new Set<string>();
     for (const record of (sendRecordsQuery.data ?? []) as SendRecordWithDetails[]) {
-      if (!isSpaceSendRecord(record)) ids.add(record.articleId);
+      if (isPubliclyEligibleNonSpaceSendRecord(record)) ids.add(record.articleId);
     }
     return ids;
   }, [sendRecordsQuery.data]);
 
   const letters = useMemo<Article[]>(() => {
-    // Person/reply sends have no SpaceLetter and remain visible. Only articles
-    // sent exclusively to spaces depend on PUBLIC space-letter visibility.
+    // Person/reply sends have no SpaceLetter and remain visible, except a
+    // reply whose source letter came from an anonymous Space — those stay
+    // recipient-only, so they never contribute to `nonSpaceSentArticleIds`.
+    // Only articles sent exclusively to spaces depend on PUBLIC space-letter
+    // visibility.
     const list = ((articlesQuery.data ?? []) as Article[]).filter((a) => {
       if (a.status !== "LETTER") return false;
       if (sendRecordByArticleId[a.id] === undefined) return false;
