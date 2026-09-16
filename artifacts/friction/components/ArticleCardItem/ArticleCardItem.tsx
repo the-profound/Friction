@@ -51,6 +51,19 @@ interface ArticleCardItemProps {
    * selected-card treatment and back on close.
    */
   shadowProgress?: SharedValue<number>;
+  /**
+   * The overlay's hero card keeps its full intrinsic size and is visually
+   * shrunk to the origin slot's footprint via a parent `transform: scale`,
+   * not real layout resizing. That parent scale also shrinks whatever this
+   * card renders, including shadow radius/offset/elevation/blur -- so a
+   * shadow written in the same raw px the resting (unscaled) slot uses would
+   * render far fainter while the scale is small, then pop to full size the
+   * instant the transform is gone. Pass the same per-frame scale factor here
+   * so the size-based shadow terms are divided by it before shrinking,
+   * keeping the on-screen shadow constant (matching the resting slot)
+   * throughout the transition instead of only at its endpoints.
+   */
+  shadowScale?: SharedValue<number>;
   /** Called after the image, or its explicit fallback, is visibly rendered. */
   onImageReady?: () => void;
   /**
@@ -106,6 +119,7 @@ function ArticleCardItem({
   visibility,
   carouselShadow = false,
   shadowProgress,
+  shadowScale,
   noShadow = false,
   onImageReady,
   pressScale,
@@ -122,6 +136,7 @@ function ArticleCardItem({
   const animatedShadowStyle = useAnimatedCardSurfaceShadowStyle(
     carouselShadow,
     shadowProgress,
+    shadowScale,
   );
   const animatedRadiusStyle = useAnimatedRadiusOverrideStyle(radiusOverride);
 
@@ -207,31 +222,39 @@ const styles = StyleSheet.create({
 function useAnimatedCardSurfaceShadowStyle(
   carouselShadow: boolean,
   shadowProgress?: SharedValue<number>,
+  shadowScale?: SharedValue<number>,
 ) {
   return useAnimatedStyle(() => {
     if (!carouselShadow || !shadowProgress) return {};
+
+    // Counter-scale the size-based shadow terms (radius/offset/elevation/
+    // blur) against the hero card's own transform scale, so a parent
+    // `transform: scale` shrinking the whole card toward a small origin slot
+    // does not also shrink the shadow into invisibility. Opacity/alpha is
+    // scale-invariant and left untouched. See `shadowScale`'s doc comment.
+    const counterScale = shadowScale ? shadowScale.value : 1;
 
     if (Platform.OS === "ios") {
       return {
         shadowColor: "#000",
         shadowOffset: {
           width: 0,
-          height: interpolate(shadowProgress.value, [0, 1], [2, 4]),
+          height: interpolate(shadowProgress.value, [0, 1], [2, 4]) / counterScale,
         },
         shadowOpacity: interpolate(shadowProgress.value, [0, 1], [0.1, 0.12]),
-        shadowRadius: interpolate(shadowProgress.value, [0, 1], [6, 12]),
+        shadowRadius: interpolate(shadowProgress.value, [0, 1], [6, 12]) / counterScale,
       };
     }
 
     if (Platform.OS === "android") {
       return {
-        elevation: interpolate(shadowProgress.value, [0, 1], [3, 5]),
+        elevation: interpolate(shadowProgress.value, [0, 1], [3, 5]) / counterScale,
       };
     }
 
     if (Platform.OS === "web") {
-      const offsetY = interpolate(shadowProgress.value, [0, 1], [2, 4]);
-      const blur = interpolate(shadowProgress.value, [0, 1], [8, 14]);
+      const offsetY = interpolate(shadowProgress.value, [0, 1], [2, 4]) / counterScale;
+      const blur = interpolate(shadowProgress.value, [0, 1], [8, 14]) / counterScale;
       const alpha = interpolate(shadowProgress.value, [0, 1], [0.1, 0.12]);
       return {
         boxShadow: `0px ${offsetY}px ${blur}px rgba(0,0,0,${alpha})`,

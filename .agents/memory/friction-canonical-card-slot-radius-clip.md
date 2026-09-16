@@ -60,3 +60,16 @@ non-`CanonicalCardSlot` placeholder cards in the same row. This keeps every
 slot's rounding genuinely tied to that carousel's real card width instead of
 an arbitrary shared number, while still giving plain placeholder views (which
 can't use `CanonicalCardSlot`'s own default) an identical value to match.
+
+**External ancestor clipping is the same bug in a different place.** Some grid
+screens (`(tabs)/to.tsx`, `(tabs)/index.tsx`, `user-profile/recipient-only-letters.tsx`,
+`of-01-detail.tsx`, `of-space-detail.tsx`) wrap each `CanonicalCardSlot` in a
+plain `View` (`gridCell`/similar) used only for the FlatList/measure ref, and
+some of those wrappers carry their own `overflow: "hidden"`. Turning on
+`carouselShadow` on the slot does nothing visible if a clipping ancestor sits
+between the slot and the grid — the shadow renders and is immediately clipped
+off at the wrapper's exact-size rectangle. Grepping for `carouselShadow` and
+`originUsesCarouselShadow: true` in the source is not enough to confirm the
+fix works; also check every ancestor `View` up to the FlatList row/cell for
+`overflow: "hidden"` (or clip via borderRadius+overflow) and remove/relocate
+it, or the "restrained shadow" story silently regresses to no shadow at all.

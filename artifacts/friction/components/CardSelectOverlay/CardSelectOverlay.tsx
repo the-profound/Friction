@@ -184,6 +184,19 @@ interface CardSelectOverlayProps {
    * frame between the source tree and the Modal portal.
    */
   onReady?: () => void;
+  /**
+   * Called the instant the close animation's shrink-back finishes, one tick
+   * before the Modal itself is hidden/unmounted. Parents use this to reveal
+   * the source card again — the Modal's last frame is already
+   * pixel-identical to the resting source card, so revealing it first
+   * guarantees an overlapping frame instead of a gap once the Modal (a
+   * separate native window/surface) actually disappears. Do not reset
+   * `articles`/`metas`-driving state here (e.g. the selected article) — the
+   * Modal is still mounted for one more tick and would flash a loading
+   * placeholder if its content data disappeared first. That full reset
+   * belongs in `onClose`, called right after.
+   */
+  onWillClose?: () => void;
   onNavigateToCollection?: (id: string) => void;
   onNavigateToAuthor?: (authorId: string) => void;
   onNavigateToSpace?: (spaceId: string) => void;
@@ -249,6 +262,7 @@ export default function CardSelectOverlay({
   onClose,
   onRead,
   onReady,
+  onWillClose,
   onNavigateToCollection,
   onNavigateToAuthor,
   onNavigateToSpace,
@@ -374,6 +388,21 @@ export default function CardSelectOverlay({
     return onScreenRadius / scale;
   });
 
+  // The hero card keeps its full intrinsic size and is shrunk to the origin
+  // slot's on-screen footprint via `transform: [{ scale }]` (see
+  // cardHeroAnimatedStyle below), not by actually relaying it out smaller.
+  // A parent transform scale visually shrinks everything it renders,
+  // including shadow radius/offset/elevation/blur -- so a shadow style
+  // written in the same raw px the resting (unscaled) grid slot uses
+  // renders far fainter than intended while origin-scale is small, then pops
+  // to its true size the instant the Modal unmounts and the real, unscaled
+  // slot takes over. Divide the size-based shadow terms by this same scale
+  // (see `ArticleCardItem`'s `shadowScale`) so the on-screen result already
+  // matches the resting slot's shadow throughout the whole transition.
+  const heroScale = useDerivedValue(() =>
+    interpolate(progress.value, [0, 1], [originScale, finalScale]),
+  );
+
   // ── Envelope animation values ─────────────────────────────────────────────
   const [envelopePhase, setEnvelopePhase] = useState<EnvelopePhase>("sealed");
   const [envelopeOpening, setEnvelopeOpening] = useState(false);
@@ -439,6 +468,8 @@ export default function CardSelectOverlay({
   const closingRef = useRef(false);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const onWillCloseRef = useRef(onWillClose);
+  onWillCloseRef.current = onWillClose;
   const [activeIndex, setActiveIndex] = useState(0);
   const activeIndexRef = useRef(0);
   const countRef = useRef(count);
@@ -677,9 +708,21 @@ export default function CardSelectOverlay({
       }
       // Guard against double-invocation (animation callback + fallback timer).
       if (!closingRef.current) return;
-      setRendered(false);
-      setIsClosing(false);
       closingRef.current = false;
+      setIsClosing(false);
+      // Reveal the source card BEFORE hiding the Modal. The Modal is a
+      // separate native window/surface from the screen underneath, so even
+      // though these are both React state updates fired from the same
+      // callback, the two surfaces are not guaranteed to repaint in the same
+      // native frame. The Modal's last frame (progress === 0) is already
+      // pixel-identical to the resting source card, so revealing the source
+      // first means there is always something painted at that exact spot —
+      // reversing this order let the Modal's window disappear while the
+      // source was still hidden (opacity 0), which read as the shadow
+      // vanishing for a frame before popping back once the source state
+      // update caught up.
+      onWillCloseRef.current?.();
+      setRendered(false);
       onClose();
     };
     const finishCloseWithIndex = (idx: number) => {
@@ -1372,6 +1415,11 @@ export default function CardSelectOverlay({
                               ? progress
                               : undefined
                           }
+                          shadowScale={
+                            originUsesCarouselShadow && i === initialIndex
+                              ? heroScale
+                              : undefined
+                          }
                           radiusOverride={
                             hasOriginCardRadius && i === initialIndex
                               ? cardRadiusOverride
@@ -1424,6 +1472,9 @@ export default function CardSelectOverlay({
                   }
                   shadowProgress={
                     originUsesCarouselShadow ? progress : undefined
+                  }
+                  shadowScale={
+                    originUsesCarouselShadow ? heroScale : undefined
                   }
                   radiusOverride={
                     hasOriginCardRadius ? cardRadiusOverride : undefined

@@ -262,6 +262,11 @@ export default function MyScreen() {
       const open = (origin: OriginLayout) => {
         openLetterOverlay(article, {
           fallbackOrigin: origin,
+          // The grid slot renders with the restrained carousel shadow
+          // token; the overlay must open/close using the same token or the
+          // shadow visibly pops to the larger standard token right at the
+          // card's rounded corners.
+          originUsesCarouselShadow: true,
           meta: {
             collectionName: rec?.name ?? null,
             collectionId: rec?.collectionId ?? null,
@@ -399,7 +404,7 @@ export default function MyScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={article.title || "제목 없음"}
                 >
-                  <CanonicalCardSlot width={cellWidth} height={cellHeight}>
+                  <CanonicalCardSlot width={cellWidth} height={cellHeight} carouselShadow>
                     <ArticleCardItem
                       title={vm.article?.title ?? "제목 없음"}
                       authorName={vm.authorName ?? undefined}
@@ -776,7 +781,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: GRID_PAD,
   },
   gridCell: {
-    overflow: "hidden",
+    // Must stay unclipped: CanonicalCardSlot's outer boundary (a direct
+    // child here) owns the restrained carousel shadow and needs to bleed
+    // beyond the card's own bounds. Clipping this wrapper would silently
+    // cut that shadow off at the slot edges.
   },
   groupRow: {
     borderBottomWidth: 1,

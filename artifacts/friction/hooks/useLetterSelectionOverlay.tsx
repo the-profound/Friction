@@ -731,6 +731,14 @@ export function useLetterSelectionOverlay(
         onClose={closeOverlay}
         onRead={handleOverlayRead}
         onReady={() => setIsSelectedSourceHidden(true)}
+        // Reveal the source card the instant the close animation's
+        // shrink-back finishes, one tick before CardSelectOverlay hides its
+        // Modal — see CardSelectOverlay's onWillClose doc comment. Do NOT
+        // fold this into closeOverlay: closeOverlay also clears
+        // selectedArticle/selectedMeta, and CardSelectOverlay is still
+        // mounted for that one tick — clearing its content data first would
+        // flash a loading placeholder instead of the finished hero card.
+        onWillClose={() => setIsSelectedSourceHidden(false)}
         onNavigateToCollection={(id) =>
           router.push({ pathname: "/of-01-detail", params: { id } })
         }

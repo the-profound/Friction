@@ -34,7 +34,7 @@
 - [Dansang scale translateY formula](friction-dansang-scale-translatey.md) — center-placed card scale: t = -s*frameHeight/2 aligns bottom to sheet top; -(1-s)*h/2 (top-anchor only) leaves bottom overlapping sheet.
 - [RN hidden-component state leak](rn-hidden-component-state-leak.md) — `return null` when hidden still keeps hook state; reset transient edit/swipe state on open, close, and key-prop change — and guard submit handler.
 - [Friction calendar grid consolidation](friction-calendar-grid-consolidation.md) — garbled date grid = mass per-cell Reanimated mount; use shared CalendarGrid/CollapsibleDatePicker, never duplicate grid code.
-- [Friction card hero transition](friction-card-hero-transition.md) — feed CardSelectOverlay a transform-shrunk canonical card, never a native small cardWidth; keep source-card hiding, delay open spring past paint.
+- [Friction card hero transition](friction-card-hero-transition.md) — feed CardSelectOverlay a transform-shrunk canonical card; keep source-card hiding/reveal on both open AND close symmetric with Modal visibility, never reversed.
 - [Selection overlay scroll restoration](friction-selection-scroll-restoration.md) — native lists can self-adjust after modal source restoration; snapshot, lock, restore-on-close only, and session-gate delayed correction.
 - [Friction cover shadow ownership](friction-cover-shadow-ownership.md) — A cover's own surface carries its background and shadow; never render an opaque same-sized shadow card behind it.
 - [Pager slot instance preservation](rn-pager-slot-instance-preservation.md) — keyed arrays preserve moves, not evictions; state that must outlive a finite pager window belongs above it.

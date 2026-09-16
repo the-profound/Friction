@@ -183,6 +183,60 @@ letter cover into `carouselShadow`, grep other `carouselShadow` call sites
 (`on.tsx`, `index.tsx`, `of-01-detail.tsx` as of this writing) to confirm the
 pairing convention before assuming a new site is correct by copy-paste.
 
+## Close-side handoff must reveal the source before hiding the Modal
+
+The open side's "keep source visible until the overlay reports readiness"
+rule (above) has a symmetric close-side failure mode that is easy to miss:
+`finishClose` used to call `setRendered(false)` (hides the Modal) before
+`onClose()` (which reveals the source via `setIsSelectedSourceHidden(false)`).
+Both are React state updates fired from the same JS callback, but the Modal
+is a separate native window/surface from the screen underneath it — the two
+are not guaranteed to repaint in the same native frame. The old order let the
+Modal's window disappear while the source card was still hidden (opacity 0),
+which read as the hero's shadow (or the whole card) vanishing for a frame
+before popping back once the source's state update caught up.
+
+**Why:** by the time `finishClose` runs, `progress` has already animated to
+0, so the Modal's last rendered frame is pixel-identical to the resting
+source card. Revealing the source first means there is always something
+painted at that exact spot; only after that should the Modal (a separate
+surface) be told to disappear.
+
+**How to apply:** `CardSelectOverlay` exposes `onWillClose` (called first,
+inside `finishClose`, before `setRendered(false)`) separately from `onClose`
+(called last, after the Modal is hidden). Put ONLY the source-reveal in
+`onWillClose` — never fold in state that `chainArticles`/`displayArticles`
+depend on (e.g. clearing `selectedArticle`/`selectedMeta`). The Modal is
+still mounted for that one extra tick and would flash a loading/skeleton
+placeholder if its content data disappeared before the Modal itself does.
+That full reset stays in `onClose`, which now runs after `setRendered(false)`.
+
+## Counter-scale shadow terms when the hero shrinks via `transform: scale`
+
+The hero card keeps its full intrinsic size and is shrunk toward a small
+origin slot purely via a parent `transform: [{ scale }]` (never real layout
+resize). That parent scale visually shrinks everything it renders, including
+shadow radius/offset/elevation/blur (iOS/Android/web alike) — a shadow
+written in the same raw px the resting (unscaled) slot uses looks far
+fainter while the scale is small (e.g. mid-close, near a small grid origin),
+then pops to full size the instant the Modal unmounts and the real unscaled
+slot takes over. Symptom reported by a user: "no shadow while shrinking,
+then it suddenly appears once it settles back in place."
+
+**Why:** a CSS-transform-style `scale()` scales the whole rendered layer,
+shadow included; the raw shadowRadius/shadowOffset/elevation/blur values are
+constants unaware of the transform, so their on-screen size shrinks along
+with the card even though the desired on-screen shadow should stay roughly
+constant (matching the resting slot) throughout the transition.
+
+**How to apply:** compute the same per-frame scale factor already used for
+the hero transform (`interpolate(progress, [0,1],[originScale, finalScale])`,
+exposed as a `useDerivedValue`), and divide only the *size*-based shadow
+terms by it before they're set — never opacity/alpha, which is
+scale-invariant. This exactly mirrors the existing `cardRadiusOverride`
+pattern (`onScreenRadius / scale`) already used for corner radius in the
+same file — same class of bug, same fix shape.
+
 ## Radius parity for a resting radius set via `originCardRadius`
 
 Most `CanonicalCardSlot` callers never pass an explicit `borderRadius`, so the

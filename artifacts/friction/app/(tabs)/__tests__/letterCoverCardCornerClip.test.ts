@@ -35,6 +35,7 @@ describe("letter cover card corner clipping", () => {
     const filesWithCarouselShadowLetterCards = [
       "(tabs)/on.tsx",
       "(tabs)/index.tsx",
+      "(tabs)/to.tsx",
       "of-01-detail.tsx",
     ];
 
@@ -43,6 +44,19 @@ describe("letter cover card corner clipping", () => {
       expect(source).toContain("carouselShadow");
       expect(source).toContain("originUsesCarouselShadow: true");
     }
+  });
+
+  it("never clips the sent-letters grid cell that wraps the shadow-owning CanonicalCardSlot", () => {
+    // Regression: CanonicalCardSlot's outer boundary (the direct
+    // `carouselShadow` parent here) must be allowed to paint its shadow
+    // beyond the card's own bounds. An ancestor `overflow: "hidden"` (e.g.
+    // on the grid cell wrapper) silently clips that shadow off at the
+    // slot's edges, leaving the card looking shadowless despite the prop
+    // being wired correctly.
+    const toScreen = read("(tabs)/to.tsx");
+    const gridCellStyle = toScreen.match(/gridCell:\s*\{([^}]*)\}/)?.[1] ?? "";
+
+    expect(gridCellStyle).not.toContain("overflow");
   });
 });
 
