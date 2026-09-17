@@ -51,12 +51,12 @@ import { ApiError } from "@workspace/api-client-react";
 import { kstDateAt6, minOpeningSendDate, toKstCalendarDate } from "@/lib/kstDate";
 import {
   getSpaceRoundPresentationStatus,
-  isKstSlotReservable,
   isOpeningSlotReservable,
 } from "@/lib/spaceRoundPresentation";
 import { canResendSpaceScheduledSend } from "@/lib/spaceScheduledSendPresentation";
 import { getOwnedSpaceScheduledSends } from "@/lib/spaceScheduledSendOwnership";
 import { resolveReservationIntentAction } from "@/lib/spaceReservationIntent";
+import { getAvailableAssignedCenterSlots } from "@/lib/spaceCenterSlotEligibility";
 
 function dateToYmd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -672,7 +672,7 @@ export default function SpaceScheduleSendScreen() {
     );
   }, [presentationRounds, roundId]);
 
-  // ─── "내 차례" CENTER slots, gathered across ACTIVE/UPCOMING rounds ────
+  // ─── "내 차례" CENTER slots, gathered across every round ───────────────
   // `allCenterSlots` always includes every round the user is assigned a CENTER
   // slot in (regardless of existing reservations) — it's the source of truth
   // used to resolve "which date belongs to which round" for editing an
@@ -682,6 +682,7 @@ export default function SpaceScheduleSendScreen() {
   const [allCenterSlots, setAllCenterSlots] = useState<
     { slotId: string; date: string; roundId: string }[] | undefined
   >(undefined);
+  const [centerSlotsLoadFailed, setCenterSlotsLoadFailed] = useState(false);
   // Rounds where the user IS the assigned CENTER slot (same criterion the
   // space detail screen uses: `assignedUserId === userId`, independent of
   // whether `scheduledDate` is set) but the slot has no date yet — leftover
@@ -697,6 +698,7 @@ export default function SpaceScheduleSendScreen() {
       if (!id || !userId) {
         setAllCenterSlots([]);
         setUnresolvedCenterRoundIds(new Set());
+        setCenterSlotsLoadFailed(false);
         return;
       }
       // The rounds query hasn't resolved yet — `rounds` is just the `?? []`
@@ -705,23 +707,34 @@ export default function SpaceScheduleSendScreen() {
       if (roundsQuery.isLoading) {
         setAllCenterSlots(undefined);
         setUnresolvedCenterRoundIds(undefined);
+        setCenterSlotsLoadFailed(false);
         return;
       }
-      const targetRounds = presentationRounds.filter(
-        (r) => r.status === "ACTIVE" || r.status === "UPCOMING",
-      );
+      // Completed rounds stay in the source set because an active Space may
+      // still allow the owner to fill an unused historical slot.
+      const targetRounds = presentationRounds;
       if (targetRounds.length === 0) {
         setAllCenterSlots([]);
         setUnresolvedCenterRoundIds(new Set());
+        setCenterSlotsLoadFailed(false);
         return;
       }
       setAllCenterSlots(undefined);
       setUnresolvedCenterRoundIds(undefined);
-      const results = await Promise.all(
-        targetRounds.map((r) =>
-          listSpaceRoundSlots(id, r.id).catch(() => [] as SpaceRoundSlotWithUser[]),
-        ),
-      );
+      setCenterSlotsLoadFailed(false);
+      let results: SpaceRoundSlotWithUser[][];
+      try {
+        results = await Promise.all(
+          targetRounds.map((r) => listSpaceRoundSlots(id, r.id)),
+        );
+      } catch {
+        if (!cancelled) {
+          setAllCenterSlots([]);
+          setUnresolvedCenterRoundIds(new Set());
+          setCenterSlotsLoadFailed(true);
+        }
+        return;
+      }
       if (cancelled) return;
       const mine: { slotId: string; date: string; roundId: string }[] = [];
       const unresolved = new Set<string>();
@@ -742,60 +755,32 @@ export default function SpaceScheduleSendScreen() {
     };
   }, [id, userId, presentationRounds, roundsQuery.isLoading, now]);
 
-  // Rounds where the user already has a PENDING CENTER reservation — picking
-  // one of these again for a *new* reservation would just trigger the
-  // backend's duplicate-slot rejection, so exclude them from that flow only.
-  const pendingCenterRoundIds = useMemo(
-    () =>
-      new Set(
-        sends
-          .filter(
-            (s) =>
-              s.status === "PENDING" &&
-              s.letterType === "CENTER" &&
-              s.letter?.authorId === userId,
-          )
-          .map((s) => s.letter?.spaceRoundId)
-          .filter((v): v is string => !!v),
-      ),
-    [sends, userId],
-  );
-  // Rounds where the user's CENTER letter has already been sent — that slot
-  // is used up and shouldn't be offered again for a *new* reservation either.
-  const sentCenterRoundIds = useMemo(
-    () =>
-      new Set(
-        sends
-          .filter(
-            (s) =>
-              s.status === "SENT" &&
-              s.letterType === "CENTER" &&
-              s.letter?.authorId === userId,
-          )
-          .map((s) => s.letter?.spaceRoundId)
-          .filter((v): v is string => !!v),
-      ),
-    [sends, userId],
-  );
   const newReservationCenterSlots = useMemo(
-    () =>
-      allCenterSlots?.filter(
-        (s) =>
-          isKstSlotReservable(s.date, now) &&
-          !pendingCenterRoundIds.has(s.roundId) &&
-          !sentCenterRoundIds.has(s.roundId),
-      ),
-    [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds, now],
+    () => {
+      const normalRoundIds = new Set(
+        presentationRounds
+          .filter((round) => round.status === "ACTIVE" || round.status === "UPCOMING")
+          .map((round) => round.id),
+      );
+      return getAvailableAssignedCenterSlots({
+        slots: allCenterSlots,
+        sends,
+        userId: userId ?? "",
+        now,
+        mode: "upcoming",
+      })?.filter((slot) => normalRoundIds.has(slot.roundId));
+    },
+    [allCenterSlots, sends, userId, now, presentationRounds],
   );
   const catchUpCenterSlots = useMemo(
-    () =>
-      allCenterSlots?.filter(
-        (s) =>
-          !isKstSlotReservable(s.date, now) &&
-          !pendingCenterRoundIds.has(s.roundId) &&
-          !sentCenterRoundIds.has(s.roundId),
-      ),
-    [allCenterSlots, pendingCenterRoundIds, sentCenterRoundIds, now],
+    () => getAvailableAssignedCenterSlots({
+      slots: allCenterSlots,
+      sends,
+      userId: userId ?? "",
+      now,
+      mode: "catch-up",
+    }),
+    [allCenterSlots, sends, userId, now],
   );
   // Assigned CENTER slots that still have no `scheduledDate` and aren't
   // already covered by a pending/sent reservation — these are the ones the
@@ -803,10 +788,8 @@ export default function SpaceScheduleSendScreen() {
   const hasUnresolvedCenterAssignment = useMemo(
     () =>
       !!unresolvedCenterRoundIds &&
-      [...unresolvedCenterRoundIds].some(
-        (rid) => !pendingCenterRoundIds.has(rid) && !sentCenterRoundIds.has(rid),
-      ),
-    [unresolvedCenterRoundIds, pendingCenterRoundIds, sentCenterRoundIds],
+      unresolvedCenterRoundIds.size > 0,
+    [unresolvedCenterRoundIds],
   );
 
   // Opening letters are reservable per-round: only an operator may add them
@@ -1085,8 +1068,33 @@ export default function SpaceScheduleSendScreen() {
   const consumedSlotIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!slotId || consumedSlotIdRef.current === slotId) return;
-    if (roundsQuery.isLoading || allCenterSlots === undefined) return;
+    if (
+      roundsQuery.isLoading ||
+      sendsQuery.isLoading ||
+      sendsQuery.isFetching ||
+      joinContextQuery.isLoading ||
+      joinContextQuery.isFetching ||
+      allCenterSlots === undefined
+    ) return;
     consumedSlotIdRef.current = slotId;
+    if (centerSlotsLoadFailed) {
+      showToast({
+        message: "슬롯 정보를 확인하지 못했어요. 다시 시도해주세요.",
+        type: "error",
+        duration: 5000,
+        position: "top",
+      });
+      return;
+    }
+    if (isSpaceArchived) {
+      showToast({
+        message: "종료된 공간의 슬롯은 채울 수 없어요.",
+        type: "error",
+        duration: 5000,
+        position: "top",
+      });
+      return;
+    }
     const isCatchUpRoute = catchUp === "1";
     const target = (isCatchUpRoute ? catchUpCenterSlots : newReservationCenterSlots)?.find(
       (slot) => slot.slotId === slotId && (!roundId || slot.roundId === roundId),
@@ -1116,7 +1124,13 @@ export default function SpaceScheduleSendScreen() {
     roundId,
     scheduledDate,
     roundsQuery.isLoading,
+    sendsQuery.isLoading,
+    sendsQuery.isFetching,
+    joinContextQuery.isLoading,
+    joinContextQuery.isFetching,
     allCenterSlots,
+    centerSlotsLoadFailed,
+    isSpaceArchived,
     newReservationCenterSlots,
     catchUpCenterSlots,
     catchUp,

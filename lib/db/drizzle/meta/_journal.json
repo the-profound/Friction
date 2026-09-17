@@ -330,6 +330,13 @@
       "when": 1788824400001,
       "tag": "0051_add_anonymous_space_reply_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1789516800000,
+      "tag": "0052_scope_pending_center_reservations_to_exact_slot",
+      "breakpoints": true
     }
   ]
 }

@@ -82,6 +82,7 @@ import {
   isReadableSpaceDetailLetter,
   type SpaceReservationMetadataPresentation,
 } from "@/lib/spaceRoundPresentation";
+import { getSpaceRoundSlotAction } from "@/lib/spaceCenterSlotEligibility";
 import { toKstCalendarDate } from "@/lib/kstDate";
 import { isRecruitmentFull } from "@/lib/spaceRecruitment";
 
@@ -477,6 +478,15 @@ function SpaceRoundSlotCard({
     !!slot.scheduledDate && !isKstSlotReservable(slot.scheduledDate, now);
   const isWithdrawn = isMySlot && !!withdrawnLetter;
   const isOtherReserved = !isMySlot && slot.hasActiveReservation;
+  const slotAction = getSpaceRoundSlotAction({
+    assignedUserId: slot.assignedUserId,
+    userId,
+    scheduledDate: slot.scheduledDate,
+    hasActiveReservation: slot.hasActiveReservation,
+    isScheduled,
+    schedulingDisabled,
+    now,
+  });
   const availabilityLabel = getSpaceRoundSlotAvailabilityLabel({
     isMySlot,
     isPastEmptySlot,
@@ -531,16 +541,16 @@ function SpaceRoundSlotCard({
           </Text>
         ) : null}
       </View>
-      {isMySlot && !isScheduled && !schedulingDisabled && (
+      {slotAction && (
         <ScalePressable
           style={styles.slotCtaOuter}
           contentStyle={styles.slotCta}
           onPress={() => onSchedule(slot)}
           accessibilityRole="button"
-          accessibilityLabel={isPastEmptySlot ? "지난 내 차례 채우기" : undefined}
+          accessibilityLabel={slotAction.accessibilityLabel}
         >
           <Text style={styles.slotCtaText}>
-            {isPastEmptySlot ? "지난 차례 채우기" : isWithdrawn ? "다시 예약하기" : "글 예약하기"}
+            {isWithdrawn ? "다시 예약하기" : slotAction.label}
           </Text>
         </ScalePressable>
       )}

@@ -13,13 +13,17 @@ const sheetSource = readFileSync(
   new URL("../../components/ArticleScheduleSheet/ArticleScheduleSheet.tsx", import.meta.url),
   "utf8",
 );
+const eligibilitySource = readFileSync(
+  new URL("../spaceCenterSlotEligibility.ts", import.meta.url),
+  "utf8",
+);
 
 describe("past assigned CENTER slot catch-up flow", () => {
   it("keeps the past owner CTA behind an explicit explanation", () => {
     expect(detailSource).toContain(
-      "{isMySlot && !isScheduled && !schedulingDisabled && (",
+      "{slotAction && (",
     );
-    expect(detailSource).toContain('"지난 차례 채우기"');
+    expect(eligibilitySource).toContain('label: "지난 차례 채우기"');
     expect(detailSource).toContain('title="지난 차례를 지금 채울까요?"');
     expect(detailSource).toContain("가장 가까운 발신 가능 시각으로 자동 예약돼요.");
     expect(detailSource).toContain('catchUp: "1"');
@@ -32,11 +36,11 @@ describe("past assigned CENTER slot catch-up flow", () => {
     );
   });
 
-  it("revalidates the exact expired owner slot and excludes used rounds", () => {
+  it("revalidates the exact expired owner slot instead of excluding a whole round", () => {
     expect(scheduleSource).toContain("const catchUpCenterSlots = useMemo(");
-    expect(scheduleSource).toContain("!isKstSlotReservable(s.date, now)");
-    expect(scheduleSource).toContain("!pendingCenterRoundIds.has(s.roundId)");
-    expect(scheduleSource).toContain("!sentCenterRoundIds.has(s.roundId)");
+    expect(scheduleSource).toContain('mode: "catch-up"');
+    expect(scheduleSource).not.toContain("pendingCenterRoundIds");
+    expect(scheduleSource).not.toContain("sentCenterRoundIds");
     expect(scheduleSource).toContain(
       "slot.slotId === slotId && (!roundId || slot.roundId === roundId)",
     );

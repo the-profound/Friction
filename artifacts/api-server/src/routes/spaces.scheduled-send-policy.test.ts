@@ -7,6 +7,10 @@ const scheduleScreenSource = readFileSync(
   join(__dirname, "../../../friction/app/of-space-schedule-send.tsx"),
   "utf8",
 );
+const slotEligibilitySource = readFileSync(
+  join(__dirname, "../../../friction/lib/spaceCenterSlotEligibility.ts"),
+  "utf8",
+);
 const scheduleSheetSource = readFileSync(
   join(
     __dirname,
@@ -67,18 +71,13 @@ describe("space scheduled-send role policy", () => {
   });
 
   it("does not let OPENING reservations consume CENTER slots", () => {
-    expect(scheduleScreenSource).toContain(
-      's.letterType === "CENTER" &&\n              s.letter?.authorId === userId',
-    );
+    expect(slotEligibilitySource).toContain('send.letterType !== "CENTER"');
+    expect(slotEligibilitySource).toContain("send.letter?.authorId !== userId");
     expect(scheduleScreenSource).not.toContain("openingRoundIdsWithSend");
     expect(scheduleSheetSource).toContain('l.letterType === "CENTER"');
   });
 
-  it("continues rejecting a second pending CENTER reservation for the same author and round", () => {
-    const conflictHelper = routesSource.slice(
-      routesSource.indexOf("async function hasPendingCenterReservationConflict"),
-      routesSource.indexOf("/**\n * Validates that a CENTER-role reservation"),
-    );
+  it("rejects a second pending CENTER reservation only for the same immutable slot", () => {
     const patchRoute = routesSource.slice(
       routesSource.indexOf(
         'router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId"',
@@ -86,20 +85,12 @@ describe("space scheduled-send role policy", () => {
       routesSource.indexOf('router.get("/spaces/:id/scheduled-sends"'),
     );
 
-    expect(conflictHelper).toContain(
-      'eq(spaceScheduledSendsTable.status, "PENDING")',
-    );
-    expect(conflictHelper).toContain(
-      'eq(spaceLettersTable.letterType, "CENTER")',
-    );
-    expect(conflictHelper).toContain(
-      "eq(spaceLettersTable.authorId, letter.authorId)",
-    );
-    expect(conflictHelper).toContain(
-      "eq(spaceLettersTable.spaceRoundId, letter.spaceRoundId)",
-    );
     expect(patchRoute).toContain("pg_advisory_xact_lock");
     expect(patchRoute).toContain("SELECT id FROM space_round_slots");
+    expect(routesSource).toContain("eq(spaceScheduledSendsTable.slotId, input.slotId)");
+    expect(routesSource).toContain(
+      "eq(spaceScheduledSendsTable.reservedDate, input.reservedDate)",
+    );
     expect(patchRoute).toContain(
       "validateCenterSlotDate(\n          lockedLetter, normalizedScheduledAt ?? lockedSend.scheduledAt",
     );

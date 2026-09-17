@@ -2987,32 +2987,6 @@ async function findAssignedSlot(spaceRoundId: string, authorId: string, database
   return slot ?? null;
 }
 
-async function hasPendingCenterReservationConflict(
-  spaceId: string,
-  letter: { authorId: string; spaceRoundId: string | null },
-  exceptSendId?: string,
-): Promise<boolean> {
-  const conditions: SQL[] = [
-    eq(spaceScheduledSendsTable.spaceId, spaceId),
-    eq(spaceScheduledSendsTable.status, "PENDING"),
-    eq(spaceLettersTable.authorId, letter.authorId),
-    eq(spaceLettersTable.letterType, "CENTER"),
-    letter.spaceRoundId
-      ? eq(spaceLettersTable.spaceRoundId, letter.spaceRoundId)
-      : isNull(spaceLettersTable.spaceRoundId),
-  ];
-  if (exceptSendId) {
-    conditions.push(ne(spaceScheduledSendsTable.id, exceptSendId));
-  }
-  const [duplicate] = await db
-    .select({ id: spaceScheduledSendsTable.id })
-    .from(spaceScheduledSendsTable)
-    .innerJoin(spaceLettersTable, eq(spaceScheduledSendsTable.spaceLetterId, spaceLettersTable.id))
-    .where(and(...conditions))
-    .limit(1);
-  return !!duplicate;
-}
-
 /**
  * Validates that a CENTER-role reservation's requested date matches the
  * author's assigned slot date for that round. Returns an error message
@@ -3058,7 +3032,14 @@ async function validateCenterSlotDate(
 
 async function lockAndCheckPendingCenterReservation(
   tx: any,
-  input: { spaceId: string; roundId: string; authorId: string; exceptSendId?: string },
+  input: {
+    spaceId: string;
+    roundId: string;
+    authorId: string;
+    slotId: string;
+    reservedDate: string;
+    exceptSendId?: string;
+  },
 ): Promise<boolean> {
   // This remains the serialization guarantee when an old duplicate prevents
   // the optional partial unique index from being installed.
@@ -3070,6 +3051,8 @@ async function lockAndCheckPendingCenterReservation(
     eq(spaceScheduledSendsTable.status, "PENDING"),
     eq(spaceScheduledSendsTable.reservedRoundId, input.roundId),
     eq(spaceScheduledSendsTable.reservationAuthorId, input.authorId),
+    eq(spaceScheduledSendsTable.slotId, input.slotId),
+    eq(spaceScheduledSendsTable.reservedDate, input.reservedDate),
   ];
   if (input.exceptSendId) conditions.push(ne(spaceScheduledSendsTable.id, input.exceptSendId));
   const [existing] = await tx.select({ id: spaceScheduledSendsTable.id })
@@ -3291,6 +3274,8 @@ router.post("/spaces/:id/letters/:letterId/scheduled-sends", requireAuth, async 
         if (await lockAndCheckPendingCenterReservation(tx, {
           spaceId: String(req.params.id), roundId: reservationIdentity.reservedRoundId,
           authorId: reservationIdentity.reservationAuthorId,
+          slotId: resolvedSlotId,
+          reservedDate: reservationIdentity.reservedDate,
         })) {
           throw Object.assign(new Error("pending CENTER reservation conflict"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
         }
@@ -3496,6 +3481,8 @@ router.patch("/spaces/:id/letters/:letterId/scheduled-sends/:sendId", requireAut
           spaceId: String(req.params.id),
           roundId: lockedSend.reservedRoundId,
           authorId: lockedSend.reservationAuthorId,
+          slotId: lockedSend.slotId,
+          reservedDate: lockedSend.reservedDate!,
           exceptSendId: lockedSend.id,
         })) {
           throw Object.assign(new Error("pending CENTER reservation conflict"), { code: "23505", constraint: "space_scheduled_sends_pending_center_reservation_unique" });
