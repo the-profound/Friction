@@ -101,6 +101,7 @@ import { useScrollPressGuard } from "@/hooks/useScrollPressGuard";
 import { useDateGroupVerticalSnap } from "@/hooks/useDateGroupVerticalSnap";
 import { getDateGroupCarouselHeight } from "@/lib/dateGroupCarousel";
 import { useIsOnline } from "@/lib/useIsOnline";
+import { trackQuestionQueueEventOnce } from "@/lib/questionQueueAnalytics";
 import type { RecordKindIntent } from "@/types/navigation";
 const FILTER_BUTTON_HEIGHT = 36;
 const VIEW_BUTTON_SIZE = FILTER_BUTTON_HEIGHT;
@@ -411,6 +412,15 @@ function OnScreenContent() {
     seed: string;
     anchors: QuestionPlacementAnchors;
   } | null>(null);
+  const activeCardByDateKeyRef = useRef(new Map<string, CardRecord>());
+  const trackQuestionExposure = useCallback((record: CardRecord | undefined) => {
+    if (record?.kind === "thought" && record.isQuestion) {
+      void trackQuestionQueueEventOnce({
+        event: "question_queue_card_viewed",
+        questionId: record.id,
+      });
+    }
+  }, []);
   const closeOpenRecordRow = useCallback(() => {
     openRecordRowRef.current?.close();
     openRecordRowRef.current = null;
@@ -785,6 +795,9 @@ function OnScreenContent() {
         .filter((token) => token.isViewable && token.item)
         .map((token) => token.item!.dateKey),
     );
+    for (const dateKey of visibleCardGroupKeysRef.current) {
+      trackQuestionExposure(activeCardByDateKeyRef.current.get(dateKey));
+    }
     setCardFocus((current) =>
       current && visibleCardGroupKeysRef.current.has(current.dateKey)
         ? { ...current, outerVisible: true }
@@ -800,6 +813,9 @@ function OnScreenContent() {
         .filter((token) => token.isViewable && token.item)
         .map((token) => `${token.item!.kind}:${token.item!.id}`),
     );
+    for (const token of info.viewableItems) {
+      if (token.isViewable) trackQuestionExposure(token.item);
+    }
     if (!intent || intent.kind !== renderedKindRef.current) return;
     const targetVisible = info.viewableItems.some((token) =>
       token.isViewable
@@ -931,10 +947,18 @@ function OnScreenContent() {
         queryClient.cancelQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() }),
       ]);
       const result = await activateQuestion.mutateAsync({ id: thought.id });
+      void trackQuestionQueueEventOnce({
+        event: "question_queue_activated",
+        questionId: thought.id,
+      });
       setThoughtQuestionQueueCache(queryClient, result);
       upsertThoughtInRecordCaches(queryClient, result.activatedThought);
       router.push({ pathname: "/on-01a", params: { id: result.activatedThought.id } });
     } catch {
+      void trackQuestionQueueEventOnce({
+        event: "question_queue_activation_failed",
+        questionId: thought.id,
+      });
       restoreRecordListCaches(queryClient, cacheSnapshot);
       showToast({ message: "질문을 시작하지 못했습니다. 다시 시도해주세요.", type: "error" });
     } finally {
@@ -1214,6 +1238,12 @@ function OnScreenContent() {
                       resetKey={index === 0 ? `${cardMixSeed}:${recordResetVersion}${queuedQuestionRecords.length > 0 ? ":q" : ""}` : cardMixSeed}
                       focusItemKey={cardFocus?.dateKey === item.dateKey ? cardFocus.itemKey : undefined}
                       onFocusItemApplied={handleCardFocusApplied}
+                      onActiveItemChange={(record) => {
+                        activeCardByDateKeyRef.current.set(item.dateKey, record);
+                        if (visibleCardGroupKeysRef.current.has(item.dateKey)) {
+                          trackQuestionExposure(record);
+                        }
+                      }}
                       renderCard={(record, context) => renderRecordCard(record, context.shouldIgnorePress, context.measureOrigin, cardHeight)}
                       shouldIgnoreVerticalPress={scrollPressGuard.shouldIgnoreVerticalPress}
                     />

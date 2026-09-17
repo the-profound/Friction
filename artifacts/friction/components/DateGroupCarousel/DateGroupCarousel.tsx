@@ -44,6 +44,7 @@ interface DateGroupCarouselProps<T> {
   resetKey?: string | number;
   focusItemKey?: string;
   onFocusItemApplied?: (itemKey: string) => void;
+  onActiveItemChange?: (item: T) => void;
   renderCard: (item: T, context: DateGroupCarouselItemContext) => React.ReactNode;
   shouldIgnoreVerticalPress?: () => boolean;
 }
@@ -65,6 +66,7 @@ export function DateGroupCarousel<T>({
   resetKey,
   focusItemKey,
   onFocusItemApplied,
+  onActiveItemChange,
   renderCard,
   shouldIgnoreVerticalPress,
 }: DateGroupCarouselProps<T>) {
@@ -194,6 +196,11 @@ export function DateGroupCarousel<T>({
   const clearNativeSwipe = useCallback(() => {
     setTimeout(() => { swipedRef.current = false; }, 100);
   }, []);
+
+  useEffect(() => {
+    const activeItem = items[activeIndex];
+    if (activeItem) onActiveItemChange?.(activeItem);
+  }, [activeIndex, items, onActiveItemChange]);
 
   const slots = items.map((item, index) => {
     const key = itemKeys[index];

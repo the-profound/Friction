@@ -1,8 +1,8 @@
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 - [Friction app testing](friction-app-testing.md) — (tabs) routes are blank when logged out; preview is Supabase-auth-gated, seeded users cannot log in.
 - [Expo notifications foreground handler](friction-expo-notifications-foreground-handler.md) — no `setNotificationHandler` means foreground pushes are silently suppressed; a plausible-looking plugin option (`iosDisplayInForeground`) may not even exist in the installed version.
 - [Friction record card gesture handoff](friction-record-card-gesture.md) — web scroll handoff can emit a trailing card press; combine local movement and parent-scroll guards.
 - [Friction dev workflow](friction-dev-workflow.md) — openapi.yaml is SSOT (run codegen); api-server has no hot-reload (restart workflow); types need `tsc --build` but runtime bundles src; known baseline tsc errors.
-- [api-zod enum barrel gap](friction-api-zod-enum-barrel-gap.md) — generated enums (ServerFeature, ThoughtStatus, ...) export only as a TS type from `@workspace/api-zod`, never a runtime const; use string literals.
 - [Friction server version/feature gate](friction-server-version-feature-gate.md) — startup mismatch detection needs `SUPPORTED_SERVER_FEATURES` (server) and `REQUIRED_SERVER_FEATURES` (client) kept in sync by hand.
 - [Friction reader page-turn](friction-reader-pager.md) — WebViews ignore RN zIndex when overlapping; use side-by-side pager. Reader padding token is shared SSOT across 4 screens (pagination coupling, no scroll).
 - [Friction reading-memo WebView editor](friction-reader-memo-webview.md) — reading-mode memo uses same WebView TipTap engine as 기록 tab (Eulyoo1945 has no italic/bold face); page-turn is button-driven flip, not gesture.
@@ -26,7 +26,6 @@
 - [Friction AI question generation](friction-ai-question-generation.md) — orval query hooks need explicit `queryKey` in options when passing `enabled`, or tsc errors; low-signal article content legitimately fails LLM validation and falls back — not a bug.
 - [Friction question queue source bounds](friction-question-queue-source-bounds.md) — exclude already-used sources before applying the bounded candidate window, or an old usable backlog can starve.
 - [Friction photo-must-be-standalone-page](friction-photo-standalone-page.md) — reuse existing autoSplitImages (idempotent) for insert-time isolation instead of a new mechanism; fixed doc-end trailing-fallback edge case.
-- [Drizzle sql import in lib/db](friction-drizzle-sql-import.md) — `sql` tag must come from `drizzle-orm`, not `drizzle-orm/pg-core`; esbuild errors on the wrong import path.
 - [Native pill stretch](friction-native-pill-stretch.md) — flex guards (alignSelf/alignItems flex-start) failed to stop capsule buttons stretching vertically on native; only explicit fixed height on every layer works.
 - [RN border + overflow:hidden](friction-toolbar-border-overflow.md) — borderWidth on a view with overflow:"hidden" gets clipped and can hide inner icons; drop overflow:hidden for outline-style buttons.
 - [Dansang sheet snap semantics](friction-dansang-sheet-snaps.md) — "full" snap = maxPanelHeight (notch), not default 58% height; check snap targets are visually distinct before debugging gestures.
@@ -34,7 +33,7 @@
 - [Dansang scale translateY formula](friction-dansang-scale-translatey.md) — center-placed card scale: t = -s*frameHeight/2 aligns bottom to sheet top; -(1-s)*h/2 (top-anchor only) leaves bottom overlapping sheet.
 - [RN hidden-component state leak](rn-hidden-component-state-leak.md) — `return null` when hidden still keeps hook state; reset transient edit/swipe state on open, close, and key-prop change — and guard submit handler.
 - [Friction calendar grid consolidation](friction-calendar-grid-consolidation.md) — garbled date grid = mass per-cell Reanimated mount; use shared CalendarGrid/CollapsibleDatePicker, never duplicate grid code.
-- [Friction card hero transition](friction-card-hero-transition.md) — feed CardSelectOverlay a transform-shrunk canonical card; keep source-card hiding/reveal on both open AND close symmetric with Modal visibility, never reversed.
+- [Friction card hero transition](friction-card-hero-transition.md) — feed CardSelectOverlay a transform-shrunk canonical card, never a native small cardWidth; keep source-card hiding, delay open spring past paint.
 - [Selection overlay scroll restoration](friction-selection-scroll-restoration.md) — native lists can self-adjust after modal source restoration; snapshot, lock, restore-on-close only, and session-gate delayed correction.
 - [Friction cover shadow ownership](friction-cover-shadow-ownership.md) — A cover's own surface carries its background and shadow; never render an opaque same-sized shadow card behind it.
 - [Pager slot instance preservation](rn-pager-slot-instance-preservation.md) — keyed arrays preserve moves, not evictions; state that must outlive a finite pager window belongs above it.
@@ -45,12 +44,10 @@
 - [React Query peer-instance alignment](friction-react-query-peer-alignment.md) — pnpm peer variants can split context even at one package version; align React peers to the Expo app.
 - [Friction KST date SSOT](friction-kst-date-ssot.md) — all "today"/06:00-cutoff/send-time math must use lib/kstDate.ts helpers (calendar Dates are local-midnight; send instants are KST 06:00), never raw new Date()/setHours.
 - [Friction drizzle-kit push migration history](friction-drizzle-push-migration-history.md) — a `_journal.json` gap doesn't prove live DB drift; verify against `SUPABASE_DB_URL` directly before assuming a 500 is a schema mismatch.
-- [RN Web Text with null sibling](friction-text-null-sibling-web.md) — a `<Text>` with a `null` or bare-string sibling next to `<Text>` children can render fully blank on web only; wrap every child in `<Text>`.
 - [Friction space-round draft data flow](friction-space-round-draft.md) — SpaceRound rows exist from space creation onward (title/description nullable); "draft" = current DB rows, not local-only UI state — seed local state from them, don't reintroduce blank defaults.
 - [Friction signup auto-confirm auth race](friction-signup-auth-race.md) — Supabase auto-confirm fires onAuthStateChange mid-signUp(), before profile sync runs; suppress session propagation until sync completes.
 - [Per-round letter scoping](friction-per-round-letter-scoping.md) — making a SpaceLetter type "one per round" touches 5 call sites (reuse match, dup-check, POST+PATCH date validation, cancel scope, frontend eligibility); fix all or the constraint half-holds.
 - [Space slot scheduledDate backfill](friction-space-slot-date-backfill.md) — reuse the exported `calculateOccasionDate`, reconstruct the same global occasion cursor (advance by total slots, not just NULLs) or later dates drift.
-- [RN Web Switch thumbColor override](rn-web-switch-thumbcolor-override.md) — web Switch forces teal #009688 active thumb and ignores thumbColor (track still obeys); use the shared custom Toggle.
 - [Drizzle pg error codes & shared Supabase DB](friction-drizzle-error-code-and-shared-db.md) — catch `err.cause.code` not `err.code`; a new index can vanish mid-task when another concurrent task's merge re-syncs the shared Supabase schema.
 - [Friction startup crash diagnostics](friction-startup-crash-diagnostics.md) — ASC crash-log API doesn't add the JS exception reason; capture it yourself via ErrorUtils + sync expo-file-system write from index.js before RCTFatal aborts.
 - [Friction dev-tunnel API domain](friction-dev-tunnel-api-domain.md) — EXPO_PUBLIC_DOMAIN must be the deployed API (friction-1.replit.app), never the ngrok domain; ngrok only tunnels Metro.
@@ -90,7 +87,6 @@
 - [Native editor typography generations](native-editor-typography-generations.md) — apply width/font metrics before editable DOM creation; reject older generations after rotation or reload.
 - [Mutation-window query retirement](mutation-window-query-retirement.md) — cancel list queries both before mutation and after its response, before synchronous cache writes.
 - [Focus-effect query recovery](focus-effect-query-recovery.md) — never make a focused effect depend on fetching flags when it starts refetches; read volatile query state through refs.
-- [React Native cursor color limits](react-native-cursor-color-limits.md) — RN 0.86 cannot independently tint an iOS TextInput caret while preserving selection handles.
 - [Atomic account deletion](friction-atomic-account-deletion.md) — app rows and auth.users delete in one DB transaction; detach cross-user provenance and converge lost-response retries to logout.
 - [Create retry generations](create-retry-generations.md) — response-loss retries that reuse a client ID must durably persist a monotonic generation beside that ID.
 - [FlatList async row data](flatlist-async-row-data.md) — external async maps need renderItem deps plus extraData, or visible rows can keep the first empty snapshot.
@@ -103,7 +99,6 @@
 - [Friction 404 classification](friction-404-classification.md) — a genuine domain 404 has a structured JSON body; an unmatched Express route returns plain-text/HTML — use body shape, not just status, to tell them apart.
 - [Friction question-queue activation signal](friction-question-queue-activation-signal.md) — createdFrom:"question" + status:"PRELIMINARY" reliably means "still queued, unactivated" from one GET; no extra queue query needed.
 - [PostgreSQL advisory lock barriers](postgres-advisory-lock-barrier.md) — order concurrent integration requests by observing exact `pg_locks` waiters before releasing a transaction-scoped lock.
-- [Friction large-screen test convention](friction-large-screen-test-convention.md) — on-01a.tsx/on.tsx-scale screens have no render harness; regression tests assert on raw source text instead.
 - [WebViewMarkdownEditor hideTitle flash](friction-editor-init-flash-hidetitle.md) — bake hideTitle into initial WebView HTML/CSS (frozen at mount), not a postMessage round-trip; every hideTitle-changing flow already fully remounts via router.replace.
 - [Friction Markdown emphasis boundaries](friction-markdown-emphasis-boundaries.md) — normalize only flanking escapes around emphasis markers before web/native editor or reader reinjection.
 - [Friction offline-first React Query persistence](friction-offline-query-persistence.md) — queryKey[0] exact-path allowlist for disk cache; NetInfo→onlineManager wiring; persist-client version pin; cold-start gate design.
@@ -121,11 +116,10 @@
 - [Friction web preview font-boot hang](friction-web-preview-font-boot-hang.md) — every route can show only the boot spinner forever due to a pre-existing NotoSerifKR asset path error; don't assume your change broke it, and Screenshot retries/sleeps between calls don't help since each is a fresh page load.
 - [Overlay info-bar navigation slots](friction-overlay-info-bar-nav-slots.md) — author/collection/space links in CardSelectOverlay share one id+currentXId+canTapX pattern; extend it, don't invent a new mechanism.
 - [Reanimated/legacy Animated bridging](friction-reanimated-legacy-animated-bridging.md) — partial Reanimated migrations must nest views (never combine value systems directly) when a property composes a shared value with a legacy Animated.Value.
-- [Source-text test corruption discovery](friction-source-text-test-corruption.md) — a missing describe/it wrapper can silently break parsing of an entire large source-text regression file; grep broadly for literal-assertion couplings across the whole test suite before large refactors, not just the named test file.
 - [PanResponder → Gesture.Pan port checklist](friction-panresponder-to-gesture-handler-port.md) — velocity unit conversion, spring config mapping, dead-code shouldSet detection, onFinalize success-gating, ScrollView/Pressable interop offsets.
 - [Sheet-to-page conversion pattern](friction-sheet-to-page-conversion.md) — derive origin-screen state from the query cache, move mutation plumbing to the new page, await save-flush before back-nav, use a subscribable singleton for cross-screen flags.
-- [Source-text test substring fragility](friction-source-text-test-substring-fragility.md) — bare-word `not.toContain("visible"/"dim"/"BottomSheet")` false-fails on comments; assert the syntactic shape instead.
 - [SwipeableRow shadow-clip vs horizontal-clip](friction-swipeablerow-shadow-clip.md) — reserve vertical room via padding-in/negative-margin-out on both clip layers so shadows bleed without flattening; horizontal clip must stay untouched.
+- [Space list recent-letters cache key wiring](friction-space-recent-letters-cache-key-wiring.md) — of.tsx's longer query key correctly prefix-matches the schedule screen's shorter invalidation key; verified no bug there for cancelled-reservation letters.
 - [Question-queue lazy expiry ordering](friction-question-queue-lazy-expiry.md) — age-based expiry is its own step between cleanup and trim; refresh/activate's AI fill is synchronous (in the response), unlike GET's background fill.
 - [CanonicalCardSlot press-scale unification](friction-canonical-slot-press-unify.md) — outer clip box and content must share one transform/shared-value during a press, never scale independently; cover must clip its own corners, not trust the image's.
 - [Friction spell-check apply confirmation](friction-spell-apply-confirmation.md) — spellFindRange searches rendered plain text but API context keeps raw Markdown symbols; make risky WebView commands a bridge.request/respond round trip, not fire-and-forget.
@@ -146,8 +140,6 @@
 - [One-time forced-redirect guard](friction-one-time-forced-redirect-guard.md) — flip the "done" ref on the hydration signal, not the redirect outcome, or a later real nav to the same route gets falsely bounced.
 - [Friction tab prefetch warm-up](friction-tab-prefetch-warmup.md) — reuse each screen's exact queryKey+fetcher; an optional "test-only" id prop can be truthy in every real session too — verify call sites before trusting it as a gate.
 - [Friction cover-photo commit](friction-cover-photo-commit.md) — a verified cover image and article cover must commit as one outcome; retries freeze the staged generation and presentation snapshot.
-- [Decoding drizzle sql`` in test mocks](friction-drizzle-sql-mock-decoding.md) — walk queryChunks (SQL/StringChunk/param) recursively instead of PgDialect in vi.hoisted, which throws a TDZ ReferenceError.
-- [Manual drizzle-kit push pty driving](drizzle-push-manual-pty-driving.md) — pull-schema step timing varies a lot; drive prompts via a pty + content-based state machine, not fixed delays.
 - [Claim ledger durable retry state](claim-ledger-durable-retry-state.md) — needs discoverable retry state (lockedAt), lease fencing on confirm/release, and a monotonic (not live-COUNT) progress cursor — all three, or it breaks under concurrency/crashes/deletion.
 - [Reading progress save ordering](friction-reading-progress-save-ordering.md) — lifecycle flushes need hydration gating, gesture cancellation, and server-enforced revision ordering.
 - [iOS writing suspension dedupe](friction-ios-writing-suspension-dedupe.md) — blur may precede AppState by a turn; dedupe pending and already-emitted flushes, then reset on focus/resume.
@@ -155,6 +147,4 @@
 - [ProseMirror default scroll authority](friction-prosemirror-default-scroll-authority.md) — a rich-text engine's own default caret-follow scroll can override app-level correction unless unified via its official override hook.
 - [Bounded autosave persistence queues](friction-bounded-autosave-queues.md) — coalesce only not-yet-started dirty snapshots; deletion and transition writes remain strict durability barriers.
 - [CardSelectOverlay meta label overload](friction-letter-overlay-meta-label-overload.md) — `collectionName` is one shared label routed by whichever of `collectionId`/`spaceId` accompanies it; put a Space name there with `spaceId` set, not `collectionId`.
-- [Reading analytics session identity](friction-reading-analytics-session.md) — persist funnel session IDs and use deterministic event IDs so restore/retry cannot duplicate or corrupt events.
-- [send-records API authorization gap](friction-send-records-api-authz-gap.md) — GET /send-records is unauthenticated, keyed only by senderId; recipient-only flags need server-side enforcement, not just client-side filtering.
-- [Multi-step sheet back navigation](friction-multistep-sheet-back-nav.md) — build "choose A then B" as one sheet with step-switched body content; don't compose two separate reusable modal components.
+- [PostHog durable event deduplication](posthog-durable-event-deduplication.md) — lifecycle events need a privacy-safe pending outbox plus deterministic `$insert_id`, not only a local sent flag.

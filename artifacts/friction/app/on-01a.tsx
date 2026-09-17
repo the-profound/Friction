@@ -150,6 +150,10 @@ import {
 } from "@/lib/readingMemoToolbar";
 import { resolveFloatingChromeOffset } from "@/lib/floatingChromeOffset";
 import {
+  getQuestionAnswerLength,
+  trackQuestionQueueEventOnce,
+} from "@/lib/questionQueueAnalytics";
+import {
   trackDraftSaved,
   trackWritingStarted,
 } from "@/lib/analytics";
@@ -482,6 +486,8 @@ export default function WritingScreen() {
   const articleContentRef = useRef("");
   // 마지막으로 서버에서 본 content. 사용자 편집 발생 여부 감지에 사용.
   const serverContentRef = useRef("");
+  const questionInitialMarkdownRef = useRef<string | null>(null);
+  const questionAnswerStartedRef = useRef(false);
   const isNavigatingRef = useRef(false);
   const pendingReverseSnapshotRef = useRef<{
     articleId: string;
@@ -622,6 +628,12 @@ export default function WritingScreen() {
       const c = activeContent;
       const t = activeTitle;
       serverContentRef.current = c;
+      if (
+        thought?.createdFrom === "question"
+        && questionInitialMarkdownRef.current === null
+      ) {
+        questionInitialMarkdownRef.current = c;
+      }
       setTitle(t);
       titleRef.current = t;
       contentRef.current = c;
@@ -969,10 +981,34 @@ export default function WritingScreen() {
         // Only the exact payload that was POSTed is already durable. Clear
         // the sentinel immediately so A → B → A still PATCHes the final A.
         if (createdContent !== data.content) {
-          const savedThought = await updateThought.mutateAsync({
-            id: thoughtId,
-            data: { content: data.content },
-          });
+          let savedThought: Thought;
+          try {
+            savedThought = await updateThought.mutateAsync({
+              id: thoughtId,
+              data: { content: data.content },
+            });
+          } catch (error) {
+            if (questionInitialMarkdownRef.current !== null) {
+              void trackQuestionQueueEventOnce({
+                event: "question_queue_answer_save_failed",
+                questionId: thoughtId,
+              });
+            }
+            throw error;
+          }
+          if (
+            savedThought.createdFrom === "question"
+            && questionInitialMarkdownRef.current !== null
+          ) {
+            void trackQuestionQueueEventOnce({
+              event: "question_queue_answer_save_succeeded",
+              questionId: thoughtId,
+              answerLength: getQuestionAnswerLength(
+                questionInitialMarkdownRef.current,
+                savedThought.content,
+              ),
+            });
+          }
           queryClient.setQueryData(
             getGetThoughtQueryKey(thoughtId),
             savedThought,
@@ -1157,6 +1193,18 @@ export default function WritingScreen() {
         }
       }
       md = removeUnpersistableInlineImages(md);
+      if (
+        questionInitialMarkdownRef.current !== null
+        && thoughtIdRef.current
+        && !questionAnswerStartedRef.current
+        && md.trim() !== questionInitialMarkdownRef.current.trim()
+      ) {
+        questionAnswerStartedRef.current = true;
+        void trackQuestionQueueEventOnce({
+          event: "question_queue_answer_started",
+          questionId: thoughtIdRef.current,
+        });
+      }
       const documentSnapshot = isThoughtModeRef.current
         ? createThoughtDocumentSnapshot(md, {
             docVersion: lastSeenDocVersionRef.current,
@@ -1199,6 +1247,24 @@ export default function WritingScreen() {
   const handleEditorChange = useCallback(
     (_payload: OnChangePayload) => {
       if (!_payload.isDirty) return;
+      if (
+        questionInitialMarkdownRef.current !== null
+        && thoughtIdRef.current
+        && !questionAnswerStartedRef.current
+        && (
+          !serverInjectionPendingRef.current
+          || (
+            _payload.markdown !== undefined
+            && _payload.markdown.trim() !== questionInitialMarkdownRef.current.trim()
+          )
+        )
+      ) {
+        questionAnswerStartedRef.current = true;
+        void trackQuestionQueueEventOnce({
+          event: "question_queue_answer_started",
+          questionId: thoughtIdRef.current,
+        });
+      }
       shouldFocusInitialH1Ref.current = false;
 
       if (_payload.markdown !== undefined) {
@@ -3161,6 +3227,11 @@ export default function WritingScreen() {
             queryClient.cancelQueries({ queryKey: getGetThoughtQuestionQueueQueryKey() }),
           ]);
           const result = await activateThoughtQuestion.mutateAsync({ id });
+          questionInitialMarkdownRef.current = result.activatedThought.content;
+          void trackQuestionQueueEventOnce({
+            event: "question_queue_activated",
+            questionId: id,
+          });
           setThoughtQuestionQueueCache(queryClient, result);
           upsertThoughtInRecordCaches(queryClient, result.activatedThought);
           queryClient.setQueryData(getGetThoughtQueryKey(id), result.activatedThought);
@@ -3171,6 +3242,10 @@ export default function WritingScreen() {
 
           if (isConfirmedGoneError(error)) {
             isRunningQuestionActivationRef.current = false;
+            void trackQuestionQueueEventOnce({
+              event: "question_queue_activation_failed",
+              questionId: id,
+            });
             showToast({ message: "이미 사라진 질문이에요. 목록으로 돌아갈게요.", type: "error" });
             if (returnSessionRef.current.begin()) {
               exitToPreviousList();
@@ -3190,6 +3265,10 @@ export default function WritingScreen() {
           isRunningQuestionActivationRef.current = false;
           questionActivationRef.current = null;
           setQuestionActivationFailed(true);
+          void trackQuestionQueueEventOnce({
+            event: "question_queue_activation_failed",
+            questionId: id,
+          });
           return;
         }
       }
