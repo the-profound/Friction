@@ -2,29 +2,36 @@ import PostHog from "posthog-react-native";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { getLastRequestId } from "@workspace/api-client-react";
+import {
+  captureAndFlushDeliveryProbe,
+  createPostHogDiagnostics,
+  initializePostHogClient,
+} from "./posthogDiagnostics";
 
 export { PostHogProvider } from "posthog-react-native";
 
 const token = process.env.EXPO_PUBLIC_POSTHOG_TOKEN ?? "";
 const host = process.env.EXPO_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
+const releaseDiagnostics = Constants.expoConfig?.extra?.releaseDiagnostics;
+const diagnostics = createPostHogDiagnostics({
+  host: releaseDiagnostics?.posthogHost ?? null,
+  tokenFingerprint: releaseDiagnostics?.posthogTokenFingerprint ?? null,
+});
 
-export let posthog: PostHog | null = null;
-
-if (token) {
-  // Guard: PostHog constructor touches native modules (lifecycle observers, device info)
-  // via TurboModule. If that call throws (e.g. on iOS 26 with enhanced PAC memory
-  // protection), we catch it here so the rest of app startup is unaffected.
-  try {
-    posthog = new PostHog(token, {
+// Guard: PostHog construction touches native modules. The factory classifies
+// failure without allowing analytics to interrupt application startup.
+export const posthog: PostHog | null = initializePostHogClient({
+  token,
+  create: (apiToken) =>
+    new PostHog(apiToken, {
       host,
       captureAppLifecycleEvents: true,
-    });
-  } catch (err) {
-    console.warn("[PostHog] Initialization failed — analytics disabled for this session:", err);
-    posthog = null;
-  }
-} else if (__DEV__) {
-  console.warn("[PostHog] EXPO_PUBLIC_POSTHOG_TOKEN is not set. Analytics disabled.");
+    }),
+  report: diagnostics.report,
+});
+
+if (posthog && Platform.OS !== "web") {
+  void diagnostics.probeConnectivity(fetch);
 }
 
 function runPostHogOperation(operation: (client: PostHog) => unknown): void {
@@ -50,6 +57,23 @@ export function identifyPostHogUser(userId: string): void {
 
 export function resetPostHogUser(): void {
   runPostHogOperation((client) => client.reset());
+}
+
+export function runPostHogDeliveryProbe(): void {
+  if (!posthog) return;
+  try {
+    void captureAndFlushDeliveryProbe({
+        client: posthog,
+        properties: {
+          release_track: releaseDiagnostics?.track ?? "development",
+          configuration_fingerprint: releaseDiagnostics?.configurationFingerprint ?? null,
+        },
+        flush: diagnostics.flush,
+      })
+      .catch(() => diagnostics.report("flush_failure"));
+  } catch {
+    diagnostics.report("flush_failure");
+  }
 }
 
 export interface PostHogIdentitySnapshot {

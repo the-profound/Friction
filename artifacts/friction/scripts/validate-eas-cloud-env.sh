@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROFILE="${1:?Usage: validate-eas-cloud-env.sh <preview|test>}"
-if [[ "$PROFILE" != "preview" && "$PROFILE" != "test" ]]; then
-  echo "Only preview and test release tracks require Cloud environment validation."
+PROFILE="${1:?Usage: validate-eas-cloud-env.sh <development|preview|test>}"
+if [[ "$PROFILE" != "development" && "$PROFILE" != "preview" && "$PROFILE" != "test" ]]; then
+  echo "Only configured EAS build profiles can be validated."
   exit 1
 fi
 CLOUD_ENV="$PROFILE"
@@ -33,6 +33,8 @@ echo "🔎 EAS Cloud ${CLOUD_ENV} 환경을 ${PROFILE} 프로필의 ${RELEASE_TR
     -u EXPO_PUBLIC_SUPABASE_URL \
     -u EXPO_PUBLIC_SUPABASE_ANON_KEY \
     -u EXPO_PUBLIC_DOMAIN \
+    -u EXPO_PUBLIC_POSTHOG_TOKEN \
+    -u EXPO_PUBLIC_POSTHOG_HOST \
     -u APP_RELEASE_TRACK \
     -u EAS_BUILD_PROFILE \
     -u RELEASE_CONFIG_EXPECTED_FINGERPRINT \

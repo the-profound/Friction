@@ -22,6 +22,7 @@
       }
     },
     "preview": {
+      "environment": "preview",
       "env": {
         "APP_RELEASE_TRACK": "preview"
       },
@@ -37,6 +38,7 @@
       }
     },
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "env": {
         "APP_VARIANT": "development",

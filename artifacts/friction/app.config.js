@@ -57,6 +57,8 @@ function buildReleaseDiagnostics() {
   const supabaseHost = parseReleaseHostname(process.env.EXPO_PUBLIC_SUPABASE_URL);
   const apiHost = parseReleaseHostname(process.env.EXPO_PUBLIC_DOMAIN, true);
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const posthogHost = parseReleaseHostname(process.env.EXPO_PUBLIC_POSTHOG_HOST);
+  const posthogToken = process.env.EXPO_PUBLIC_POSTHOG_TOKEN?.trim();
   const anonKeyFingerprint =
     anonKey &&
     !["placeholder", "placeholder-anon-key", "configuration-invalid", "undefined", "null"].includes(
@@ -64,10 +66,17 @@ function buildReleaseDiagnostics() {
     )
       ? releaseFingerprint(anonKey)
       : null;
+  const posthogTokenFingerprint =
+    posthogToken &&
+    !["placeholder", "configuration-invalid", "undefined", "null"].includes(
+      posthogToken.toLowerCase(),
+    )
+      ? releaseFingerprint(posthogToken)
+      : null;
   const configurationFingerprint =
-    supabaseHost && apiHost && anonKeyFingerprint
+    supabaseHost && apiHost && anonKeyFingerprint && posthogHost && posthogTokenFingerprint
       ? releaseFingerprint(
-          `${releaseTrack}|${supabaseHost}|${apiHost}|${anonKeyFingerprint}`,
+          `${releaseTrack}|${supabaseHost}|${apiHost}|${anonKeyFingerprint}|${posthogHost}|${posthogTokenFingerprint}`,
         )
       : null;
 
@@ -75,13 +84,15 @@ function buildReleaseDiagnostics() {
     track: releaseTrack,
     supabaseHost,
     apiHost,
+    posthogHost,
+    posthogTokenFingerprint,
     configurationFingerprint,
   };
 }
 
 function validateEasReleaseEnvironment() {
   const profile = process.env.EAS_BUILD_PROFILE;
-  if (profile !== "preview" && profile !== "test") return;
+  if (!["development", "preview", "test"].includes(profile)) return;
   const expectedTrack = profile === "test" ? "production" : profile;
   if (process.env.APP_RELEASE_TRACK !== expectedTrack) {
     throw new Error(
@@ -93,12 +104,15 @@ function validateEasReleaseEnvironment() {
     "EXPO_PUBLIC_SUPABASE_URL",
     "EXPO_PUBLIC_SUPABASE_ANON_KEY",
     "EXPO_PUBLIC_DOMAIN",
+    "EXPO_PUBLIC_POSTHOG_TOKEN",
+    "EXPO_PUBLIC_POSTHOG_HOST",
   ].filter((name) => {
     const value = process.env[name]?.trim().toLowerCase() ?? "";
     return (
       value === "" ||
       value === "placeholder" ||
       value === "placeholder-anon-key" ||
+      value === "configuration-invalid" ||
       value === "undefined" ||
       value === "null"
     );
@@ -142,6 +156,10 @@ function validateEasReleaseEnvironment() {
     }
   } catch {
     missing.push("EXPO_PUBLIC_DOMAIN");
+  }
+
+  if (!parseReleaseHostname(process.env.EXPO_PUBLIC_POSTHOG_HOST)) {
+    missing.push("EXPO_PUBLIC_POSTHOG_HOST");
   }
 
   if (missing.length > 0) {

@@ -31,6 +31,8 @@ run_missing_value_case() {
     EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
     EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
     EXPO_PUBLIC_DOMAIN="release-test.example" \
+    EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token" \
+    EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com" \
     env -u "$missing_name" \
     bash "$SCRIPT_DIR/$script_name" > "$output" 2>&1
   local status=$?
@@ -54,10 +56,28 @@ run_missing_value_case() {
 }
 
 for script_name in publish-test.sh publish-ios.sh publish-preview.sh publish-android.sh; do
-  for variable in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_DOMAIN; do
+  for variable in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_DOMAIN EXPO_PUBLIC_POSTHOG_TOKEN EXPO_PUBLIC_POSTHOG_HOST; do
     run_missing_value_case "$script_name" "$variable"
   done
 done
+
+INVALID_POSTHOG_OUTPUT="$TMP_DIR/invalid-posthog.log"
+if EAS_BUILD_PROFILE=test \
+  APP_RELEASE_TRACK=production \
+  EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+  EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+  EXPO_PUBLIC_DOMAIN="release-test.example" \
+  EXPO_PUBLIC_POSTHOG_TOKEN="phc_must_not_appear_in_output" \
+  EXPO_PUBLIC_POSTHOG_HOST="http://insecure.posthog.example" \
+  node "$SCRIPT_DIR/validate-release-env.mjs" > "$INVALID_POSTHOG_OUTPUT" 2>&1; then
+  echo "Expected insecure PostHog host to be rejected." >&2
+  exit 1
+fi
+grep -q "EXPO_PUBLIC_POSTHOG_HOST" "$INVALID_POSTHOG_OUTPUT"
+if grep -q "phc_must_not_appear_in_output" "$INVALID_POSTHOG_OUTPUT"; then
+  echo "Release validation exposed the PostHog token." >&2
+  exit 1
+fi
 
 node - "$SCRIPT_DIR/../eas.json" <<'NODE'
 const fs = require("node:fs");
@@ -77,7 +97,9 @@ if (eas.build?.production || eas.build?.["android-test"] || eas.submit?.producti
 }
 if (
   eas.build?.preview?.env?.APP_RELEASE_TRACK !== "preview" ||
+  eas.build?.preview?.environment !== "preview" ||
   eas.build?.development?.env?.APP_RELEASE_TRACK !== "development" ||
+  eas.build?.development?.environment !== "development" ||
   eas.build?.development?.developmentClient !== true
 ) {
   throw new Error("Preview or development profile behavior changed.");
@@ -103,6 +125,8 @@ if [[ "$1" == "env:exec" ]]; then
   export EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co"
   export EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key"
   export EXPO_PUBLIC_DOMAIN="release-test.example"
+  export EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token"
+  export EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com"
   eval "$3"
 elif [[ "$1" == "build" ]]; then
   platform=""
@@ -160,6 +184,8 @@ run_publish_case() {
     EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
     EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
     EXPO_PUBLIC_DOMAIN="release-test.example" \
+    EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token" \
+    EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com" \
     bash "$SCRIPT_DIR/publish-test.sh" > "$output" 2>&1
   local status=$?
   set -e
@@ -209,8 +235,60 @@ grep -q '\[Android 경로\] APK 빌드 및 결과 확인 성공' "$TMP_DIR/publi
     EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
     EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
     EXPO_PUBLIC_DOMAIN="release-test.example" \
+    EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token" \
+    EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com" \
     node scripts/validate-resolved-release-config.mjs
 ) > "$TMP_DIR/resolved-test-config.log"
 grep -q 'track=production' "$TMP_DIR/resolved-test-config.log"
+
+(
+  cd "$SCRIPT_DIR/.."
+  EAS_BUILD_PROFILE=development \
+    APP_RELEASE_TRACK=development \
+    EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+    EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+    EXPO_PUBLIC_DOMAIN="release-test.example" \
+    EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token" \
+    EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com" \
+    node scripts/validate-resolved-release-config.mjs
+) > "$TMP_DIR/resolved-development-config.log"
+grep -q 'track=development' "$TMP_DIR/resolved-development-config.log"
+
+BUNDLE_DIR="$TMP_DIR/bundle-check"
+mkdir -p "$BUNDLE_DIR"
+cat > "$BUNDLE_DIR/main.jsbundle" <<'EOF'
+https://release-test.supabase.co release-test-anon-key release-test.example
+https://us.i.posthog.com phc_release_test_token
+EOF
+(
+  cd "$BUNDLE_DIR"
+  EAS_BUILD_PROFILE=test \
+    EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+    EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+    EXPO_PUBLIC_DOMAIN="release-test.example" \
+    EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token" \
+    EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com" \
+    node "$SCRIPT_DIR/validate-eas-bundle.mjs"
+) > "$TMP_DIR/bundle-success.log"
+grep -q "Validated release configuration" "$TMP_DIR/bundle-success.log"
+
+sed -i 's/phc_release_test_token/token-was-not-compiled/' "$BUNDLE_DIR/main.jsbundle"
+if (
+  cd "$BUNDLE_DIR"
+  EAS_BUILD_PROFILE=test \
+    EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+    EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+    EXPO_PUBLIC_DOMAIN="release-test.example" \
+    EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token" \
+    EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com" \
+    node "$SCRIPT_DIR/validate-eas-bundle.mjs"
+) > "$TMP_DIR/bundle-failure.log" 2>&1; then
+  echo "Expected bundle validation to reject a missing PostHog token." >&2
+  exit 1
+fi
+if grep -q "phc_release_test_token" "$TMP_DIR/bundle-failure.log"; then
+  echo "Bundle validation exposed the PostHog token." >&2
+  exit 1
+fi
 
 echo "Release publication guards validated parallel platform builds, isolated iOS submission, Android APK-only reporting, failure isolation, and missing-value rejection."

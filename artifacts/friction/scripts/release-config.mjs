@@ -19,6 +19,8 @@ export const RELEASE_REQUIRED_VARIABLES = [
   "EXPO_PUBLIC_SUPABASE_URL",
   "EXPO_PUBLIC_SUPABASE_ANON_KEY",
   "EXPO_PUBLIC_DOMAIN",
+  "EXPO_PUBLIC_POSTHOG_TOKEN",
+  "EXPO_PUBLIC_POSTHOG_HOST",
 ];
 
 function hash(value) {
@@ -85,17 +87,27 @@ export function buildReleaseConfigSummary(env = process.env, expectedTrack) {
   const supabaseUrl = parseReleaseUrl(env.EXPO_PUBLIC_SUPABASE_URL);
   const apiUrl = parseReleaseUrl(env.EXPO_PUBLIC_DOMAIN ?? "", { allowDomainOnly: true });
   const anonKey = env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+  const posthogToken = env.EXPO_PUBLIC_POSTHOG_TOKEN?.trim() ?? "";
+  const posthogUrl = parseReleaseUrl(env.EXPO_PUBLIC_POSTHOG_HOST ?? "");
 
   if (!supabaseUrl) issues.push("EXPO_PUBLIC_SUPABASE_URL");
   if (isInvalidValue(anonKey)) issues.push("EXPO_PUBLIC_SUPABASE_ANON_KEY");
   if (!apiUrl) issues.push("EXPO_PUBLIC_DOMAIN");
+  if (isInvalidValue(posthogToken)) issues.push("EXPO_PUBLIC_POSTHOG_TOKEN");
+  if (!posthogUrl) issues.push("EXPO_PUBLIC_POSTHOG_HOST");
 
   const supabaseHost = supabaseUrl?.hostname.toLowerCase() ?? null;
   const apiHost = apiUrl?.hostname.toLowerCase() ?? null;
   const anonKeyFingerprint = isInvalidValue(anonKey) ? null : hash(anonKey).slice(0, 16);
+  const posthogHost = posthogUrl?.hostname.toLowerCase() ?? null;
+  const posthogTokenFingerprint = isInvalidValue(posthogToken)
+    ? null
+    : hash(posthogToken).slice(0, 16);
   const configurationFingerprint =
-    supabaseHost && apiHost && anonKeyFingerprint
-      ? hash(`${track}|${supabaseHost}|${apiHost}|${anonKeyFingerprint}`).slice(0, 16)
+    supabaseHost && apiHost && anonKeyFingerprint && posthogHost && posthogTokenFingerprint
+      ? hash(
+          `${track}|${supabaseHost}|${apiHost}|${anonKeyFingerprint}|${posthogHost}|${posthogTokenFingerprint}`,
+        ).slice(0, 16)
       : null;
 
   return {
@@ -105,6 +117,8 @@ export function buildReleaseConfigSummary(env = process.env, expectedTrack) {
     supabaseHost,
     apiHost,
     anonKeyFingerprint,
+    posthogHost,
+    posthogTokenFingerprint,
     configurationFingerprint,
   };
 }

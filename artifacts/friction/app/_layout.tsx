@@ -24,7 +24,7 @@ import {
   setEditorFonts,
   setEditorFontsError,
 } from "@/lib/editorFontStore";
-import { posthog, PostHogProvider } from "@/lib/posthog";
+import { posthog, PostHogProvider, runPostHogDeliveryProbe } from "@/lib/posthog";
 import { trackAppOpen } from "@/lib/analytics";
 import { flushPendingQuestionQueueEvents } from "@/lib/questionQueueAnalytics";
 import { usePushNotifications } from "@/lib/usePushNotifications";
@@ -520,6 +520,7 @@ export default function RootLayout() {
       // posthog?.capture() is a TurboModule call; guard so analytics failure
       // never interrupts the startup render cycle.
       trackAppOpen();
+      runPostHogDeliveryProbe();
       void flushPendingQuestionQueueEvents();
     } catch (err) {
       console.warn("[analytics] trackAppOpen failed:", err);

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { buildReleaseConfigSummary, resolveReleaseTrack } from "./release-config.mjs";
 
 const profile = process.env.EAS_BUILD_PROFILE;
-if (profile !== "preview" && profile !== "test") {
+if (!["development", "preview", "test"].includes(profile)) {
   console.log("Skipping resolved Expo config validation for non-release profile.");
   process.exit(0);
 }
@@ -22,16 +22,25 @@ const rawConfig = execFileSync("pnpm", ["exec", "expo", "config", "--json"], {
 });
 const config = JSON.parse(rawConfig);
 const diagnostics = config.extra?.releaseDiagnostics;
-const expectedName = profile === "preview" ? "Friction Preview" : "Friction";
+const expectedName =
+  profile === "development"
+    ? "Friction Dev"
+    : profile === "preview"
+      ? "Friction Preview"
+      : "Friction";
+const expectedBundleIdentifier =
+  profile === "development" ? "com.theprofound.friction" : "friction.by.theprofound";
 
 if (
   config.name !== expectedName ||
-  config.ios?.bundleIdentifier !== "friction.by.theprofound" ||
-  config.android?.package !== "friction.by.theprofound" ||
+  config.ios?.bundleIdentifier !== expectedBundleIdentifier ||
+  config.android?.package !== expectedBundleIdentifier ||
   diagnostics?.track !== resolveReleaseTrack(process.env) ||
   diagnostics?.configurationFingerprint !== summary.configurationFingerprint ||
   diagnostics?.apiHost !== summary.apiHost ||
-  diagnostics?.supabaseHost !== summary.supabaseHost
+  diagnostics?.supabaseHost !== summary.supabaseHost ||
+  diagnostics?.posthogHost !== summary.posthogHost ||
+  diagnostics?.posthogTokenFingerprint !== summary.posthogTokenFingerprint
 ) {
   console.error(
     "Resolved Expo config does not match the expected release track or sanitized configuration fingerprint.",

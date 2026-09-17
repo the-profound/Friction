@@ -8,6 +8,8 @@ const expectedValues = [
   process.env.EXPO_PUBLIC_SUPABASE_URL,
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   process.env.EXPO_PUBLIC_DOMAIN,
+  process.env.EXPO_PUBLIC_POSTHOG_HOST,
+  process.env.EXPO_PUBLIC_POSTHOG_TOKEN,
 ].filter(Boolean);
 const bundleNames = new Set([
   "main.jsbundle",
@@ -35,12 +37,12 @@ async function findBundles(directory) {
   return bundles;
 }
 
-if (process.env.EAS_BUILD_PROFILE !== "preview" && process.env.EAS_BUILD_PROFILE !== "test") {
+if (!["development", "preview", "test"].includes(process.env.EAS_BUILD_PROFILE ?? "")) {
   console.log("Skipping EAS bundle validation for non-release profile.");
   process.exit(0);
 }
 
-if (expectedValues.length !== 3) {
+if (expectedValues.length !== 5) {
   console.error(
     "EAS release bundle validation cannot run because a required public value is missing.",
   );
@@ -58,7 +60,7 @@ for (const bundlePath of bundles) {
   const missing = expectedValues.some((value) => !contents.includes(value));
   if (missing) {
     console.error(
-      `EAS release bundle is missing validated Supabase/API configuration: ${path.relative(
+      `EAS release bundle is missing validated release configuration: ${path.relative(
         root,
         bundlePath,
       )}`,
@@ -68,5 +70,5 @@ for (const bundlePath of bundles) {
 }
 
 console.log(
-  `Validated Supabase/API configuration in ${bundles.length} EAS native bundle(s).`,
+  `Validated release configuration, including the PostHog host and expected public configuration, in ${bundles.length} EAS native bundle(s).`,
 );
