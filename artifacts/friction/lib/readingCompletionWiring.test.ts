@@ -79,6 +79,9 @@ describe("space letter inbox synchronization", () => {
       "utf8",
     );
     expect(rootLayout).toContain("entrySource: readingToRestore.entrySource");
+    expect(rootLayout).toContain(
+      "readingQuestionSessionId: readingToRestore.readingQuestionSessionId",
+    );
 
     const restoredSession = {
       userId: "current-user",
@@ -161,6 +164,8 @@ describe("in-screen reread reset wiring", () => {
     expect(handler).toContain("setIsInScreenReread(true)");
     expect(handler).toContain("reading.restartReading()");
     expect(handler).toContain("analyticsSessionIdRef.current = createAnalyticsSessionId()");
+    expect(handler).toContain("resetReadingQuestionSession(nextReadingQuestionSessionId)");
+    expect(handler).toContain("readingQuestionSessionId: nextReadingQuestionSessionId");
     expect(handler).toContain("hasTrackedReadingStartRef.current = false");
     expect(readScreen).toContain("onReread={handleRestartReading}");
   });
@@ -209,6 +214,25 @@ describe("reading funnel analytics wiring", () => {
 });
 
 describe("non-blocking completion save", () => {
+  it("tracks active question exposure, first input, and per-item save outcomes without content", () => {
+    expect(readScreen).toContain("visualPageRef.current !== totalPagesRef.current");
+    expect(readScreen).toContain("trackReadingQuestionSessionExposed");
+    expect(readScreen).toContain("trackReadingQuestionItemExposed");
+    expect(readScreen).toContain("trackReadingQuestionAnswerStarted");
+    expect(readScreen).toContain("saveReadingQuestionAnswers({");
+    expect(readScreen).toContain("clientId,");
+    expect(readScreen).toContain("readingQuestionSessionId: questionAnswerSessionKey");
+    expect(readScreen).toContain(
+      "mode, questionAnswerSessionKey, setActiveSession, userId",
+    );
+    expect(readScreen).toContain("params.readingQuestionSessionId || createReadingQuestionSessionId(articleId)");
+    expect(readScreen).toContain("trackReadingQuestionSaveSucceeded");
+    expect(readScreen).toContain("thoughtId: thought.id");
+    expect(readScreen).toContain("answerLength: readingQuestionAnswerLength(card.answer)");
+    expect(readScreen).toContain("trackReadingQuestionSaveFailed");
+    expect(readScreen).not.toMatch(/trackReadingQuestion\w+\(\{[\s\S]{0,300}(?:question|answer):/);
+  });
+
   it("starts persistence in the background and navigates without awaiting it", () => {
     const handler = sourceBetween(
       "const handleCommitAndSave = useCallback",

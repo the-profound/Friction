@@ -308,6 +308,13 @@ export function trackArticlePublished(params: {
   });
 }
 
+type ReadingQuestionBase = {
+  articleId: string;
+  sessionId: string;
+  questionIndex: number;
+  questionCount: number;
+};
+
 export function trackInboxLetterImpression(params: {
   viewSessionId: string;
   inboxId: string;
@@ -346,5 +353,60 @@ export function trackInboxLetterOpened(params: {
     ...readingProperties(params),
     inbox_id: params.inboxId,
     hour_kst: kstHour(),
+  });
+}
+
+export function trackReadingQuestionItemExposed(params: ReadingQuestionBase): void {
+  posthog?.capture("reading_question_item_exposed", {
+    $insert_id: `reading-question-item-exposed:${params.sessionId}:${params.questionIndex}`,
+    ...readingQuestionProperties(params),
+  });
+}
+
+export function trackReadingQuestionAnswerStarted(params: ReadingQuestionBase): void {
+  posthog?.capture("reading_question_answer_started", {
+    $insert_id: `reading-question-answer-started:${params.sessionId}:${params.questionIndex}`,
+    ...readingQuestionProperties(params),
+  });
+}
+
+function readingQuestionProperties(params: ReadingQuestionBase) {
+  return {
+    article_id: params.articleId,
+    reading_question_session_id: params.sessionId,
+    question_index: params.questionIndex,
+    question_count: params.questionCount,
+    event_key: `${params.sessionId}:${params.questionIndex}`,
+  };
+}
+
+export function trackReadingQuestionSessionExposed(params: {
+  articleId: string;
+  sessionId: string;
+  questionCount: number;
+}): void {
+  posthog?.capture("reading_question_session_exposed", {
+    $insert_id: `reading-question-session-exposed:${params.sessionId}`,
+    article_id: params.articleId,
+    reading_question_session_id: params.sessionId,
+    question_count: params.questionCount,
+    event_key: params.sessionId,
+  });
+}
+
+export function trackReadingQuestionSaveFailed(params: ReadingQuestionBase): void {
+  posthog?.capture("reading_question_save_failed", {
+    $insert_id: `reading-question-save-failed:${params.sessionId}:${params.questionIndex}`,
+    ...readingQuestionProperties(params),
+  });
+}
+
+export function trackReadingQuestionSaveSucceeded(
+  params: ReadingQuestionBase & { answerLength: number; thoughtId: string },
+): void {
+  posthog?.capture("reading_question_save_succeeded", {
+    $insert_id: `reading-question-save-succeeded:${params.thoughtId}`,
+    ...readingQuestionProperties(params),
+    answer_length: params.answerLength,
   });
 }

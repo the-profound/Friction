@@ -81,6 +81,8 @@ export interface QuestionCardCurlProps {
    */
   initialAnswers: Record<number, string>;
   onAnswersChange: (answers: Record<number, string>) => void;
+  onActiveQuestionChange?: (questionIndex: number, questionCount: number) => void;
+  onAnswerStarted?: (questionIndex: number, questionCount: number) => void;
   answerSessionKey: string;
   /** read.tsx의 keyboardVisibleRef */
   keyboardVisibleRef: React.RefObject<boolean>;
@@ -88,6 +90,7 @@ export interface QuestionCardCurlProps {
 
 /** 답한(한 글자 이상 입력한) 질문 카드 하나. */
 export interface AnsweredQuestionCard {
+  questionIndex: number;
   question: string;
   answer: string;
 }
@@ -147,6 +150,8 @@ function QuestionCardCurlInner({
   questions,
   initialAnswers,
   onAnswersChange,
+  onActiveQuestionChange,
+  onAnswerStarted,
   answerSessionKey,
   keyboardVisibleRef,
 }: QuestionCardCurlProps, ref: React.ForwardedRef<QuestionCardCurlHandle>) {
@@ -174,13 +179,22 @@ function QuestionCardCurlInner({
    * 매 글자마다 무거운 읽기 화면 전체를 다시 렌더링하지 않는다. */
   const [answers, setAnswers] = useState<Record<number, string>>(() => initialAnswers);
   const [cursor, setCursor] = useState(0);
+  const startedAnswerIndicesRef = useRef(new Set<number>());
 
   const answersRef = useRef(answers);
   answersRef.current = answers;
   useEffect(() => {
     setAnswers(initialAnswers);
     answersRef.current = initialAnswers;
+    startedAnswerIndicesRef.current = new Set(
+      Object.entries(initialAnswers)
+        .filter(([, answer]) => answer.trim().length > 0)
+        .map(([index]) => Number(index)),
+    );
   }, [answerSessionKey]);
+  useEffect(() => {
+    onActiveQuestionChange?.(cursor, questionCount);
+  }, [cursor, onActiveQuestionChange, questionCount]);
 
   /* ── Shared values ──────────────────────────────────────────────────
    * pos: 덱 전체 배치의 단일 소스 (카드 단위 float).
@@ -389,7 +403,7 @@ function QuestionCardCurlInner({
       for (let i = 0; i < _questions.length; i++) {
         const ans = _answers[i] ?? "";
         if (ans.trim().length > 0) {
-          cards.push({ question: _questions[i] ?? "", answer: ans });
+          cards.push({ questionIndex: i, question: _questions[i] ?? "", answer: ans });
         }
       }
       return cards;
@@ -670,6 +684,13 @@ function QuestionCardCurlInner({
                         value={answers[idx] ?? ""}
                         editable={isActive}
                         onChangeText={isActive ? (v) => {
+                          if (
+                            v.trim().length > 0
+                            && !startedAnswerIndicesRef.current.has(idx)
+                          ) {
+                            startedAnswerIndicesRef.current.add(idx);
+                            onAnswerStarted?.(idx, questionCount);
+                          }
                           const next = { ...answersRef.current, [idx]: v };
                           answersRef.current = next;
                           setAnswers(next);

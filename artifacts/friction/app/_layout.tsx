@@ -144,6 +144,7 @@ function ActiveReadingGuard({
           mode: readingToRestore.mode,
           analyticsSessionId: readingToRestore.analyticsSessionId,
           analyticsIsReread: readingToRestore.analyticsIsReread ? "true" : undefined,
+          readingQuestionSessionId: readingToRestore.readingQuestionSessionId,
         },
       });
     } else if (protectedNavigationKind === "open-records") {
@@ -157,6 +158,7 @@ function ActiveReadingGuard({
     readingToRestore?.mode,
     readingToRestore?.analyticsSessionId,
     readingToRestore?.analyticsIsReread,
+    readingToRestore?.readingQuestionSessionId,
     router,
   ]);
 

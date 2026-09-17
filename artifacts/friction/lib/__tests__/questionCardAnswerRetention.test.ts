@@ -22,12 +22,14 @@ describe("question-card answer retention", () => {
     );
   });
 
-  it("clears retained answers only when the reading identity changes", () => {
+  it("clears retained answers when the reading identity or question session changes", () => {
     const identityResetEffect = readScreenSource.slice(
       readScreenSource.indexOf("useEffect(() => {", readScreenSource.indexOf("const committedTotalPagesRef")),
-      readScreenSource.indexOf("}, [readerIdentity]);") + "}, [readerIdentity]);".length,
+      readScreenSource.indexOf("useLayoutEffect", readScreenSource.indexOf("const committedTotalPagesRef")),
     );
 
-    expect(identityResetEffect).toContain("questionCardAnswersRef.current = {};");
+    expect(identityResetEffect).toContain("resetReadingQuestionSession(");
+    expect(readScreenSource).toContain("questionCardAnswersRef.current = {};");
+    expect(readScreenSource).toContain("key={questionAnswerSessionKey}");
   });
 });

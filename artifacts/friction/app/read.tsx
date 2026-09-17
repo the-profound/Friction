@@ -26,6 +26,11 @@ import {
   trackAppBackgroundedDuringReading,
   trackSentenceCollected,
   trackMemoCreatedDuringReading,
+  trackReadingQuestionSessionExposed,
+  trackReadingQuestionItemExposed,
+  trackReadingQuestionAnswerStarted,
+  trackReadingQuestionSaveSucceeded,
+  trackReadingQuestionSaveFailed,
 } from "@/lib/analytics";
 import Animated, {
   useSharedValue,
@@ -105,6 +110,12 @@ import {
 import { useToast } from "@/contexts/ToastContext";
 import { formatReadingThoughtQuote, getReadingThoughtMemoLength } from "@/lib/thoughtInlineEditor";
 import { createAnalyticsSessionId } from "@/lib/analytics";
+import {
+  createReadingQuestionSessionId,
+  createReadingQuestionSaveState,
+  readingQuestionAnswerLength,
+  saveReadingQuestionAnswers,
+} from "@/lib/readingQuestionAnalytics";
 
 // Horizontal padding on each side of the reader card so the drop-shadow is
 // visible left and right. Must match pageListContainer.paddingHorizontal below.
@@ -189,12 +200,19 @@ export default function ReadScreen() {
     teamCollectionId?: string;
     analyticsSessionId?: string;
     analyticsIsReread?: string;
+    readingQuestionSessionId?: string;
   }>();
 
   const articleId = params.articleId ?? "";
   const inboxId = params.inboxId;
   const mode: ReadingMode = (params.mode as ReadingMode) ?? "basic";
   const readerIdentity = `${articleId}\u0000${mode}\u0000${inboxId ?? ""}`;
+  const readingQuestionSessionIdRef = useRef(
+    params.readingQuestionSessionId || createReadingQuestionSessionId(articleId),
+  );
+  const [questionAnswerSessionKey, setQuestionAnswerSessionKey] = useState(
+    readingQuestionSessionIdRef.current,
+  );
   const entrySource = params.entrySource as "list" | "inbox" | "space" | undefined;
   const teamCollectionId = params.teamCollectionId;
   const analyticsSessionIdRef = useRef(params.analyticsSessionId || createAnalyticsSessionId());
@@ -636,43 +654,114 @@ export default function ReadScreen() {
   const readingStartTimeRef = useRef<number>(0);
   const completionTimeRef = useRef<number>(0);
   const hasTrackedReadingStartRef = useRef(false);
+  const readingQuestionSessionExposedRef = useRef(false);
+  const exposedReadingQuestionIndicesRef = useRef(new Set<number>());
+  const startedReadingQuestionIndicesRef = useRef(new Set<number>());
+  const readingQuestionSaveStateRef = useRef(createReadingQuestionSaveState());
+  const activeReadingQuestionRef = useRef({ questionIndex: 0, questionCount: 0 });
+
+  const resetReadingQuestionSession = useCallback((sessionId: string) => {
+    readingQuestionSessionIdRef.current = sessionId;
+    readingQuestionSessionExposedRef.current = false;
+    exposedReadingQuestionIndicesRef.current.clear();
+    startedReadingQuestionIndicesRef.current.clear();
+    readingQuestionSaveStateRef.current = createReadingQuestionSaveState();
+    activeReadingQuestionRef.current = { questionIndex: 0, questionCount: 0 };
+    questionCardAnswersRef.current = {};
+    setQuestionAnswerSessionKey(sessionId);
+  }, []);
+
+  const exposeActiveReadingQuestion = useCallback(() => {
+    const { questionIndex, questionCount } = activeReadingQuestionRef.current;
+    if (visualPageRef.current !== totalPagesRef.current || questionCount <= 0) return;
+    const base = {
+      articleId,
+      sessionId: readingQuestionSessionIdRef.current,
+      questionIndex,
+      questionCount,
+    };
+    if (!readingQuestionSessionExposedRef.current) {
+      readingQuestionSessionExposedRef.current = true;
+      trackReadingQuestionSessionExposed({
+        articleId,
+        sessionId: base.sessionId,
+        questionCount,
+      });
+    }
+    if (!exposedReadingQuestionIndicesRef.current.has(questionIndex)) {
+      exposedReadingQuestionIndicesRef.current.add(questionIndex);
+      trackReadingQuestionItemExposed(base);
+    }
+  }, [articleId]);
+
+  const handleActiveReadingQuestionChange = useCallback(
+    (questionIndex: number, questionCount: number) => {
+      activeReadingQuestionRef.current = { questionIndex, questionCount };
+      exposeActiveReadingQuestion();
+    },
+    [exposeActiveReadingQuestion],
+  );
+
+  const handleReadingQuestionAnswerStarted = useCallback(
+    (questionIndex: number, questionCount: number) => {
+      if (startedReadingQuestionIndicesRef.current.has(questionIndex)) return;
+      startedReadingQuestionIndicesRef.current.add(questionIndex);
+      trackReadingQuestionAnswerStarted({
+        articleId,
+        sessionId: readingQuestionSessionIdRef.current,
+        questionIndex,
+        questionCount,
+      });
+    },
+    [articleId],
+  );
 
   // 완료 커밋(보관/건너뛰기/재읽기 종료) 직전에 호출된다. 질문 카드에
   // 한 글자 이상 답한 카드가 있으면, 단상으로 저장한다.
-  const answeredQuestionBatchClaimedRef = useRef(false);
-  useEffect(() => {
-    answeredQuestionBatchClaimedRef.current = false;
-  }, [articleId]);
   const applyAnsweredQuestionCardsToMemo = useCallback(() => {
-    if (answeredQuestionBatchClaimedRef.current) return;
     const answeredCards = questionCardRef.current?.getAnsweredCards() ?? [];
     const cardsToSave = answeredCards.filter((card) => card.answer.trim().length > 0);
     if (cardsToSave.length === 0) return;
-    // Claim synchronously before the first await. Save/skip/reread exit can
-    // overlap, but only one path may create this reading session's answers.
-    answeredQuestionBatchClaimedRef.current = true;
+    const saveState = readingQuestionSaveStateRef.current;
+    const sessionId = readingQuestionSessionIdRef.current;
+    const questionCount = activeReadingQuestionRef.current.questionCount;
 
     void (async () => {
       await queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() });
-      const results = await Promise.allSettled(cardsToSave.map((card) =>
-        createThought.mutateAsync({
+      await saveReadingQuestionAnswers({
+        cards: cardsToSave,
+        state: saveState,
+        sessionId,
+        create: (card, clientId) =>
+          createThought.mutateAsync({
             data: {
+              clientId,
               content: `> ${card.question}\n\n${card.answer.trim()}`,
               createdFrom: "question",
               sourceArticleId: articleId,
             },
-          }) as Promise<Thought>
-      ));
-
-      // Apply successful responses in authored order, not network completion
-      // order, then perform one refresh after the entire creation batch settles.
-      for (const result of results) {
-        if (result.status === "fulfilled") {
-          upsertThoughtInRecordCaches(queryClient, result.value);
-        } else {
-          console.warn("[thought] question creation failed:", result.reason);
-        }
-      }
+          }) as Promise<Thought>,
+        onSucceeded: (card, thought) => {
+          upsertThoughtInRecordCaches(queryClient, thought);
+          trackReadingQuestionSaveSucceeded({
+            articleId,
+            sessionId,
+            questionIndex: card.questionIndex,
+            questionCount,
+            answerLength: readingQuestionAnswerLength(card.answer),
+            thoughtId: thought.id,
+          });
+        },
+        onFailed: (card, reason) => {
+          console.warn("[thought] question creation failed:", reason);
+          trackReadingQuestionSaveFailed({
+            articleId,
+            sessionId,
+            questionIndex: card.questionIndex,
+            questionCount,
+          });
+        },
+      });
       await invalidateThoughtLists(queryClient);
     })();
   }, [articleId, createThought, queryClient]);
@@ -824,10 +913,11 @@ export default function ReadScreen() {
         userId,
         analyticsSessionId: analyticsSessionIdRef.current,
         analyticsIsReread: isAnalyticsReread,
+        readingQuestionSessionId: questionAnswerSessionKey,
       });
     }
     return () => {};
-  }, [articleId, inboxId, entrySource, isAnalyticsReread, mode, setActiveSession, userId]);
+  }, [articleId, inboxId, entrySource, isAnalyticsReread, mode, questionAnswerSessionKey, setActiveSession, userId]);
 
   useEffect(() => {
     if (!reading.isRestoring && reading.isSessionHydrated && reading.session.state === "IDLE" && totalPages > 0) {
@@ -1088,6 +1178,9 @@ export default function ReadScreen() {
     qCardOpacitySV.value = isCarouselBwd ? 1 : 0;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visualPage, totalPages, layout.containerWidth]);
+  useEffect(() => {
+    exposeActiveReadingQuestion();
+  }, [visualPage, totalPages, exposeActiveReadingQuestion]);
 
   const PARK_EXTRA = 120;
   // Constant visual gap between adjacent sections (letter / Q-card / complete)
@@ -1178,11 +1271,13 @@ export default function ReadScreen() {
     hasTrackedReadingStartRef.current = false;
     readingStartTimeRef.current = 0;
     completionTimeRef.current = 0;
-    answeredQuestionBatchClaimedRef.current = false;
+    resetReadingQuestionSession(
+      params.readingQuestionSessionId || createReadingQuestionSessionId(articleId),
+    );
     isCommittingRef.current = false;
     activeSwipeRef.current = null;
     pageTurnGenerationRef.current += 1;
-  }, [readerIdentity]);
+  }, [articleId, params.readingQuestionSessionId, readerIdentity, resetReadingQuestionSession]);
 
   useLayoutEffect(() => {
     if (committedTotalPagesRef.current === totalPages) return;
@@ -1255,6 +1350,8 @@ export default function ReadScreen() {
 
   const handleRestartReading = useCallback(() => {
     analyticsSessionIdRef.current = createAnalyticsSessionId();
+    const nextReadingQuestionSessionId = createReadingQuestionSessionId(articleId);
+    resetReadingQuestionSession(nextReadingQuestionSessionId);
     hasTrackedReadingStartRef.current = false;
     readingStartTimeRef.current = 0;
     completionTimeRef.current = 0;
@@ -1283,10 +1380,11 @@ export default function ReadScreen() {
         userId,
         analyticsSessionId: analyticsSessionIdRef.current,
         analyticsIsReread: true,
+        readingQuestionSessionId: nextReadingQuestionSessionId,
       });
     }
     reading.restartReading();
-  }, [articleId, entrySource, inboxId, layout.containerWidth, mode, reading.restartReading, setActiveSession, userId]);
+  }, [articleId, entrySource, inboxId, layout.containerWidth, mode, reading.restartReading, resetReadingQuestionSession, setActiveSession, userId]);
 
   // Callbacks invoked via runOnJS after UI-thread animation completes
   const finishPageTurnRef = useRef((
@@ -2104,11 +2202,14 @@ export default function ReadScreen() {
                           return (
                             <Animated.View style={[StyleSheet.absoluteFill, qCardGateStyle]}>
                               <QuestionCardCurl
+                                key={questionAnswerSessionKey}
                                 ref={questionCardRef}
                                 questions={questionCardQuestions}
                                 initialAnswers={questionCardAnswersRef.current}
                                 onAnswersChange={handleQuestionCardAnswersChange}
-                                answerSessionKey={readerIdentity}
+                                onActiveQuestionChange={handleActiveReadingQuestionChange}
+                                onAnswerStarted={handleReadingQuestionAnswerStarted}
+                                answerSessionKey={questionAnswerSessionKey}
                                 containerWidth={layout.containerWidth}
                                 containerHeight={layout.containerHeight}
                                 keyboardVisibleRef={keyboardVisibleRef}
