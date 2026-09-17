@@ -93,15 +93,27 @@ describe("ArticleListItem contract", () => {
     expect(sharedPickerListSource).toContain("<ArticleListItem");
   });
 
-  it("uses one searchable, newest-first list for send and reply selection", () => {
+  it("uses one searchable, newest-first list for personal send selection", () => {
     expect(pickerSource).toContain("<LetterPickerList");
-    expect(replyPickerSource).toContain("<LetterPickerSelectionSheet");
     expect(sharedPickerListSource).toContain("<ArticleListItem");
     expect(sharedPickerListSource).toContain('placeholder="제목으로 검색"');
     expect(sharedPickerListSource).toContain("sortAndFilterLetterPickerItems");
     expect(sharedPickerListSource).toContain("scrollToIndex");
     expect(sharedPickerListSource).toContain("selectedId");
-    expect(replyPickerSource).toContain("onSelect={onSelect}");
+  });
+
+  it("splits reply letter selection into a space step and a searchless per-space grid step, inside one sheet", () => {
+    expect(replyPickerSource).toContain("<BottomSheet");
+    expect((replyPickerSource.match(/<BottomSheet/g) ?? []).length).toBe(1);
+    expect(replyPickerSource).not.toContain("SpacePickerModal");
+    expect(replyPickerSource).not.toContain("<LetterPickerSelectionSheet");
+    expect(replyPickerSource).toContain("<LetterPickerGrid");
+    expect(replyPickerSource).toContain("showSearch={false}");
+    expect(replyPickerSource).toContain("headerLeft={");
+    expect(replyPickerSource).toContain("filterReplyLettersBySpace");
+    expect(replyPickerSource).toContain("onSelect={(item) => {");
+    expect(replyPickerSource).not.toContain("<LetterPickerList ");
+    expect(replyPickerSource).not.toContain("titleQuery");
   });
 
   it("preserves dates and passes cover/author metadata to the space schedule flow's grid picker", () => {
@@ -127,7 +139,7 @@ describe("ArticleListItem contract", () => {
     expect(sharedPickerGridSource).not.toContain("<ArticleListItem");
   });
 
-  it("keeps the other letter pickers (space wizard, personal send, reply) on the default list body", () => {
+  it("keeps the other letter pickers (space wizard, personal send) on the default list body", () => {
     expect(pickerSource).toContain("<LetterPickerList");
     expect(pickerSource).toContain('bodyVariant = "list"');
     // The space-wizard/personal-send LetterPickerSheet must not opt into the grid.

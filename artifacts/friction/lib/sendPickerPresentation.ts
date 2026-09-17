@@ -143,3 +143,16 @@ export function filterActiveParticipatingSpaces(
       (space.myRole === "OPERATOR" || space.myRole === "PARTICIPANT"),
   );
 }
+
+/**
+ * Narrows an already-reply-eligible inbox list (see filterReadReplyLetters)
+ * down to the ones delivered through one specific Space. GET /inbox already
+ * excludes rows where senderId === recipientId, so "letters I sent myself in
+ * this space" can never appear here — no extra author check is needed.
+ */
+export function filterReplyLettersBySpace(
+  items: InboxItem[],
+  spaceId: string,
+): InboxItem[] {
+  return items.filter((item) => item.sourceSpaceId === spaceId);
+}

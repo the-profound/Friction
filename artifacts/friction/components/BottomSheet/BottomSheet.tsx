@@ -39,6 +39,13 @@ interface BottomSheetProps {
    * animated value에서 파생하므로 열기·드래그·닫기 프레임이 어긋나지 않는다.
    */
   translateYAnim?: Animated.Value;
+  /**
+   * Custom element rendered at the left of the title row (e.g. a back
+   * button for a multi-step sheet). Mutually exclusive in practice with
+   * `closeButton`; when neither `closeButton` nor `headerLeft` is set, the
+   * title row has no side elements at all.
+   */
+  headerLeft?: React.ReactNode;
 }
 
 interface KeyboardSyncProps {
@@ -120,6 +127,7 @@ export default function BottomSheet({
   keyboardAware = false,
   closeButton = false,
   translateYAnim,
+  headerLeft,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: SCREEN_H } = useWindowDimensions();
@@ -313,11 +321,15 @@ export default function BottomSheet({
         >
           <View {...panResponder.panHandlers} style={styles.handleArea}>
             <View style={styles.handle} />
-            {(title || closeButton) && (
+            {(title || closeButton || headerLeft) && (
               <View style={styles.titleRow}>
-                {closeButton ? <View style={styles.titleSpacer} /> : null}
+                {headerLeft
+                  ? headerLeft
+                  : closeButton
+                    ? <View style={styles.titleSpacer} />
+                    : null}
                 {title ? <Text style={[styles.title, titleStyle]}>{title}</Text> : null}
-                {closeButton && (
+                {closeButton ? (
                   <ScalePressable
                     onPress={close}
                     style={styles.closeButton}
@@ -326,7 +338,9 @@ export default function BottomSheet({
                   >
                     <Feather name="x" size={20} color={Colors.zinc500} />
                   </ScalePressable>
-                )}
+                ) : headerLeft ? (
+                  <View style={styles.titleSpacer} />
+                ) : null}
               </View>
             )}
           </View>

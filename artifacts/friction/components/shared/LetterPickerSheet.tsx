@@ -52,11 +52,15 @@ interface LetterPickerSelectionSheetProps<T> {
   emptyAction?: { label: string; onPress: () => void };
   /**
    * "list" (default) renders the compact ArticleListItem rows every other
-   * picker uses. "grid" renders the 3-column cover-card grid — currently
-   * only the space-reservation schedule sheet opts into it via
-   * LetterGridPickerSheet.
+   * picker uses. "grid" renders the 3-column cover-card grid — used by the
+   * space-reservation schedule sheet (LetterGridPickerSheet) and the reply
+   * letter picker's per-space grid step.
    */
   bodyVariant?: "list" | "grid";
+  /** Grid-only. Hides the title-search row entirely. Defaults to true. */
+  showSearch?: boolean;
+  /** Custom element for the sheet's title-row left slot (e.g. a back button). */
+  headerLeft?: React.ReactNode;
 }
 
 export function LetterPickerSelectionSheet<T>({
@@ -74,6 +78,8 @@ export function LetterPickerSelectionSheet<T>({
   emptyMessage,
   emptyAction,
   bodyVariant = "list",
+  showSearch = true,
+  headerLeft,
 }: LetterPickerSelectionSheetProps<T>) {
   return (
     <BottomSheet
@@ -82,6 +88,7 @@ export function LetterPickerSelectionSheet<T>({
       title={title}
       snapPoints={[0.85]}
       keyboardAware
+      headerLeft={headerLeft}
     >
       {isLoading ? (
         <View style={styles.empty}>
@@ -120,6 +127,7 @@ export function LetterPickerSelectionSheet<T>({
           visible={visible}
           items={items}
           selectedId={selectedId}
+          showSearch={showSearch}
           onSelect={(item) => {
             onSelect(item);
             onClose();

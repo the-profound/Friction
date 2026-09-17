@@ -16,6 +16,12 @@ interface LetterPickerGridProps<T> {
   items: LetterPickerListEntry<T>[];
   selectedId: string | null;
   onSelect: (item: T) => void;
+  /**
+   * Whether to render the title-search row above the grid. Defaults to
+   * true. Flows that pre-filter their candidates elsewhere (e.g. the reply
+   * picker's space step) can hide it entirely.
+   */
+  showSearch?: boolean;
 }
 
 const GRID_COLS = 3;
@@ -35,6 +41,7 @@ export function LetterPickerGrid<T>({
   items,
   selectedId,
   onSelect,
+  showSearch = true,
 }: LetterPickerGridProps<T>) {
   const { width: windowWidth } = useWindowDimensions();
   const [searchQuery, setSearchQuery] = useState("");
@@ -44,8 +51,8 @@ export function LetterPickerGrid<T>({
   }, [visible]);
 
   const visibleItems = useMemo(
-    () => sortAndFilterLetterPickerItems(items, searchQuery),
-    [items, searchQuery],
+    () => sortAndFilterLetterPickerItems(items, showSearch ? searchQuery : ""),
+    [items, searchQuery, showSearch],
   );
 
   const rows = useMemo(() => {
@@ -66,7 +73,9 @@ export function LetterPickerGrid<T>({
 
   return (
     <View style={styles.container}>
-      <LetterPickerSearchBar value={searchQuery} onChange={setSearchQuery} />
+      {showSearch ? (
+        <LetterPickerSearchBar value={searchQuery} onChange={setSearchQuery} />
+      ) : null}
 
       {visibleItems.length === 0 ? (
         <View style={styles.noResults}>
