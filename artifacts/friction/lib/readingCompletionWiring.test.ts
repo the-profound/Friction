@@ -144,9 +144,10 @@ describe("safe reading exit navigation", () => {
       "const handleTextSelect = useCallback",
     );
 
-    for (const handler of [generalExit, saveExit, completionExit, rereadExit]) {
+    for (const handler of [generalExit, completionExit, rereadExit]) {
       expect(handler).toContain("runOnJS(navigateBackDelayed)()");
     }
+    expect(saveExit).not.toContain("runOnJS(navigateBackDelayed)()");
   });
 });
 
@@ -233,13 +234,13 @@ describe("non-blocking completion save", () => {
     expect(readScreen).not.toMatch(/trackReadingQuestion\w+\(\{[\s\S]{0,300}(?:question|answer):/);
   });
 
-  it("starts persistence in the background and navigates without awaiting it", () => {
+  it("starts archive persistence in the background and keeps the completion screen open", () => {
     const handler = sourceBetween(
       "const handleCommitAndSave = useCallback",
       "const handleCommitAndSkip = useCallback",
     );
 
-    expect(handler).toContain("if (isSavingRef.current) return");
+    expect(handler).toContain("if (completionActionRef.current) return");
     expect(handler).toContain("void (async () => {");
     expect(handler).toContain("await reading.commitCompletion()");
     expect(handler).toContain("invalidateInbox(queryClient)");
@@ -251,8 +252,10 @@ describe("non-blocking completion save", () => {
     const navigationStart = handler.indexOf("trackArticleAction({");
     expect(backgroundStart).toBeGreaterThanOrEqual(0);
     expect(navigationStart).toBeGreaterThan(backgroundStart);
-    expect(handler.slice(navigationStart)).toContain("clearActiveSession()");
-    expect(handler.slice(navigationStart)).toContain("overlayOpacity.value = withTiming(1");
+    expect(handler).toContain("setIsSavedThisSession(true)");
+    const archiveTail = handler.slice(navigationStart, handler.indexOf("const handleStartReply"));
+    expect(archiveTail).not.toContain("clearActiveSession()");
+    expect(archiveTail).not.toContain("overlayOpacity.value = withTiming(1");
   });
 
   it("keeps safe unavailable states and the requested action order", () => {
@@ -261,8 +264,8 @@ describe("non-blocking completion save", () => {
       "const readingCompleteStyles = StyleSheet.create",
     );
 
-    expect(screen).toContain("disabled={isSaving || !isCollectionsReady || isAlreadySaved}");
-    expect(screen).toContain('accessibilityState={{ disabled: isSaving || !isCollectionsReady || isAlreadySaved, busy: isSaving }}');
+    expect(screen).toContain("disabled={isActionBusy || !isCollectionsReady || isAlreadySaved}");
+    expect(screen).toContain('accessibilityState={{ disabled: isActionBusy || !isCollectionsReady || isAlreadySaved, busy: isSaving }}');
 
     const reread = screen.indexOf('accessibilityLabel="다시 읽기"');
     const save = screen.indexOf('accessibilityLabel="보관하기"');
@@ -294,8 +297,9 @@ describe("non-blocking completion save", () => {
       "const readingCompleteStyles = StyleSheet.create",
     );
 
-    expect(screen.match(/style=\{readingCompleteStyles\.actionShadow\}/g)).toHaveLength(1);
-    expect(screen.match(/style=\{\[readingCompleteStyles\.actionShadow,/g)).toHaveLength(2);
+    expect(screen.match(/style=\{readingCompleteStyles\.actionShadow\}/g)).toBeNull();
+    expect(screen.match(/style=\{\[readingCompleteStyles\.actionShadow,/g)).toHaveLength(4);
+    expect(screen).toContain("<View style={readingCompleteStyles.replyBtn}>");
     expect(screen).toContain("<View style={readingCompleteStyles.rereadBtn}>");
     expect(screen).toContain("<View style={readingCompleteStyles.saveBtn}>");
     expect(screen).toContain("<View style={readingCompleteStyles.skipBtn}>");

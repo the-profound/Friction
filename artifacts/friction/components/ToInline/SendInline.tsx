@@ -79,6 +79,7 @@ interface SendInlineProps {
   prefillNeighborId?: string;
   prefillSpaceId?: string;
   prefillSpaceName?: string;
+  prefillReplyInboxId?: string;
   returnToId?: string;
   prefillKey?: string | number;
   onSent?: () => void;
@@ -110,6 +111,7 @@ export function SendInline({
   prefillNeighborId,
   prefillSpaceId,
   prefillSpaceName,
+  prefillReplyInboxId,
   returnToId: _returnToId,
   prefillKey,
   onSent,
@@ -220,6 +222,11 @@ export function SendInline({
     initialDefaultsPendingRef.current = false;
   }, [prefillKey]);
 
+  useEffect(() => {
+    if (!prefillReplyInboxId) return;
+    setMode("reply");
+  }, [prefillKey, prefillReplyInboxId]);
+
   // Preserve all existing entry points while applying their preselection once
   // their corresponding server list has arrived. Cached route snapshots are
   // display-only until this background verification settles successfully.
@@ -312,16 +319,26 @@ export function SendInline({
       initialDefaultsPendingRef.current = false;
       return;
     }
-    const defaults = resolveInitialSendDefaults(
-      selectedArticle,
-      replyCandidates,
-    );
+    const explicitReply = prefillReplyInboxId
+      ? replyCandidates.find((item) => item.id === prefillReplyInboxId) ?? null
+      : null;
+    if (prefillReplyInboxId && !explicitReply) {
+      initialDefaultsPendingRef.current = false;
+      setMode("reply");
+      setSelectedReplyInbox(null);
+      setSendError("답장 대상을 확인하지 못했어요. 받은 편지를 다시 확인해주세요.");
+      return;
+    }
+    const defaults = explicitReply
+      ? { mode: "reply" as const, replyInbox: explicitReply }
+      : resolveInitialSendDefaults(selectedArticle, replyCandidates);
     setMode(defaults.mode);
     setSelectedReplyInbox(defaults.replyInbox);
     initialDefaultsPendingRef.current = false;
   }, [
     inboxQuery.isLoading,
     prefillNeighborId,
+    prefillReplyInboxId,
     prefillSpaceId,
     replyCandidates,
     selectedArticle,

@@ -105,8 +105,21 @@ const TRANSITIONS: Record<ReadingSessionState, ReadingSessionState[]> = {
   READING: ["PAUSED", "COMPLETED_READY"],
   PAUSED: ["READING", "IDLE"],
   COMPLETED_READY: ["COMPLETED_COMMITTED", "READING"],
-  COMPLETED_COMMITTED: ["IDLE"],
+  COMPLETED_COMMITTED: ["IDLE", "READING"],
 };
+
+export type CompletionCommitDisposition =
+  | "commit"
+  | "already_committed"
+  | "invalid";
+
+export function getCompletionCommitDisposition(
+  state: ReadingSessionState,
+): CompletionCommitDisposition {
+  if (state === "COMPLETED_READY") return "commit";
+  if (state === "COMPLETED_COMMITTED") return "already_committed";
+  return "invalid";
+}
 
 export function canTransitionSession(
   from: ReadingSessionState,

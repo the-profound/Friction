@@ -65,11 +65,12 @@ export default function ClosingScreen() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { setRecordKindIntent } = useAppNavigation();
-  const { id, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
+  const { id, spaceId, spaceRoundId, letterType, replyToInboxId } = useLocalSearchParams<{
     id: string;
     spaceId?: string;
     spaceRoundId?: string;
     letterType?: string;
+    replyToInboxId?: string;
   }>();
   const articleQuery = useGetArticle(id ?? "");
   const article = id
@@ -89,6 +90,7 @@ export default function ClosingScreen() {
     letterType?: string;
   } | null>(null);
   const [contextReady, setContextReady] = useState(!!spaceId);
+  const [recoveredReplyToInboxId, setRecoveredReplyToInboxId] = useState<string | null>(null);
   useEffect(() => {
     setRecordKindIntent("editing");
   }, [setRecordKindIntent]);
@@ -102,7 +104,10 @@ export default function ClosingScreen() {
       return;
     }
     // spaceId가 라우트에 없는 경우 — AsyncStorage에서 복구 시도
-    void AsyncStorage.getItem(`space_context:${id}`).then((raw) => {
+    void Promise.all([
+      AsyncStorage.getItem(`space_context:${id}`),
+      AsyncStorage.getItem(`reply_context:${id}`),
+    ]).then(([raw, replyRaw]) => {
       if (raw) {
         try {
           setRecoveredSpaceContext(
@@ -110,13 +115,20 @@ export default function ClosingScreen() {
           );
         } catch {}
       }
+      if (replyRaw) {
+        try {
+          const parsed = JSON.parse(replyRaw) as { replyToInboxId?: string };
+          setRecoveredReplyToInboxId(parsed.replyToInboxId ?? null);
+        } catch {}
+      }
       setContextReady(true);
     });
-  }, [id, spaceId]);
+  }, [id, replyToInboxId, spaceId]);
 
   const effectiveSpaceId = spaceId ?? recoveredSpaceContext?.spaceId;
   const effectiveSpaceRoundId = spaceRoundId ?? recoveredSpaceContext?.spaceRoundId;
   const effectiveLetterType = letterType ?? recoveredSpaceContext?.letterType;
+  const effectiveReplyToInboxId = replyToInboxId ?? recoveredReplyToInboxId ?? undefined;
 
   const spaceQuery = useGetSpace(effectiveSpaceId ?? "", {
     query: {
@@ -164,6 +176,7 @@ export default function ClosingScreen() {
   const navigationCommittedRef = useRef(false);
   const storedLayoutWidth = (article?.layoutWidth != null && article.layoutWidth > 0) ? article.layoutWidth : null;
   const exportedArticleIdRef = useRef<string | null>(null);
+  const sendReplyAfterExportRef = useRef(true);
   const initializedRef = useRef(false);
 
   const navigateAfterRemovingGuard = useCallback((navigate: () => void) => {
@@ -325,6 +338,21 @@ export default function ClosingScreen() {
           router.replace({ pathname: "/of-space-start", params: { id: effectiveSpaceId } });
         });
       } else {
+        if (effectiveReplyToInboxId && sendReplyAfterExportRef.current) {
+          navigateAfterRemovingGuard(() => {
+            router.replace({
+              pathname: "/to-send",
+              params: {
+                prefillArticleId: articleId,
+                replyToInboxId: effectiveReplyToInboxId,
+              },
+            });
+          });
+          return;
+        }
+        try {
+          await AsyncStorage.removeItem(`reply_context:${articleId}`);
+        } catch {}
         setRecordKindIntent("letter", { focusRecordId: articleId });
         navigateAfterRemovingGuard(() => {
           router.replace({ pathname: "/(tabs)/on", params: { tab: "my_article" } });
@@ -333,12 +361,13 @@ export default function ClosingScreen() {
     },
     [
       pages, finalizeArticle, navigateAfterRemovingGuard, queryClient, router, showToast,
-      effectiveSpaceId, effectiveSpaceRoundId, effectiveLetterType, visibility, isAnonymous,
+      effectiveSpaceId, effectiveSpaceRoundId, effectiveLetterType, effectiveReplyToInboxId, visibility, isAnonymous,
       createSpaceLetterMutation, updateSpaceLetterVisibilityMutation, setRecordKindIntent,
     ],
   );
 
-  const handleConfirmExport = useCallback(async () => {
+  const handleConfirmExport = useCallback(async (sendReplyAfterExport = true) => {
+    sendReplyAfterExportRef.current = sendReplyAfterExport;
     exportPromptOpenRef.current = false;
     setConfirmVisible(false);
     if (id && isCoverPhotoUploadInProgress(id)) return;
@@ -399,6 +428,14 @@ export default function ClosingScreen() {
   ]);
 
   const handleCancelExport = useCallback(() => {
+    exportPromptOpenRef.current = false;
+    setConfirmVisible(false);
+    if (effectiveReplyToInboxId) {
+      void handleConfirmExport(false);
+    }
+  }, [effectiveReplyToInboxId, handleConfirmExport]);
+
+  const handleDismissExport = useCallback(() => {
     exportPromptOpenRef.current = false;
     setConfirmVisible(false);
   }, []);
@@ -474,10 +511,12 @@ export default function ClosingScreen() {
         mode: "dividing",
         returnPage: String(returnPageIdx),
         returnBlock: String(returnBlockIdx),
+        ...(effectiveReplyToInboxId ? { replyToInboxId: effectiveReplyToInboxId } : {}),
       },
     }));
   }, [
     id,
+    effectiveReplyToInboxId,
     navigateAfterRemovingGuard,
     queryClient,
     router,
@@ -717,13 +756,14 @@ export default function ClosingScreen() {
 
       <ConfirmModal
         visible={confirmVisible}
-        title="편지로 내보내기"
-        description="내보내면 더 이상 수정할 수 없어요. 진행할까요?"
-        confirmLabel="내보내기"
-        cancelLabel="취소"
+        title={effectiveReplyToInboxId ? "답글 보내기" : "편지로 내보내기"}
+        description={effectiveReplyToInboxId ? "이 글에 답장으로 바로 보낼까요?" : "내보내면 더 이상 수정할 수 없어요. 진행할까요?"}
+        confirmLabel={effectiveReplyToInboxId ? "답장으로 보내기" : "내보내기"}
+        cancelLabel={effectiveReplyToInboxId ? "기록함에만 저장" : "취소"}
         destructive
         onConfirm={handleConfirmExport}
         onCancel={handleCancelExport}
+        onBackdropPress={handleDismissExport}
       />
 
     </View>

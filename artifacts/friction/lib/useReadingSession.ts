@@ -16,6 +16,7 @@ import {
   clampReadingPage,
   shouldBlockExit,
   shouldShowExitUI,
+  getCompletionCommitDisposition,
 } from "./readingPersistence";
 import type { ReadingSession, ReadingSessionState } from "./readingPersistence";
 import { createReadingSaveBoundary } from "./readingSaveBoundary";
@@ -318,7 +319,11 @@ export function useReadingSession({
   );
 
   const commitCompletion = useCallback(async () => {
-    if (session.state !== "COMPLETED_READY") {
+    const disposition = getCompletionCommitDisposition(session.state);
+    if (disposition === "already_committed") {
+      return { success: true };
+    }
+    if (disposition === "invalid") {
       return { success: false, error: "완독 상태가 아닙니다." };
     }
 
@@ -351,7 +356,6 @@ export function useReadingSession({
   }, [session.state, userId, articleId, createArticleRead, markInboxReadMutation, queryClient]);
 
   const restartReading = useCallback(() => {
-    if (session.state !== "COMPLETED_READY") return;
     const result = transitionSession(session.state, "READING");
     if (!result.allowed) return;
     setSession((prev) => ({
@@ -363,7 +367,6 @@ export function useReadingSession({
   }, [session.state, savePosition]);
 
   const continueReading = useCallback(() => {
-    if (session.state !== "COMPLETED_READY") return;
     const result = transitionSession(session.state, "READING");
     if (!result.allowed) return;
     setSession((prev) => ({ ...prev, state: result.state }));

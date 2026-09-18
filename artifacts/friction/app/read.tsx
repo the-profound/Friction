@@ -560,7 +560,10 @@ export default function ReadScreen() {
   const updateRecentCollection = useUpdateUserRecentCollection();
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
+  const [isSavedThisSession, setIsSavedThisSession] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isStartingReply, setIsStartingReply] = useState(false);
+  const completionActionRef = useRef<"save" | "reply" | "exit" | null>(null);
 
   // Detect other unread inbox copies of the same article (same article delivered
   // through multiple team collections). After the user finishes one, we offer
@@ -590,6 +593,16 @@ export default function ReadScreen() {
   }, [inboxListQuery.data, articleId, inboxId]);
 
   const isInboxEntry = entrySource === "inbox" || !!inboxId;
+  const replySourceInbox = inboxId
+    ? inboxListQuery.data?.find((item) => item.id === inboxId)
+    : undefined;
+  const canStartReply = Boolean(
+    isInboxEntry
+    && inboxId
+    && replySourceInbox
+    && replySourceInbox.senderId
+    && replySourceInbox.senderId !== userId,
+  );
 
   const promptOrContinue = useCallback(
     (afterDecision: () => void) => {
@@ -718,15 +731,16 @@ export default function ReadScreen() {
 
   // 완료 커밋(보관/건너뛰기/재읽기 종료) 직전에 호출된다. 질문 카드에
   // 한 글자 이상 답한 카드가 있으면, 단상으로 저장한다.
-  const applyAnsweredQuestionCardsToMemo = useCallback(() => {
+  const applyAnsweredQuestionCardsToMemo = useCallback(async () => {
     const answeredCards = questionCardRef.current?.getAnsweredCards() ?? [];
     const cardsToSave = answeredCards.filter((card) => card.answer.trim().length > 0);
     if (cardsToSave.length === 0) return;
     const saveState = readingQuestionSaveStateRef.current;
     const sessionId = readingQuestionSessionIdRef.current;
     const questionCount = activeReadingQuestionRef.current.questionCount;
+    let saveFailure: unknown;
 
-    void (async () => {
+    await (async () => {
       await queryClient.cancelQueries({ queryKey: getListThoughtsQueryKey() });
       await saveReadingQuestionAnswers({
         cards: cardsToSave,
@@ -753,6 +767,7 @@ export default function ReadScreen() {
           });
         },
         onFailed: (card, reason) => {
+          saveFailure = reason;
           console.warn("[thought] question creation failed:", reason);
           trackReadingQuestionSaveFailed({
             articleId,
@@ -762,6 +777,9 @@ export default function ReadScreen() {
           });
         },
       });
+      if (saveFailure) {
+        throw saveFailure;
+      }
       await invalidateThoughtLists(queryClient);
     })();
   }, [articleId, createThought, queryClient]);
@@ -1349,6 +1367,7 @@ export default function ReadScreen() {
   }, []);
 
   const handleRestartReading = useCallback(() => {
+    if (completionActionRef.current) return;
     analyticsSessionIdRef.current = createAnalyticsSessionId();
     const nextReadingQuestionSessionId = createReadingQuestionSessionId(articleId);
     resetReadingQuestionSession(nextReadingQuestionSessionId);
@@ -1762,20 +1781,23 @@ export default function ReadScreen() {
   );
 
   const isCollectionsReady = !!userId && !!articleId && !collectionsQuery.isLoading && !collectionsQuery.isError;
-  const isAlreadySaved = collectionsQuery.data?.some((collection) => collection.containsArticle) ?? false;
+  const isAlreadySaved =
+    isSavedThisSession
+    || (collectionsQuery.data?.some((collection) => collection.containsArticle) ?? false);
 
   const handleCommitAndSave = useCallback(() => {
-    if (isSavingRef.current) return;
+    if (completionActionRef.current) return;
     if (!isCollectionsReady) {
       showToast({ message: "보관함 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.", type: "info" });
       return;
     }
     if (isAlreadySaved) return;
     isSavingRef.current = true;
+    completionActionRef.current = "save";
     setIsSaving(true);
 
-    // Fire-and-handle: completion and collection persistence continue after the
-    // reader starts leaving, while this task owns every rejection it can produce.
+    // Keep the completion screen mounted while persistence runs. A failed step
+    // releases the lock so the same action can be retried in place.
     void (async () => {
       try {
         const result = await reading.commitCompletion();
@@ -1783,6 +1805,7 @@ export default function ReadScreen() {
           showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
           return;
         }
+        await applyAnsweredQuestionCardsToMemo();
         await syncSpaceInboxRead();
         invalidateInbox(queryClient);
 
@@ -1801,7 +1824,7 @@ export default function ReadScreen() {
               });
               targetCollectionId = newCol.id;
             } catch {
-              showToast({ message: "완독 기록은 저장했지만 보관함 생성에 실패했습니다.", type: "info" });
+              throw new Error("완독 기록은 저장했지만 보관함 생성에 실패했습니다.");
             }
           }
         }
@@ -1812,6 +1835,7 @@ export default function ReadScreen() {
               id: targetCollectionId,
               data: { articleId },
             });
+            setIsSavedThisSession(true);
             invalidateMyCollections(queryClient);
             try {
               await updateRecentCollection.mutateAsync({
@@ -1823,7 +1847,7 @@ export default function ReadScreen() {
               console.warn("[handleCommitAndSave] recent collection update failed (non-fatal):", e);
             }
           } catch {
-            showToast({ message: "완독 기록은 저장했지만 보관함 추가에 실패했습니다.", type: "info" });
+            throw new Error("완독 기록은 저장했지만 보관함 추가에 실패했습니다.");
           }
         }
         showToast({ message: "보관함에 저장됐어요.", type: "success" });
@@ -1832,11 +1856,11 @@ export default function ReadScreen() {
         showToast({ message: "완독 및 보관 처리에 실패했습니다.", type: "error" });
       } finally {
         isSavingRef.current = false;
+        completionActionRef.current = null;
         setIsSaving(false);
       }
     })();
 
-    // Navigation is intentionally independent of the background network chain.
     trackArticleAction({
       sessionId: analyticsSessionIdRef.current,
       articleId,
@@ -1844,15 +1868,42 @@ export default function ReadScreen() {
       msSinceComplete: Date.now() - completionTimeRef.current,
       isReread: isAnalyticsReread,
     });
-    clearActiveSession();
-    applyAnsweredQuestionCardsToMemo();
-    overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
-      if (finished) runOnJS(navigateBackDelayed)();
-    });
-  }, [isCollectionsReady, isAlreadySaved, reading, syncSpaceInboxRead, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, clearActiveSession, applyAnsweredQuestionCardsToMemo, overlayOpacity, navigateBackDelayed, showToast]);
+  }, [isCollectionsReady, isAlreadySaved, reading, applyAnsweredQuestionCardsToMemo, syncSpaceInboxRead, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, showToast]);
+
+  const handleStartReply = useCallback(async () => {
+    if (!canStartReply || !inboxId || completionActionRef.current) return;
+    completionActionRef.current = "reply";
+    setIsStartingReply(true);
+    try {
+      const result = await reading.commitCompletion();
+      if (!result.success) {
+        showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
+        return;
+      }
+      await applyAnsweredQuestionCardsToMemo();
+      await syncSpaceInboxRead();
+      invalidateInbox(queryClient);
+      clearActiveSession();
+      router.push({
+        pathname: "/on-01a",
+        params: {
+          mode: "local-draft",
+          sourceArticleId: articleId,
+          replyToInboxId: inboxId,
+        },
+      });
+    } catch (error) {
+      console.warn("[handleStartReply] failed:", error);
+      showToast({ message: "답글을 시작하기 전에 읽기 기록을 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
+    } finally {
+      completionActionRef.current = null;
+      setIsStartingReply(false);
+    }
+  }, [articleId, applyAnsweredQuestionCardsToMemo, canStartReply, clearActiveSession, inboxId, queryClient, reading, router, showToast, syncSpaceInboxRead]);
 
   const handleCommitAndSkip = useCallback(async () => {
-    if (isDeleting) return;
+    if (completionActionRef.current) return;
+    completionActionRef.current = "exit";
     setIsDeleting(true);
     try {
       const result = await reading.commitCompletion();
@@ -1872,7 +1923,7 @@ export default function ReadScreen() {
           invalidateInbox(queryClient);
         }
         clearActiveSession();
-        applyAnsweredQuestionCardsToMemo();
+        await applyAnsweredQuestionCardsToMemo();
         promptOrContinue(() => {
           overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
             if (finished) runOnJS(navigateBackDelayed)();
@@ -1883,6 +1934,7 @@ export default function ReadScreen() {
         showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
       }
     } finally {
+      completionActionRef.current = null;
       setIsDeleting(false);
     }
   }, [isDeleting, isListEntry, reading, syncSpaceInboxRead, router, clearActiveSession, queryClient, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
@@ -2226,7 +2278,11 @@ export default function ReadScreen() {
                               isDeleting={isDeleting}
                               isCollectionsReady={isCollectionsReady}
                               isAlreadySaved={isAlreadySaved}
+                               canReply={canStartReply}
+                               isStartingReply={isStartingReply}
+                               isActionBusy={isSaving || isDeleting || isStartingReply}
                               onSave={handleCommitAndSave}
+                               onReply={handleStartReply}
                               onSkip={mode === "re_read" ? handleRereadExit : handleCommitAndSkip}
                               onReread={handleRestartReading}
                             />
@@ -2943,7 +2999,11 @@ interface ReadingCompleteScreenProps {
   isDeleting: boolean;
   isCollectionsReady: boolean;
   isAlreadySaved: boolean;
+  canReply: boolean;
+  isStartingReply: boolean;
+  isActionBusy: boolean;
   onSave: () => void;
+  onReply: () => void;
   onSkip: () => void;
   onReread: () => void;
 }
@@ -2954,7 +3014,11 @@ function ReadingCompleteScreen({
   isDeleting,
   isCollectionsReady,
   isAlreadySaved,
+  canReply,
+  isStartingReply,
+  isActionBusy,
   onSave,
+  onReply,
   onSkip,
   onReread,
 }: ReadingCompleteScreenProps) {
@@ -2976,13 +3040,32 @@ function ReadingCompleteScreen({
       </View>
 
       {/* 하단 버튼 영역 */}
-      <View style={[readingCompleteStyles.bottom, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+      <View style={[readingCompleteStyles.bottom, { paddingBottom: Platform.OS === "web" ? 34 : Math.max(insets.bottom, 24) }]}>
+        {canReply ? (
+          <Pressable
+            style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
+            onPress={onReply}
+            disabled={isActionBusy}
+            accessibilityRole="button"
+            accessibilityLabel="답글 쓰기"
+            accessibilityState={{ disabled: isActionBusy, busy: isStartingReply }}
+            testID="reading-complete-reply"
+          >
+            <View style={readingCompleteStyles.replyBtn}>
+              <Text style={readingCompleteStyles.replyBtnText}>
+                {isStartingReply ? "저장 중..." : "답글 쓰기"}
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
         {/* 다시 읽기 (primary) */}
         <Pressable
-          style={readingCompleteStyles.actionShadow}
+          style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
           onPress={onReread}
+          disabled={isActionBusy}
           accessibilityRole="button"
           accessibilityLabel="다시 읽기"
+          accessibilityState={{ disabled: isActionBusy }}
         >
           <View style={readingCompleteStyles.rereadBtn}>
             <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
@@ -2991,28 +3074,28 @@ function ReadingCompleteScreen({
 
         {/* 보관하기 (secondary) */}
         <Pressable
-          style={[readingCompleteStyles.actionShadow, (isSaving || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
+          style={[readingCompleteStyles.actionShadow, (isActionBusy || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
           onPress={onSave}
-          disabled={isSaving || !isCollectionsReady || isAlreadySaved}
+          disabled={isActionBusy || !isCollectionsReady || isAlreadySaved}
           accessibilityRole="button"
           accessibilityLabel="보관하기"
-          accessibilityState={{ disabled: isSaving || !isCollectionsReady || isAlreadySaved, busy: isSaving }}
+          accessibilityState={{ disabled: isActionBusy || !isCollectionsReady || isAlreadySaved, busy: isSaving }}
         >
           <View style={readingCompleteStyles.saveBtn}>
             <Text style={readingCompleteStyles.saveBtnText}>
-              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "이미 보관된 글이에요" : "보관하기"}
+              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "보관됨" : "보관하기"}
             </Text>
           </View>
         </Pressable>
 
         {/* 나가기 (tertiary) */}
         <Pressable
-          style={[readingCompleteStyles.actionShadow, isDeleting && readingCompleteStyles.btnDisabled]}
+          style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
           onPress={onSkip}
-          disabled={isDeleting}
+          disabled={isActionBusy}
           accessibilityRole="button"
           accessibilityLabel="나가기"
-          accessibilityState={{ disabled: isDeleting, busy: isDeleting }}
+          accessibilityState={{ disabled: isActionBusy, busy: isDeleting }}
         >
           <View style={readingCompleteStyles.skipBtn}>
             <Text style={readingCompleteStyles.skipBtnText}>
@@ -3076,6 +3159,22 @@ const readingCompleteStyles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+  },
+  replyBtn: {
+    width: "100%",
+    height: 52,
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: Colors.primaryAction,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  replyBtnText: {
+    fontSize: 16,
+    fontFamily: ReaderTokens.fontFamily.sansSemiBold,
+    fontWeight: "600",
+    color: Colors.primaryActionForeground,
   },
   saveBtnText: {
     fontSize: 16,

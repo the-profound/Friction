@@ -10,6 +10,8 @@ import {
   isLastPage,
   entersReaderSuspension,
   resumesReaderFromSuspension,
+  getCompletionCommitDisposition,
+  transitionSession,
 } from "./readingPersistence";
 
 describe("reader virtual-page bounds", () => {
@@ -76,5 +78,26 @@ describe("reader app-state boundaries", () => {
     expect(entersReaderSuspension("inactive", "background")).toBe(false);
     expect(resumesReaderFromSuspension("background", "active")).toBe(true);
     expect(resumesReaderFromSuspension("active", "active")).toBe(false);
+  });
+});
+
+describe("post-archive completion actions", () => {
+  it("treats a second completion commit as successful without another write", () => {
+    expect(getCompletionCommitDisposition("COMPLETED_READY")).toBe("commit");
+    expect(getCompletionCommitDisposition("COMPLETED_COMMITTED")).toBe(
+      "already_committed",
+    );
+    expect(getCompletionCommitDisposition("READING")).toBe("invalid");
+  });
+
+  it("allows rereading after completion was already archived", () => {
+    expect(transitionSession("COMPLETED_READY", "READING")).toEqual({
+      allowed: true,
+      state: "READING",
+    });
+    expect(transitionSession("COMPLETED_COMMITTED", "READING")).toEqual({
+      allowed: true,
+      state: "READING",
+    });
   });
 });

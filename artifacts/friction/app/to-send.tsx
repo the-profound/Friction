@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { View, Text, StyleSheet } from "react-native";
 import ScalePressable from "@/components/shared/ScalePressable";
 import HeaderButton from "@/components/shared/HeaderButton";
@@ -21,6 +22,7 @@ export default function ToSendScreen() {
     neighborId?: string;
     spaceId?: string;
     spaceName?: string;
+    replyToInboxId?: string;
   }>();
 
   const prefillArticleId = params.prefillArticleId ?? params.articleId;
@@ -35,6 +37,7 @@ export default function ToSendScreen() {
         params.spaceId ?? "",
         params.spaceName ?? "",
         params.returnToId ?? "",
+        params.replyToInboxId ?? "",
       ].join("|"),
     [
       params.targetGroup,
@@ -44,12 +47,16 @@ export default function ToSendScreen() {
       params.spaceId,
       params.spaceName,
       params.returnToId,
+      params.replyToInboxId,
     ],
   );
 
   const handleSendComplete = useCallback(() => {
+    if (params.replyToInboxId && prefillArticleId) {
+      void AsyncStorage.removeItem(`reply_context:${prefillArticleId}`).catch(() => undefined);
+    }
     router.back();
-  }, [router]);
+  }, [params.replyToInboxId, prefillArticleId, router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -100,6 +107,7 @@ export default function ToSendScreen() {
         prefillNeighborId={params.neighborId}
         prefillSpaceId={params.spaceId}
         prefillSpaceName={params.spaceName}
+        prefillReplyInboxId={params.replyToInboxId}
         returnToId={params.returnToId}
         prefillKey={prefillKey}
         onSent={handleSendComplete}

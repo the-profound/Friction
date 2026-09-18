@@ -234,7 +234,7 @@ export default function WritingScreen() {
   const navigation = useNavigation();
   const { setRecordKindIntent } = useAppNavigation();
   const queryClient = useQueryClient();
-  const { id, source, mode: modeParam, editorContext, returnPage, returnBlock, spaceId, spaceRoundId, letterType } = useLocalSearchParams<{
+  const { id, source, mode: modeParam, editorContext, returnPage, returnBlock, spaceId, spaceRoundId, letterType, sourceArticleId, replyToInboxId } = useLocalSearchParams<{
     id?: string;
     source?: string;
     mode?: string;
@@ -244,6 +244,8 @@ export default function WritingScreen() {
     spaceId?: string;
     spaceRoundId?: string;
     letterType?: string;
+    sourceArticleId?: string;
+    replyToInboxId?: string;
   }>();
   const isLocalDirectDraft = modeParam === "local-draft";
   const returnPageIndex = returnPage !== undefined ? parseInt(returnPage, 10) : undefined;
@@ -910,6 +912,7 @@ export default function WritingScreen() {
               authorId: userId ?? "",
               content: data.content,
               createdFrom: "direct",
+              ...(sourceArticleId ? { sourceArticleId } : {}),
               status: "NORMAL",
               createdAt: now,
               updatedAt: now,
@@ -925,6 +928,7 @@ export default function WritingScreen() {
                     ?? thoughtCreationGenerationRef.current,
                   content: data.content,
                   createdFrom: "direct",
+                  ...(sourceArticleId ? { sourceArticleId } : {}),
                 },
               })
               .then(async (created: Thought) => {
@@ -1081,7 +1085,7 @@ export default function WritingScreen() {
         void invalidateArticleLists(queryClient);
       }
     },
-    [id, createThought, queryClient, updateThought, updateArticle, isLocalDirectDraft, router, userId],
+    [id, createThought, queryClient, updateThought, updateArticle, isLocalDirectDraft, router, sourceArticleId, userId],
   );
 
   const handleAutosaveRestore = useCallback((data: {
@@ -1984,6 +1988,12 @@ export default function WritingScreen() {
           }),
         ).catch(() => undefined);
     }
+    if (replyToInboxId) {
+      await AsyncStorage.setItem(
+        `reply_context:${promoted.id}`,
+        JSON.stringify({ replyToInboxId, sourceArticleId: sourceArticleId ?? thought?.sourceArticleId }),
+      );
+    }
 
     // Replace route with the new article id so a refresh lands on the real article.
     // This route identity swap is a stage transition, not a user-initiated exit.
@@ -1994,10 +2004,11 @@ export default function WritingScreen() {
           id: promoted.id,
           mode: "dividing",
           ...(spaceId ? { spaceId, ...(spaceRoundId ? { spaceRoundId } : {}), ...(letterType ? { letterType } : {}) } : {}),
+           ...(replyToInboxId ? { replyToInboxId, ...(sourceArticleId ? { sourceArticleId } : {}) } : {}),
         },
       });
     }, { resumeGuardAfterRouteChange: true });
-  }, [abortAutosaveTransition, commitAutosaveTransition, flush, getEditorContent, markDirty, prepareAutosaveTransition, promoteThought, queryClient, releaseDirectThoughtDraft, reportAutosaveFailure, router, setModeBoth, setRecordKindIntent, showToast, spaceId, spaceRoundId, thought, letterType, navigateAfterRemovingGuard]);
+  }, [abortAutosaveTransition, commitAutosaveTransition, flush, getEditorContent, markDirty, prepareAutosaveTransition, promoteThought, queryClient, releaseDirectThoughtDraft, replyToInboxId, reportAutosaveFailure, router, setModeBoth, setRecordKindIntent, showToast, sourceArticleId, spaceId, spaceRoundId, thought, letterType, navigateAfterRemovingGuard]);
   retryPromotionRef.current = () => {
     void enterDividingMode();
   };
@@ -2299,6 +2310,7 @@ export default function WritingScreen() {
       params: {
         id,
         ...(spaceId ? { spaceId, ...(spaceRoundId ? { spaceRoundId } : {}), ...(letterType ? { letterType } : {}) } : {}),
+         ...(replyToInboxId ? { replyToInboxId, ...(sourceArticleId ? { sourceArticleId } : {}) } : {}),
       },
     });
     isNavigatingRef.current = false;
