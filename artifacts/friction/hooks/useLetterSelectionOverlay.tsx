@@ -73,11 +73,6 @@ export interface OpenLetterOverlayOptions {
   /** Envelope info for sealed letters (inbox use). */
   envelopeInfo?: EnvelopeInfo | null;
   /**
-   * Pass true when the source carousel uses the restrained carousel shadow
-   * token so the hero transition blends shadows correctly.
-   */
-  originUsesCarouselShadow?: boolean;
-  /**
    * The origin card's resting corner radius (on-screen pixels), when it
    * differs from the natural canonical-scaled ratio — e.g. a CanonicalCardSlot
    * whose outer clip pins an explicit radius rather than scaling it down
@@ -339,7 +334,6 @@ export function useLetterSelectionOverlay(
     currentSpaceId?: string | null;
   }>({});
   const [selectedEnvelopeInfo, setSelectedEnvelopeInfo] = useState<EnvelopeInfo | null>(null);
-  const [selectedCarouselShadow, setSelectedCarouselShadow] = useState(false);
   const [selectedOriginCardRadius, setSelectedOriginCardRadius] = useState<
     number | undefined
   >(undefined);
@@ -468,7 +462,6 @@ export function useLetterSelectionOverlay(
     setSelectedMeta({});
     setOverlayNavOptions({});
     setSelectedEnvelopeInfo(null);
-    setSelectedCarouselShadow(false);
     onCloseRef.current?.();
   }, []);
 
@@ -486,7 +479,6 @@ export function useLetterSelectionOverlay(
       setSelectedMeta({});
       setOverlayNavOptions({});
       setSelectedEnvelopeInfo(null);
-      setSelectedCarouselShadow(false);
       if (onReadRef.current) {
         onReadRef.current(article, isNonPrimary, mode);
       } else {
@@ -510,7 +502,6 @@ export function useLetterSelectionOverlay(
         currentSpaceId: openOptions?.currentSpaceId,
       });
       setSelectedEnvelopeInfo(openOptions?.envelopeInfo ?? null);
-      setSelectedCarouselShadow(openOptions?.originUsesCarouselShadow ?? false);
       setSelectedOriginCardRadius(openOptions?.originCardRadius);
 
       if (openOptions?.measureRef) {
@@ -751,7 +742,6 @@ export function useLetterSelectionOverlay(
         currentCollectionId={overlayNavOptions.currentCollectionId}
         currentAuthorId={overlayNavOptions.currentAuthorId}
         currentSpaceId={overlayNavOptions.currentSpaceId}
-        originUsesCarouselShadow={selectedCarouselShadow}
         originCardRadius={selectedOriginCardRadius}
         envelopeInfo={selectedEnvelopeInfo}
         visibilityButton={visibilityButton}

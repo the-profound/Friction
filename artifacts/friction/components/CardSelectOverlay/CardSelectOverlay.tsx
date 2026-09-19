@@ -205,12 +205,6 @@ interface CardSelectOverlayProps {
   currentAuthorId?: string | null;
   currentSpaceId?: string | null;
   /**
-   * The inbox carousel uses the restrained carousel shadow at the source.
-   * Cross-fade from that source token to the selection token on the same hero
-   * progress, so the return handoff cannot pop a different shadow into view.
-   */
-  originUsesCarouselShadow?: boolean;
-  /**
    * The origin card's resting corner radius (on-screen pixels) when it
    * diverges from the natural canonical-scaled ratio (e.g. a CanonicalCardSlot
    * with an explicit radius override). When set, the hero card's own radius
@@ -269,7 +263,6 @@ export default function CardSelectOverlay({
   currentCollectionId,
   currentAuthorId,
   currentSpaceId,
-  originUsesCarouselShadow = false,
   originCardRadius,
   envelopeInfo,
   visibilityButton,
@@ -391,17 +384,8 @@ export default function CardSelectOverlay({
   // The hero card keeps its full intrinsic size and is shrunk to the origin
   // slot's on-screen footprint via `transform: [{ scale }]` (see
   // cardHeroAnimatedStyle below), not by actually relaying it out smaller.
-  // A parent transform scale visually shrinks everything it renders,
-  // including shadow radius/offset/elevation/blur -- so a shadow style
-  // written in the same raw px the resting (unscaled) grid slot uses
-  // renders far fainter than intended while origin-scale is small, then pops
-  // to its true size the instant the Modal unmounts and the real, unscaled
-  // slot takes over. Divide the size-based shadow terms by this same scale
-  // (see `ArticleCardItem`'s `shadowScale`) so the on-screen result already
-  // matches the resting slot's shadow throughout the whole transition.
-  const heroScale = useDerivedValue(() =>
-    interpolate(progress.value, [0, 1], [originScale, finalScale]),
-  );
+  // This module renders a flat, shadow-free surface at every scale, so no
+  // shadow-counter-scale value is needed here.
 
   // ── Envelope animation values ─────────────────────────────────────────────
   const [envelopePhase, setEnvelopePhase] = useState<EnvelopePhase>("sealed");
@@ -1406,20 +1390,6 @@ export default function CardSelectOverlay({
                           isRead={meta.isRead ?? false}
                           isActive
                           disabled
-                          carouselShadow={
-                            originUsesCarouselShadow &&
-                            i === initialIndex
-                          }
-                          shadowProgress={
-                            originUsesCarouselShadow && i === initialIndex
-                              ? progress
-                              : undefined
-                          }
-                          shadowScale={
-                            originUsesCarouselShadow && i === initialIndex
-                              ? heroScale
-                              : undefined
-                          }
                           radiusOverride={
                             hasOriginCardRadius && i === initialIndex
                               ? cardRadiusOverride
@@ -1467,15 +1437,6 @@ export default function CardSelectOverlay({
                   isRead={displayMetas[0]?.isRead ?? false}
                   isActive
                   disabled
-                  carouselShadow={
-                    originUsesCarouselShadow
-                  }
-                  shadowProgress={
-                    originUsesCarouselShadow ? progress : undefined
-                  }
-                  shadowScale={
-                    originUsesCarouselShadow ? heroScale : undefined
-                  }
                   radiusOverride={
                     hasOriginCardRadius ? cardRadiusOverride : undefined
                   }

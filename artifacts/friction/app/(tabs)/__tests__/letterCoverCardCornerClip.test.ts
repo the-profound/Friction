@@ -13,8 +13,8 @@ const readComponent = (relativePath: string) =>
 /**
  * Every `.tsx` screen under `app/`, as paths relative to `appRoot`. Used so
  * regression coverage below applies to whichever screens actually use
- * `CanonicalCardSlot`/`carouselShadow` today, instead of a maintained list of
- * filenames that silently stops covering new or newly-fixed screens.
+ * `CanonicalCardSlot`/`ArticleCardItem` today, instead of a maintained list
+ * of filenames that silently stops covering new or newly-fixed screens.
  */
 function listAppScreenFiles(dir: string): string[] {
   const out: string[] = [];
@@ -35,43 +35,8 @@ const appScreenFiles = listAppScreenFiles(appRoot).map((f) =>
   relative(appRoot, f),
 );
 
-/**
- * Every `<CanonicalCardSlot ...>...</CanonicalCardSlot>` block in a source
- * string, split into its opening-tag props and its body (the JSX between the
- * opening and closing tags). Self-closing slots (no children) are skipped —
- * shadow ownership only applies once a card is actually projected inside.
- *
- * This assumes (like the rest of this file's regexes) that a slot's opening
- * tag never itself contains a bare `>` inside an attribute expression (e.g.
- * an inline arrow function) — true for every usage in this codebase today.
- */
-function findCanonicalCardSlotBlocks(
-  source: string,
-): { openProps: string; body: string }[] {
-  const blocks: { openProps: string; body: string }[] = [];
-  const openTagPattern = /<CanonicalCardSlot([\s\S]*?)>/g;
-  let match: RegExpExecArray | null;
-  while ((match = openTagPattern.exec(source))) {
-    const openProps = match[1];
-    if (openProps.trim().endsWith("/")) continue;
-    const bodyStart = match.index + match[0].length;
-    const closeIndex = source.indexOf("</CanonicalCardSlot>", bodyStart);
-    const body =
-      closeIndex === -1
-        ? source.slice(bodyStart)
-        : source.slice(bodyStart, closeIndex);
-    blocks.push({ openProps, body });
-  }
-  return blocks;
-}
-
-// Regression coverage for a corner-leak bug: the 기록 tab drew letter covers
-// directly (no outer wrapper owning the final radius+clip), and any grid that
-// opts a letter cover into the restrained carousel shadow token must open its
-// CardSelectOverlay with the same token — otherwise the shadow visibly pops
-// to the larger standard token right at the card's rounded corners.
 describe("letter cover card corner clipping", () => {
-  it("wraps the 기록 tab's letter cover in a shadow-owning CanonicalCardSlot", () => {
+  it("wraps the 기록 tab's letter cover in a CanonicalCardSlot", () => {
     const onScreen = read("(tabs)/on.tsx");
     const letterBranch = onScreen.match(
       /if \(record\.kind === "letter"\) \{[\s\S]*?\n {2}\}/,
@@ -79,54 +44,9 @@ describe("letter cover card corner clipping", () => {
 
     expect(letterBranch).toContain("<CanonicalCardSlot");
     expect(letterBranch).toContain("</CanonicalCardSlot>");
-    expect(letterBranch).toContain("carouselShadow");
-    expect(letterBranch).not.toContain("carouselShadow={true}");
     // The slot itself now owns the card's rendered size; ArticleCardItem must
     // not also be forced to a native cardWidth inside it.
     expect(letterBranch).not.toContain("cardWidth={width}");
-  });
-
-  it("opens the overlay with originUsesCarouselShadow wherever a letter grid uses the carousel shadow token", () => {
-    // File-name-agnostic: any screen under app/ that opts a letter card into
-    // the restrained carousel shadow token — whether via CanonicalCardSlot's
-    // own `carouselShadow` prop (the only supported way to pair it with a
-    // card projected through the slot) or, for screens that don't use the
-    // slot at all, directly on ArticleCardItem — must open its
-    // CardSelectOverlay with the matching option. This intentionally has no
-    // hardcoded screen list, so a new screen (or another task's fix to an
-    // existing screen) that adopts this pattern is covered automatically.
-    for (const relativePath of appScreenFiles) {
-      const source = read(relativePath);
-      if (!/\bcarouselShadow\b/.test(source)) continue;
-
-      expect(
-        source,
-        `${relativePath} uses the restrained carousel shadow token but never opens its overlay with originUsesCarouselShadow: true — the shadow will visibly pop to the larger standard token when the overlay opens or closes.`,
-      ).toContain("originUsesCarouselShadow: true");
-    }
-  });
-
-  it("keeps CanonicalCardSlot the sole shadow owner wherever a screen opts a projected card into the carousel shadow token", () => {
-    // The supported pattern is: CanonicalCardSlot itself draws the shadow on
-    // its unclipped outer boundary (and disables the child card's own
-    // shadow). A card that also declares its own `carouselShadow` while
-    // nested in such a slot is the retired pattern — the shadow is drawn a
-    // second time inside the slot's clipping boundary, where it gets cut off
-    // whenever the slot's static resting shadow (rather than the overlay's
-    // uncropped one) is what's visible.
-    for (const relativePath of appScreenFiles) {
-      const source = read(relativePath);
-      const slotBlocks = findCanonicalCardSlotBlocks(source);
-
-      for (const { openProps, body } of slotBlocks) {
-        if (!/\bcarouselShadow\b/.test(openProps)) continue;
-
-        expect(
-          body,
-          `${relativePath}: a CanonicalCardSlot using carouselShadow must be the sole shadow owner — its nested ArticleCardItem must not also declare carouselShadow.`,
-        ).not.toMatch(/<ArticleCardItem[\s\S]*?\bcarouselShadow\b/);
-      }
-    }
   });
 });
 
@@ -168,11 +88,11 @@ describe("card press-scale corner clipping", () => {
     expect(source).toContain("applyScaleStyle={!pressScale}");
   });
 
-  it("makes CanonicalCardSlot's shadow, clip, and content scale as one unit", () => {
+  it("makes CanonicalCardSlot's clip and content scale as one unit", () => {
     const source = readComponent("ArticleCardItem/CanonicalCardSlot.tsx");
 
     // The unclipped outer node must own the shared transform, with the clip
-    // nested beneath it so shadow, corners, and content move together.
+    // nested beneath it so corners and content move together.
     expect(source).toContain("useSharedValue(1)");
     expect(source).toMatch(
       /transform:\s*\[\{\s*scale:\s*pressScale\.value\s*\}\]/,
@@ -182,25 +102,113 @@ describe("card press-scale corner clipping", () => {
     expect(source).toContain("styles.clip");
     // The same shared value must reach the ArticleCardItem child so its own
     // ScalePressable writes into it (single source of truth for the ratio).
-    expect(source).toMatch(/cloneElement\([\s\S]*?\{\s*pressScale,/);
+    expect(source).toMatch(/cloneElement\([\s\S]*?\{\s*pressScale/);
   });
+});
 
-  it("renders the carousel shadow once outside the rounded content clip", () => {
-    const slot = readComponent("ArticleCardItem/CanonicalCardSlot.tsx");
+// Regression coverage: the letter card module (CanonicalCardSlot +
+// ArticleCardItem + CardSelectOverlay) must render a flat, shadow-free
+// surface in every state — resting slot and selection overlay alike. This
+// intentionally has no hardcoded screen list: any screen under app/ that
+// uses the module is covered automatically, so a new screen (or a
+// regression reintroducing the old shadow pattern on an existing one) fails
+// this test instead of silently reintroducing the shadow-pop bug this
+// module was built to eliminate.
+describe("letter card module never renders a shadow", () => {
+  // Retired props/shared-values that used to turn the shadow on somewhere in
+  // the module. None of them should exist anywhere in the module's own
+  // component source or any screen using it.
+  const RETIRED_SHADOW_TOKENS = [
+    "carouselShadow",
+    "noShadow",
+    "shadowProgress",
+    "shadowScale",
+    "originUsesCarouselShadow",
+    "heroScale",
+  ];
 
-    expect(slot).toContain("...Shadows.carouselCard");
-    expect(slot).toContain("carouselShadow && styles.carouselShadow");
-    expect(slot).toMatch(
-      /carouselShadow\s*\?\s*\{\s*noShadow:\s*true\s*\}\s*:\s*\{\}/,
+  it("never applies the shared Shadows.card/Shadows.carouselCard tokens inside ArticleCardItem or CanonicalCardSlot", () => {
+    const articleCardItem = readComponent(
+      "ArticleCardItem/ArticleCardItem.tsx",
+    );
+    const canonicalCardSlot = readComponent(
+      "ArticleCardItem/CanonicalCardSlot.tsx",
     );
 
-    const outerStyle =
-      slot.match(/outer:\s*\{([^}]*)\}/)?.[1] ?? "";
-    const clipStyle =
-      slot.match(/clip:\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(outerStyle).toContain('overflow: "visible"');
-    expect(outerStyle).not.toContain('overflow: "hidden"');
-    expect(clipStyle).toContain('overflow: "hidden"');
-    expect(clipStyle).not.toContain("Shadows.");
+    expect(articleCardItem).not.toContain("Shadows.");
+    expect(canonicalCardSlot).not.toContain("Shadows.");
+  });
+
+  it("never interpolates a shadow style inside CardSelectOverlay", () => {
+    const overlay = readComponent(
+      "CardSelectOverlay/CardSelectOverlay.tsx",
+    );
+
+    expect(overlay).not.toMatch(/shadowOpacity|shadowRadius|shadowOffset/);
+    expect(overlay).not.toContain("boxShadow");
+  });
+
+  it("has removed every retired shadow prop/shared-value from the module's own components", () => {
+    const articleCardItem = readComponent(
+      "ArticleCardItem/ArticleCardItem.tsx",
+    );
+    const canonicalCardSlot = readComponent(
+      "ArticleCardItem/CanonicalCardSlot.tsx",
+    );
+    const overlay = readComponent(
+      "CardSelectOverlay/CardSelectOverlay.tsx",
+    );
+
+    for (const token of RETIRED_SHADOW_TOKENS) {
+      const pattern = new RegExp(`\\b${token}\\b`);
+      expect(
+        articleCardItem,
+        `ArticleCardItem.tsx still references retired shadow token "${token}"`,
+      ).not.toMatch(pattern);
+      expect(
+        canonicalCardSlot,
+        `CanonicalCardSlot.tsx still references retired shadow token "${token}"`,
+      ).not.toMatch(pattern);
+      expect(
+        overlay,
+        `CardSelectOverlay.tsx still references retired shadow token "${token}"`,
+      ).not.toMatch(pattern);
+    }
+  });
+
+  it("has no screen re-enabling a shadow via a retired prop on CanonicalCardSlot or ArticleCardItem", () => {
+    // File-name-agnostic: every .tsx screen under app/ is scanned, so a new
+    // screen adopting the module is covered automatically. Matches a JSX
+    // opening tag for either component and checks its prop list (up to the
+    // matching `>`) for any retired shadow token/prop name.
+    const openTagPattern = /<(CanonicalCardSlot|ArticleCardItem)\b([\s\S]*?)>/g;
+
+    for (const relativePath of appScreenFiles) {
+      const source = read(relativePath);
+      let match: RegExpExecArray | null;
+      openTagPattern.lastIndex = 0;
+      while ((match = openTagPattern.exec(source))) {
+        const [, componentName, propsText] = match;
+        for (const token of RETIRED_SHADOW_TOKENS) {
+          const pattern = new RegExp(`\\b${token}\\b`);
+          expect(
+            propsText,
+            `${relativePath}: <${componentName}> passes retired shadow prop "${token}" — this module renders no shadow in any state; remove it instead of trying to re-enable one.`,
+          ).not.toMatch(pattern);
+        }
+      }
+    }
+  });
+
+  it("has no screen opening its overlay with a retired shadow option", () => {
+    for (const relativePath of appScreenFiles) {
+      const source = read(relativePath);
+      for (const token of ["originUsesCarouselShadow"]) {
+        expect(
+          source,
+          `${relativePath} still passes the retired "${token}" overlay option — CardSelectOverlay no longer interpolates a shadow, so this option no longer exists.`,
+        ).not.toContain(token);
+      }
+    }
   });
 });

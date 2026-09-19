@@ -51,14 +51,6 @@ describe("archive collection recent-letter previews", () => {
     );
   });
 
-  it("disables the preview cover's own shadow, matching the space card treatment", () => {
-    const previewCardsFn = archiveScreen.slice(
-      archiveScreen.indexOf("function CollectionPreviewCards"),
-      archiveScreen.indexOf("function ", archiveScreen.indexOf("function CollectionPreviewCards") + 1),
-    );
-    expect(previewCardsFn).toContain("noShadow");
-  });
-
   it("keeps the preview row height stable across 0-3 letters and async loading", () => {
     const previewStyle = archiveScreen.slice(
       archiveScreen.indexOf("collectionPreviews:"),

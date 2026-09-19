@@ -326,11 +326,6 @@ export default function UserProfileScreen() {
         measureRef: slotRef ?? null,
         fallbackOrigin: { x: 0, y: 0, width: cellWidth, height: cellHeight },
         currentAuthorId: profileUserId,
-        // The grid card renders with the restrained carousel shadow token;
-        // the overlay must open/close using the same token or the shadow
-        // visibly pops to the larger standard token right at the card's
-        // rounded corners.
-        originUsesCarouselShadow: true,
       });
     },
     [
@@ -422,9 +417,10 @@ export default function UserProfileScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={article.title || "제목 없음"}
                 >
-                  {/* The slot's unclipped outer boundary owns the restrained shadow while
-                      its same-sized inner boundary clips the projected cover corners. */}
-                  <CanonicalCardSlot width={cellWidth} height={cellHeight} carouselShadow>
+                  {/* The slot's unclipped outer boundary and its same-sized inner
+                      boundary clip the projected cover corners; this module renders
+                      no shadow at rest or in the selection overlay. */}
+                  <CanonicalCardSlot width={cellWidth} height={cellHeight}>
                     <ArticleCardItem
                       title={vm.article?.title ?? "제목 없음"}
                       authorName={vm.authorName ?? undefined}

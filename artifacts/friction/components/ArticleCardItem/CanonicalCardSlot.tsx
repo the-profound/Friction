@@ -5,7 +5,7 @@ import RAnimated, {
   useAnimatedStyle,
   type SharedValue,
 } from "react-native-reanimated";
-import { Shadows, Sizing } from "@/constants/tokens";
+import { Sizing } from "@/constants/tokens";
 
 interface CanonicalCardSlotProps {
   /** The visual slot size in the surrounding list or carousel. */
@@ -25,11 +25,6 @@ interface CanonicalCardSlotProps {
    * them instead of looking flatter.
    */
   borderRadius?: number;
-  /**
-   * Draws the restrained carousel shadow on the unclipped slot boundary.
-   * The child card's own shadow is disabled so the shadow is rendered once.
-   */
-  carouselShadow?: boolean;
 }
 
 /**
@@ -44,22 +39,26 @@ export const CANONICAL_RADIUS_RATIO = 16 / Sizing.cardSlotW;
  * Keeps an ArticleCardItem at the same canonical size used by the selection
  * overlay, then projects that complete card into a smaller visual slot.
  *
- * The outer view owns layout, optional shadow, and press scale without clipping,
- * so iOS/web shadows can extend beyond the slot. A same-sized inner clip owns
- * the final corner radius and clips only the projected card content. The
- * canonical projection therefore never recalculates typography, padding,
- * radius, or shadow from a small cardWidth.
+ * The outer view owns layout and press scale without clipping. A same-sized
+ * inner clip owns the final corner radius and clips only the projected card
+ * content. The canonical projection therefore never recalculates typography,
+ * padding, or radius from a small cardWidth.
+ *
+ * This module (this slot, `ArticleCardItem`, and `CardSelectOverlay`) always
+ * renders a flat, shadow-free surface, at rest and inside the selection
+ * overlay alike — do not add a shadow style here or pass one down to the
+ * projected card.
  *
  * The single ArticleCardItem child is expected to expose a `pressScale`
  * prop (all current usages satisfy this). This component creates that
  * shared value, hands it to the child so ScalePressable's press-in/out
  * animation writes into it instead of transforming the child's own subtree,
  * and applies the same value as a transform on this OUTER view. Because the
- * shadow, nested clip, and content are in the same transformed node tree, they
- * always shrink together at the same ratio and around the same center.
+ * nested clip and content are in the same transformed node tree, they always
+ * shrink together at the same ratio and around the same center.
  */
 const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
-  ({ width, height, children, borderRadius, carouselShadow = false }, ref) => {
+  ({ width, height, children, borderRadius }, ref) => {
     const scale = width / Sizing.cardSlotW;
     const canonicalHeight = Sizing.cardH;
     const resolvedRadius =
@@ -74,12 +73,8 @@ const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
       ? React.cloneElement(
           children as React.ReactElement<{
             pressScale?: SharedValue<number>;
-            noShadow?: boolean;
           }>,
-          {
-            pressScale,
-            ...(carouselShadow ? { noShadow: true } : {}),
-          },
+          { pressScale },
         )
       : children;
 
@@ -88,7 +83,6 @@ const CanonicalCardSlot = React.forwardRef<View, CanonicalCardSlotProps>(
         ref={ref}
         style={[
           styles.outer,
-          carouselShadow && styles.carouselShadow,
           { width, height, borderRadius: resolvedRadius },
           animatedOuterStyle,
         ]}
@@ -121,9 +115,6 @@ export default CanonicalCardSlot;
 const styles = StyleSheet.create({
   outer: {
     overflow: "visible",
-  },
-  carouselShadow: {
-    ...Shadows.carouselCard,
   },
   clip: {
     width: "100%",

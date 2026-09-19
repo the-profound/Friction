@@ -153,10 +153,6 @@ export default function RecipientOnlyLettersScreen() {
           : null,
         fallbackOrigin: { x: 0, y: 0, width: cellWidth, height: cellHeight },
         currentAuthorId: userId,
-        // The grid card renders with the restrained carousel shadow token;
-        // the overlay must open/close using the same token or the shadow
-        // visibly pops to the larger standard token at the slot boundary.
-        originUsesCarouselShadow: true,
       });
     },
     [openLetterOverlay, cellWidth, cellHeight, sendRecordByArticleId, userId],
@@ -185,7 +181,7 @@ export default function RecipientOnlyLettersScreen() {
                 { width: cellWidth, opacity: hidden ? 0 : 1 },
               ]}
             >
-              <CanonicalCardSlot width={cellWidth} height={cellHeight} carouselShadow>
+              <CanonicalCardSlot width={cellWidth} height={cellHeight}>
                 <ArticleCardItem
                   title={vm.article?.title ?? "제목 없음"}
                   authorName={vm.authorName ?? undefined}
@@ -303,8 +299,7 @@ const styles = StyleSheet.create({
   },
   gridCell: {
     // No overflow clip here: CanonicalCardSlot owns its own inner clip for
-    // the projected cover, and the outer boundary must stay unclipped so the
-    // restrained carousel shadow (carouselShadow prop) isn't cut off.
+    // the projected cover.
   },
   emptyWrap: {
     flex: 1,

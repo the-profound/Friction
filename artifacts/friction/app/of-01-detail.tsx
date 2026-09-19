@@ -379,7 +379,7 @@ export default function PersonalCollectionDetailScreen() {
               }}
               style={[styles.gridCell, { width: cellWidth, opacity: hidden ? 0 : 1 }]}
             >
-              <CanonicalCardSlot width={cellWidth} height={cellHeight} carouselShadow>
+              <CanonicalCardSlot width={cellWidth} height={cellHeight}>
                 <ArticleCardItem
                   title={entry.article?.title ?? "제목 없음"}
                   authorName={vm?.authorName ?? undefined}
@@ -396,11 +396,6 @@ export default function PersonalCollectionDetailScreen() {
                     // overlay's "읽기" button, regardless of authorship.
                     const slotRef = cardSlotRefs.current.get(entry.articleId);
                     openLetterOverlay(entry.article, {
-                      // This grid renders with the restrained carousel shadow
-                      // token; the overlay must open/close using the same
-                      // token or the shadow visibly pops to the larger
-                      // standard token right at the card's rounded corners.
-                      originUsesCarouselShadow: true,
                       meta: {
                         // Show the letter's originating Space, not this
                         // browsing collection's own name (always redundant

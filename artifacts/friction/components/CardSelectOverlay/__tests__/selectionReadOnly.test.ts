@@ -52,12 +52,13 @@ describe("selection-mode read entry", () => {
     expect(articleCard).not.toContain("ArticleCardShadow");
     expect(articleCard).not.toContain("hideShadow");
     expect(articleCard).toContain("backgroundColor: DEFAULT_BG");
-    expect(articleCard).toContain("...Shadows.card");
-    expect(articleCard).toContain("...Shadows.carouselCard");
-    expect(articleCard).toContain("shadowProgress?:");
-    expect(articleCard).toContain("interpolate(shadowProgress.value");
+    // The letter card module (CanonicalCardSlot + ArticleCardItem +
+    // CardSelectOverlay) renders a flat, shadow-free surface in every
+    // state — see letterCoverCardCornerClip.test.ts's "never renders a
+    // shadow" coverage.
+    expect(articleCard).not.toContain("Shadows.");
+    expect(articleCard).not.toContain("shadowProgress");
     expect(articleCard).not.toContain("StyleSheet.absoluteFill");
-    expect(overlay).toContain("shadowProgress={");
-    expect(overlay).toContain("? progress");
+    expect(overlay).not.toContain("shadowProgress");
   });
 });

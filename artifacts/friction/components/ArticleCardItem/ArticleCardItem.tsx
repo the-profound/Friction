@@ -1,17 +1,12 @@
 import React from "react";
-import {
-  StyleSheet,
-  Platform,
-  type ViewStyle,
-} from "react-native";
+import { StyleSheet } from "react-native";
 import RAnimated, {
   useAnimatedStyle,
-  interpolate,
   type SharedValue,
 } from "react-native-reanimated";
 import ScalePressable from "@/components/shared/ScalePressable";
 import type { ArticleCover } from "@workspace/api-client-react";
-import { Colors, Shadows, Sizing } from "../../constants/tokens";
+import { Colors, Sizing } from "../../constants/tokens";
 import ArticleCardCover from "./ArticleCardCover";
 
 interface ArticleCardItemProps {
@@ -41,29 +36,6 @@ interface ArticleCardItemProps {
    * card covers). Kept only so existing callers don't need to change.
    */
   visibility?: string | null;
-  /** Limits shadow strength when the card sits inside a clipped date carousel. */
-  carouselShadow?: boolean;
-  /** Removes the card surface shadow entirely, e.g. for compact previews stacked inside another shadowed container. */
-  noShadow?: boolean;
-  /**
-   * Selection overlays use the same hero progress (Reanimated shared value,
-   * UI thread) to blend a carousel card's raised surface into the
-   * selected-card treatment and back on close.
-   */
-  shadowProgress?: SharedValue<number>;
-  /**
-   * The overlay's hero card keeps its full intrinsic size and is visually
-   * shrunk to the origin slot's footprint via a parent `transform: scale`,
-   * not real layout resizing. That parent scale also shrinks whatever this
-   * card renders, including shadow radius/offset/elevation/blur -- so a
-   * shadow written in the same raw px the resting (unscaled) slot uses would
-   * render far fainter while the scale is small, then pop to full size the
-   * instant the transform is gone. Pass the same per-frame scale factor here
-   * so the size-based shadow terms are divided by it before shrinking,
-   * keeping the on-screen shadow constant (matching the resting slot)
-   * throughout the transition instead of only at its endpoints.
-   */
-  shadowScale?: SharedValue<number>;
   /** Called after the image, or its explicit fallback, is visibly rendered. */
   onImageReady?: () => void;
   /**
@@ -88,19 +60,6 @@ interface ArticleCardItemProps {
 
 const DEFAULT_BG = Colors.zinc50;
 
-/**
- * Static base shadow style for the two non-interpolated cases. When
- * `shadowProgress` is provided, the per-frame interpolated values are layered
- * on top via `useAnimatedCardSurfaceShadowStyle` below (UI thread).
- */
-function getStaticCardSurfaceShadowStyle(
-  carouselShadow: boolean,
-  hasShadowProgress: boolean,
-): ViewStyle | undefined {
-  if (!carouselShadow) return styles.standardCardSurface;
-  if (!hasShadowProgress) return styles.carouselCardSurface;
-  return undefined;
-}
 function ArticleCardItem({
   title,
   authorName,
@@ -117,10 +76,6 @@ function ArticleCardItem({
   letterTypeBadge,
   date,
   visibility,
-  carouselShadow = false,
-  shadowProgress,
-  shadowScale,
-  noShadow = false,
   onImageReady,
   pressScale,
   radiusOverride,
@@ -129,15 +84,6 @@ function ArticleCardItem({
   const h = w * Sizing.cardRatio;
   const scale = w / CARD_W;
   const borderRadius = cardRadius ?? Math.max(8, Math.round(16 * scale));
-  const staticShadowStyle = getStaticCardSurfaceShadowStyle(
-    carouselShadow,
-    !!shadowProgress,
-  );
-  const animatedShadowStyle = useAnimatedCardSurfaceShadowStyle(
-    carouselShadow,
-    shadowProgress,
-    shadowScale,
-  );
   const animatedRadiusStyle = useAnimatedRadiusOverrideStyle(radiusOverride);
 
   return (
@@ -157,8 +103,6 @@ function ArticleCardItem({
       <RAnimated.View
         style={[
           styles.cardSurface,
-          !noShadow && staticShadowStyle,
-          !noShadow && animatedShadowStyle,
           { width: w, height: h, borderRadius },
           animatedRadiusStyle,
         ]}
@@ -196,14 +140,10 @@ const styles = StyleSheet.create({
     overflow: "visible",
     // The raised surface is the card itself. Never put an opaque, same-sized
     // shadow plate behind this cover: a transform or image handoff can expose
-    // it as a white duplicate card.
+    // it as a white duplicate card. This module renders a flat surface with
+    // no shadow in any state (resting slot or selection overlay) — do not
+    // reintroduce a shadow style here or on any wrapping slot/overlay.
     backgroundColor: DEFAULT_BG,
-  },
-  standardCardSurface: {
-    ...Shadows.card,
-  },
-  carouselCardSurface: {
-    ...Shadows.carouselCard,
   },
   inactive: {
     opacity: Colors.cardInactiveOpacity,
@@ -214,63 +154,11 @@ const styles = StyleSheet.create({
 });
 
 /**
- * The card surface itself owns the interpolation. Avoid an opaque shadow
- * sibling: it can show up as a same-sized white card while the cover moves.
- * Runs entirely on the UI thread via Reanimated so the carousel-shadow
- * cross-fade never drops frames during the hero open/close transition.
- */
-function useAnimatedCardSurfaceShadowStyle(
-  carouselShadow: boolean,
-  shadowProgress?: SharedValue<number>,
-  shadowScale?: SharedValue<number>,
-) {
-  return useAnimatedStyle(() => {
-    if (!carouselShadow || !shadowProgress) return {};
-
-    // Counter-scale the size-based shadow terms (radius/offset/elevation/
-    // blur) against the hero card's own transform scale, so a parent
-    // `transform: scale` shrinking the whole card toward a small origin slot
-    // does not also shrink the shadow into invisibility. Opacity/alpha is
-    // scale-invariant and left untouched. See `shadowScale`'s doc comment.
-    const counterScale = shadowScale ? shadowScale.value : 1;
-
-    if (Platform.OS === "ios") {
-      return {
-        shadowColor: "#000",
-        shadowOffset: {
-          width: 0,
-          height: interpolate(shadowProgress.value, [0, 1], [2, 4]) / counterScale,
-        },
-        shadowOpacity: interpolate(shadowProgress.value, [0, 1], [0.1, 0.12]),
-        shadowRadius: interpolate(shadowProgress.value, [0, 1], [6, 12]) / counterScale,
-      };
-    }
-
-    if (Platform.OS === "android") {
-      return {
-        elevation: interpolate(shadowProgress.value, [0, 1], [3, 5]) / counterScale,
-      };
-    }
-
-    if (Platform.OS === "web") {
-      const offsetY = interpolate(shadowProgress.value, [0, 1], [2, 4]) / counterScale;
-      const blur = interpolate(shadowProgress.value, [0, 1], [8, 14]) / counterScale;
-      const alpha = interpolate(shadowProgress.value, [0, 1], [0.1, 0.12]);
-      return {
-        boxShadow: `0px ${offsetY}px ${blur}px rgba(0,0,0,${alpha})`,
-      } as ViewStyle;
-    }
-
-    return {};
-  });
-}
-
-/**
- * Mirrors `useAnimatedCardSurfaceShadowStyle`: runs on the UI thread so the
- * radius the selection overlay computes per frame (see
- * `CardSelectOverlay`'s `cardRadiusOverride`) is applied without a JS-thread
- * round trip. Returns an empty style when no override is supplied, leaving
- * the static `borderRadius` set alongside it in the style array untouched.
+ * Runs on the UI thread so the radius the selection overlay computes per
+ * frame (see `CardSelectOverlay`'s `cardRadiusOverride`) is applied without a
+ * JS-thread round trip. Returns an empty style when no override is supplied,
+ * leaving the static `borderRadius` set alongside it in the style array
+ * untouched.
  */
 function useAnimatedRadiusOverrideStyle(radiusOverride?: SharedValue<number>) {
   return useAnimatedStyle(() => {

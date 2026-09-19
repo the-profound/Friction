@@ -291,7 +291,6 @@ function InboxScreenContent() {
     if (!article) return;
     openLetterOverlay(article, {
       fallbackOrigin: layout,
-      originUsesCarouselShadow: true,
       envelopeInfo: (item as any).isEnvelope && !item.openedAt
         ? {
             senderName: item.senderDisplayName ?? item.sender?.nickname ?? item.sender?.id ?? null,
@@ -386,7 +385,6 @@ function InboxScreenContent() {
                     cover={item.article?.cover}
                     isRead={item.isRead}
                     isActive={context.isActive}
-                    carouselShadow
                   />
                 )}
                 {isSealed ? (

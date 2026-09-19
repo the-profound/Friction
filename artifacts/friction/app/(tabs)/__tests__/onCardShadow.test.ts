@@ -42,7 +42,7 @@ describe("record card shadow ownership", () => {
     expect(onScreen).toContain("question && styles.questionCardSurface");
   });
 
-  it("keeps card-view shadows untouched while list rows use the toned-down list card shadow", () => {
+  it("keeps card-view shadows untouched on non-module cards while list rows use the toned-down list card shadow", () => {
     const recordRow = read(
       "../components/RecordRow/RecordRow.tsx",
     );
@@ -55,13 +55,16 @@ describe("record card shadow ownership", () => {
     expect(recordRow).toContain(
       "rowContent: { padding: 16, gap: 7, borderRadius: 16, backgroundColor: Colors.white, ...Shadows.listCard }",
     );
-    expect(articleCard).toContain("...Shadows.card");
-    expect(articleCard).toContain("...Shadows.carouselCard");
+    // ArticleCardItem is part of the letter card module (CanonicalCardSlot +
+    // ArticleCardItem + CardSelectOverlay), which renders a flat, shadow-free
+    // surface at rest and in the selection overlay alike — see
+    // letterCoverCardCornerClip.test.ts's "never renders a shadow" coverage.
+    expect(articleCard).not.toContain("Shadows.");
     expect(articleListItem).toContain("...Shadows.listCard");
     expect(articleListItem).toContain("marginHorizontal: Spacing.screenPx");
   });
 
-  it("lets the 기록 letter slot own one unclipped carousel shadow", () => {
+  it("lets the 기록 letter slot's clip own the corners with no shadow", () => {
     const onScreen = read("(tabs)/on.tsx");
     const letterBranch = onScreen.match(
       /if \(record\.kind === "letter"\) \{[\s\S]*?\n {2}\}/,
@@ -71,10 +74,9 @@ describe("record card shadow ownership", () => {
     );
 
     expect(letterBranch).toContain(
-      "<CanonicalCardSlot width={width} height={height} carouselShadow>",
+      "<CanonicalCardSlot width={width} height={height}>",
     );
-    expect(letterBranch).not.toContain("<ArticleCardItem\n            carouselShadow");
-    expect(canonicalSlot).toContain("carouselShadow && styles.carouselShadow");
+    expect(canonicalSlot).not.toContain("Shadows.");
     expect(canonicalSlot).toContain('overflow: "visible"');
     expect(canonicalSlot).toContain("styles.clip");
   });

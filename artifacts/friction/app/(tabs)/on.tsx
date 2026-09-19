@@ -234,9 +234,10 @@ function RecordSourceCard({
   if (record.kind === "letter") {
     return (
       <View style={NON_SELECTABLE_WEB_STYLE}>
-        {/* The slot's unclipped outer boundary owns the restrained shadow while
-            its same-sized inner boundary clips the projected cover corners. */}
-        <CanonicalCardSlot width={width} height={height} carouselShadow>
+        {/* The slot's unclipped outer boundary and its same-sized inner
+            boundary clip the projected cover corners; this module renders no
+            shadow at rest or in the selection overlay. */}
+        <CanonicalCardSlot width={width} height={height}>
           <ArticleCardItem
             title={record.article.title || "제목 없음"}
             authorName={record.article.authorNickname ?? undefined}
@@ -1149,11 +1150,6 @@ function OnScreenContent() {
                   measureOrigin((layout) => {
                     openLetterOverlay(record.article, {
                       fallbackOrigin: layout,
-                      // The source card renders with the restrained carousel
-                      // shadow token; the overlay must open/close using the
-                      // same token or the shadow visibly pops to the larger
-                      // standard token right at the card's rounded corners.
-                      originUsesCarouselShadow: true,
                       meta: {
                         // Overlay header shows spaceName for space letters; falls
                         // back to collectionName (personal folder) otherwise.

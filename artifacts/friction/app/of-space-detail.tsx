@@ -303,7 +303,6 @@ function SpaceCarousel({
           width={SC_CARD_W}
           height={SC_CARD_H}
           borderRadius={SC_SLOT_RADIUS}
-          carouselShadow
         >
           <ArticleCardItem
             title={title ?? "제목 없음"}
@@ -904,7 +903,6 @@ function RoundSection({
                 width={SC_CARD_W}
                 height={SC_CARD_H}
                 borderRadius={SC_SLOT_RADIUS}
-                carouselShadow
               >
                 <ArticleCardItem
                   title={title ?? "제목 없음"}
@@ -1459,11 +1457,6 @@ export default function SpaceDetailScreen() {
         // natural canonical-scaled ratio; tell the overlay so its close
         // animation converges on that exact radius instead of popping to it.
         originCardRadius: SC_SLOT_RADIUS,
-        // Both round-carousel CanonicalCardSlots above render with the
-        // restrained carousel shadow token; the overlay must open/close using
-        // the same token or the shadow visibly pops to the larger standard
-        // token as the card grows/shrinks.
-        originUsesCarouselShadow: true,
       });
       // Async fetch to hydrate the overlay with the full article object
       // (includes sourceArticleId for ancestor chain traversal).

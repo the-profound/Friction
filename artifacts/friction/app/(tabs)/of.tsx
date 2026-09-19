@@ -1062,7 +1062,6 @@ function RecentPostCards({
               cardWidth={coverWidth}
               cardRadius={coverRadius}
               disabled
-              noShadow
               onPress={() => {}}
             />
           </View>
