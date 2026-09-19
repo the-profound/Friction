@@ -1369,7 +1369,6 @@ function spellFindRange(
   let editorFocused = false;
   let keyboardOpen = false;
   let syncScheduled = false;
-  let viewportCorrectionGeneration = 0;
   const LARGE_PASTE_MIN_CHARS = 800;
   const LARGE_PASTE_MIN_LINES = 6;
   const CARET_VIEWPORT_MARGIN_PX = 16;
@@ -1382,6 +1381,7 @@ function spellFindRange(
   let pendingViewportCorrectionAfterTouch = false;
   let editorObscuredBottomPx = 0;
   let selectionHandleDragging = false;
+  let selectionHandleCorrectionGeneration = 0;
   let activeSelectionEndpoint: SelectionEndpoint | null = null;
 
   function getDocumentScrollTop(): number {
@@ -1475,14 +1475,26 @@ function spellFindRange(
   }
 
   function scheduleViewportCorrection(keepEditorSelectionVisible: boolean) {
-    const generation = ++viewportCorrectionGeneration;
+    const belongsToSelectionHandleDrag = selectionHandleDragging;
+    const selectionHandleGeneration = selectionHandleCorrectionGeneration;
     const run = () => {
-      if (generation !== viewportCorrectionGeneration) return;
+      if (
+        belongsToSelectionHandleDrag &&
+        selectionHandleGeneration !== selectionHandleCorrectionGeneration
+      ) {
+        return;
+      }
       correctDocumentViewport(keepEditorSelectionVisible);
     };
 
     // The first pass follows ProseMirror's DOM commit; the delayed pass follows
-    // WKWebView's keyboard/frame animation and final text reflow.
+    // WKWebView's keyboard/frame animation and final text reflow. Do not cancel
+    // an older delayed pass when another correction is scheduled: consecutive
+    // Enter presses and selection updates can otherwise invalidate the only
+    // pass that runs after the new paragraph's layout settles. Every pass reads
+    // the current caret rect, viewport height, and scroll range, so retained
+    // passes cannot apply a stale target and remain no-ops while the caret is
+    // already inside the safe area.
     requestAnimationFrame(() => requestAnimationFrame(run));
     setTimeout(run, 180);
   }
@@ -2727,7 +2739,7 @@ function spellFindRange(
       // any session state. Otherwise a queued pass can run against a cleared
       // endpoint and fall back to selection.head, moving toward the stationary
       // endpoint or a stale top-of-document coordinate.
-      viewportCorrectionGeneration++;
+      selectionHandleCorrectionGeneration++;
       if (selectionHandleDragging) {
         selectionHandleDragging = false;
         postToRN({ type: "onSelHandleDragEnd" });

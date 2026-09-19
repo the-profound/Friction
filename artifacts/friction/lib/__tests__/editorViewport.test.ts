@@ -46,6 +46,47 @@ describe("native editor viewport scroll correction", () => {
     ).toBe(360);
   });
 
+  it("uses the latest settled caret and scroll range at the end of the document", () => {
+    const initialPass = computeEditorViewportScrollTop({
+      currentScrollTop: 320,
+      maxScrollTop: 340,
+      viewportHeight: 500,
+      marginPx: 16,
+      obscuredBottomPx: 64,
+      caretTop: 790,
+      caretBottom: 814,
+    });
+    expect(initialPass).toBe(340);
+
+    // A later layout pass has committed the new empty paragraph and bottom
+    // padding, so the same policy can now reveal the latest caret completely.
+    expect(
+      computeEditorViewportScrollTop({
+        currentScrollTop: initialPass,
+        maxScrollTop: 430,
+        viewportHeight: 500,
+        marginPx: 16,
+        obscuredBottomPx: 64,
+        caretTop: 850,
+        caretBottom: 874,
+      }),
+    ).toBe(430);
+  });
+
+  it("does not move again when a retained delayed pass finds the caret safe", () => {
+    expect(
+      computeEditorViewportScrollTop({
+        currentScrollTop: 430,
+        maxScrollTop: 430,
+        viewportHeight: 500,
+        marginPx: 16,
+        obscuredBottomPx: 64,
+        caretTop: 760,
+        caretBottom: 784,
+      }),
+    ).toBe(430);
+  });
+
   it("reveals a caret above the visible editor after a viewport change", () => {
     expect(
       computeEditorViewportScrollTop({

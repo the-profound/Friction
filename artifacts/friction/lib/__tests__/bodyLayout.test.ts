@@ -392,6 +392,19 @@ describe("letter body font fallback contract", () => {
     expect(editorSource).toContain(
       "editor.view.coordsAtPos(boundedSelectionPosition)",
     );
+    const correctionScheduler = editorSource.slice(
+      editorSource.indexOf("function scheduleViewportCorrection"),
+      editorSource.indexOf("function syncKeyboardState"),
+    );
+    expect(correctionScheduler).toContain(
+      "requestAnimationFrame(() => requestAnimationFrame(run))",
+    );
+    expect(correctionScheduler).toContain("setTimeout(run, 180)");
+    expect(correctionScheduler).not.toContain("viewportCorrectionGeneration");
+    expect(correctionScheduler).toContain("belongsToSelectionHandleDrag");
+    expect(editorSource).toContain(
+      'if (event.key === "Enter" && editorFocused)',
+    );
     expect(nativeEditor).toContain("automaticallyAdjustContentInsets={false}");
     expect(nativeEditor).toContain(
       'contentInsetAdjustmentBehavior={Platform.OS === "ios" ? "never" : undefined}',
