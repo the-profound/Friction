@@ -1101,7 +1101,10 @@ function CollectionPreviewCards({
           <ArticleCardItem
             title={entry.article?.title ?? "제목 없음"}
             authorName={entry.article?.authorNickname ?? undefined}
-            collectionName={entry.article?.collectionName ?? undefined}
+            collectionName={
+              entry.article?.spaceName ?? entry.article?.collectionName ?? undefined
+            }
+            spaceName={entry.article?.spaceName ?? undefined}
             cover={entry.article?.cover}
             cardWidth={coverWidth}
             cardRadius={coverRadius}
