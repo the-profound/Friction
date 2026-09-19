@@ -108,6 +108,7 @@ import {
   type ReaderAppState,
 } from "@/lib/readingPersistence";
 import { useToast } from "@/contexts/ToastContext";
+import { launchCompletionAction } from "@/lib/completionActionCoordinator";
 import { formatReadingThoughtQuote, getReadingThoughtMemoLength } from "@/lib/thoughtInlineEditor";
 import { createAnalyticsSessionId } from "@/lib/analytics";
 import {
@@ -561,6 +562,7 @@ export default function ReadScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
   const [isSavedThisSession, setIsSavedThisSession] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isStartingReply, setIsStartingReply] = useState(false);
   const completionActionRef = useRef<"save" | "reply" | "exit" | null>(null);
@@ -1789,24 +1791,27 @@ export default function ReadScreen() {
     || (collectionsQuery.data?.some((collection) => collection.containsArticle) ?? false);
 
   const handleCommitAndSave = useCallback(() => {
-    if (completionActionRef.current) return;
     if (!isCollectionsReady) {
       showToast({ message: "보관함 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.", type: "info" });
       return;
     }
     if (isAlreadySaved) return;
-    isSavingRef.current = true;
-    completionActionRef.current = "save";
-    setIsSaving(true);
 
-    // Keep the completion screen mounted while persistence runs. A failed step
-    // releases the lock so the same action can be retried in place.
-    void (async () => {
-      try {
+    const started = launchCompletionAction({
+      lock: completionActionRef,
+      action: "save",
+      onStart: () => {
+        isSavingRef.current = true;
+        setIsSaving(true);
+        setArchiveError(null);
+        // Reflect the requested action in the same event turn. Core persistence
+        // failure rolls this back so the stable action slot becomes retryable.
+        setIsSavedThisSession(true);
+      },
+      work: async () => {
         const result = await reading.commitCompletion();
         if (!result.success) {
-          showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
-          return;
+          throw new Error(result.error ?? "완독 처리에 실패했습니다.");
         }
         await applyAnsweredQuestionCardsToMemo();
         await syncSpaceInboxRead();
@@ -1838,7 +1843,6 @@ export default function ReadScreen() {
               id: targetCollectionId,
               data: { articleId },
             });
-            setIsSavedThisSession(true);
             invalidateMyCollections(queryClient);
             try {
               await updateRecentCollection.mutateAsync({
@@ -1848,21 +1852,32 @@ export default function ReadScreen() {
               invalidateRecentCollection(queryClient, userId);
             } catch (e) {
               console.warn("[handleCommitAndSave] recent collection update failed (non-fatal):", e);
+              showToast({
+                message: "보관은 완료됐지만 최근 보관함 갱신에 실패했어요.",
+                type: "info",
+              });
             }
           } catch {
             throw new Error("완독 기록은 저장했지만 보관함 추가에 실패했습니다.");
           }
         }
         showToast({ message: "보관함에 저장됐어요.", type: "success" });
-      } catch (error) {
+      },
+      onError: (error) => {
         console.warn("[handleCommitAndSave] background save failed:", error);
-        showToast({ message: "완독 및 보관 처리에 실패했습니다.", type: "error" });
-      } finally {
+        const message = error instanceof Error
+          ? error.message
+          : "완독 및 보관 처리에 실패했습니다.";
+        setIsSavedThisSession(false);
+        setArchiveError(`${message} 보관하기를 눌러 다시 시도해주세요.`);
+        showToast({ message: "보관하지 못했어요. 다시 시도해주세요.", type: "error" });
+      },
+      onFinally: () => {
         isSavingRef.current = false;
-        completionActionRef.current = null;
         setIsSaving(false);
-      }
-    })();
+      },
+    });
+    if (!started) return;
 
     trackArticleAction({
       sessionId: analyticsSessionIdRef.current,
@@ -1873,35 +1888,45 @@ export default function ReadScreen() {
     });
   }, [isCollectionsReady, isAlreadySaved, reading, applyAnsweredQuestionCardsToMemo, syncSpaceInboxRead, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, showToast]);
 
-  const handleStartReply = useCallback(async () => {
-    if (!canStartReply || !inboxId || completionActionRef.current) return;
-    completionActionRef.current = "reply";
-    setIsStartingReply(true);
-    try {
-      const result = await reading.commitCompletion();
-      if (!result.success) {
-        showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
-        return;
-      }
-      await applyAnsweredQuestionCardsToMemo();
-      await syncSpaceInboxRead();
-      invalidateInbox(queryClient);
-      clearActiveSession();
-      router.push({
-        pathname: "/on-01a",
-        params: {
-          mode: "local-draft",
-          sourceArticleId: articleId,
-          replyToInboxId: inboxId,
-        },
-      });
-    } catch (error) {
-      console.warn("[handleStartReply] failed:", error);
-      showToast({ message: "답글을 시작하기 전에 읽기 기록을 저장하지 못했어요. 다시 시도해주세요.", type: "error" });
-    } finally {
-      completionActionRef.current = null;
-      setIsStartingReply(false);
-    }
+  const handleStartReply = useCallback(() => {
+    if (!canStartReply || !inboxId) return;
+    const replySourceArticleId = articleId;
+    const replyTargetInboxId = inboxId;
+    launchCompletionAction({
+      lock: completionActionRef,
+      action: "reply",
+      onStart: () => {
+        setIsStartingReply(true);
+        router.push({
+          pathname: "/on-01a",
+          params: {
+            mode: "local-draft",
+            sourceArticleId: replySourceArticleId,
+            replyToInboxId: replyTargetInboxId,
+          },
+        });
+      },
+      work: async () => {
+        const result = await reading.commitCompletion();
+        if (!result.success) {
+          throw new Error(result.error ?? "완독 처리에 실패했습니다.");
+        }
+        await applyAnsweredQuestionCardsToMemo();
+        await syncSpaceInboxRead();
+        invalidateInbox(queryClient);
+      },
+      onSuccess: clearActiveSession,
+      onError: (error) => {
+        console.warn("[handleStartReply] background completion failed:", error);
+        showToast({
+          message: "답글 화면은 열었지만 읽기 기록 저장에 실패했어요. 읽기 화면으로 돌아가 다시 시도해주세요.",
+          type: "error",
+        });
+      },
+      onFinally: () => {
+        setIsStartingReply(false);
+      },
+    });
   }, [articleId, applyAnsweredQuestionCardsToMemo, canStartReply, clearActiveSession, inboxId, queryClient, reading, router, showToast, syncSpaceInboxRead]);
 
   const handleCommitAndSkip = useCallback(async () => {
@@ -2281,6 +2306,7 @@ export default function ReadScreen() {
                               isDeleting={isDeleting}
                               isCollectionsReady={isCollectionsReady}
                               isAlreadySaved={isAlreadySaved}
+                               archiveError={archiveError}
                                canReply={canStartReply}
                                isStartingReply={isStartingReply}
                                isActionBusy={isSaving || isDeleting || isStartingReply}
@@ -3002,6 +3028,7 @@ interface ReadingCompleteScreenProps {
   isDeleting: boolean;
   isCollectionsReady: boolean;
   isAlreadySaved: boolean;
+  archiveError: string | null;
   canReply: boolean;
   isStartingReply: boolean;
   isActionBusy: boolean;
@@ -3017,6 +3044,7 @@ function ReadingCompleteScreen({
   isDeleting,
   isCollectionsReady,
   isAlreadySaved,
+  archiveError,
   canReply,
   isStartingReply,
   isActionBusy,
@@ -3093,6 +3121,15 @@ function ReadingCompleteScreen({
             </View>
           </Pressable>
         )}
+        {archiveError ? (
+          <Text
+            style={readingCompleteStyles.actionError}
+            accessibilityRole="alert"
+            testID="reading-complete-save-error"
+          >
+            {archiveError}
+          </Text>
+        ) : null}
 
         {/* 나가기 (tertiary) */}
         <Pressable
@@ -3187,6 +3224,13 @@ const readingCompleteStyles = StyleSheet.create({
     fontFamily: ReaderTokens.fontFamily.sansSemiBold,
     fontWeight: "600",
     color: Colors.primaryAction,
+  },
+  actionError: {
+    color: Colors.noticeAccent,
+    fontFamily: ReaderTokens.fontFamily.sans,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
   },
   skipBtn: {
     width: "100%",

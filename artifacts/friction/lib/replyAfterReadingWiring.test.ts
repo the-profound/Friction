@@ -11,7 +11,7 @@ const sendInline = readFileSync(
 );
 
 describe("reply after reading flow", () => {
-  it("only offers reply for a verified inbox delivery and saves before navigation", () => {
+  it("only offers reply for a verified inbox delivery and navigates before background persistence", () => {
     expect(readScreen).toContain("const canStartReply = Boolean(");
     expect(readScreen).toContain("const inboxQueryParams = {");
     expect(readScreen).toContain("recipientId: userId,");
@@ -19,8 +19,17 @@ describe("reply after reading flow", () => {
     expect(readScreen).toContain("item.id === inboxId");
     expect(readScreen).toContain("replySourceInbox.senderId !== userId");
     expect(readScreen).toContain('accessibilityLabel="답글 쓰기"');
-    expect(readScreen).toMatch(
-      /handleStartReply[\s\S]*await reading\.commitCompletion\(\)[\s\S]*await applyAnsweredQuestionCardsToMemo\(\)[\s\S]*pathname: "\/on-01a"/,
+    const handlerStart = readScreen.indexOf("const handleStartReply = useCallback");
+    const handlerEnd = readScreen.indexOf("const handleCommitAndSkip = useCallback", handlerStart);
+    const handler = readScreen.slice(handlerStart, handlerEnd);
+    expect(handler.indexOf('pathname: "/on-01a"')).toBeGreaterThanOrEqual(0);
+    expect(handler.indexOf('pathname: "/on-01a"')).toBeLessThan(
+      handler.indexOf("await reading.commitCompletion()"),
+    );
+    expect(handler).toContain("await applyAnsweredQuestionCardsToMemo()");
+    expect(handler).toContain("onSuccess: clearActiveSession");
+    expect(handler.indexOf("onSuccess: clearActiveSession")).toBeGreaterThan(
+      handler.indexOf("await applyAnsweredQuestionCardsToMemo()"),
     );
   });
 

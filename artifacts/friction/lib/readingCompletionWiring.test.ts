@@ -240,15 +240,21 @@ describe("non-blocking completion save", () => {
       "const handleCommitAndSkip = useCallback",
     );
 
-    expect(handler).toContain("if (completionActionRef.current) return");
-    expect(handler).toContain("void (async () => {");
+    expect(handler).toContain("launchCompletionAction({");
+    expect(handler).toContain("lock: completionActionRef");
     expect(handler).toContain("await reading.commitCompletion()");
     expect(handler).toContain("invalidateInbox(queryClient)");
     expect(handler).toContain("invalidateMyCollections(queryClient)");
     expect(handler).toContain("invalidateRecentCollection(queryClient, userId)");
     expect(handler).toContain("background save failed");
+    expect(handler.indexOf("setIsSavedThisSession(true)")).toBeLessThan(
+      handler.indexOf("await reading.commitCompletion()"),
+    );
+    expect(handler).toContain("setIsSavedThisSession(false)");
+    expect(handler).toContain("setArchiveError(`${message} 보관하기를 눌러 다시 시도해주세요.`)");
+    expect(handler).toContain("recent collection update failed (non-fatal)");
 
-    const backgroundStart = handler.indexOf("void (async () => {");
+    const backgroundStart = handler.indexOf("work: async () => {");
     const navigationStart = handler.indexOf("trackArticleAction({");
     expect(backgroundStart).toBeGreaterThanOrEqual(0);
     expect(navigationStart).toBeGreaterThan(backgroundStart);
@@ -256,6 +262,34 @@ describe("non-blocking completion save", () => {
     const archiveTail = handler.slice(navigationStart, handler.indexOf("const handleStartReply"));
     expect(archiveTail).not.toContain("clearActiveSession()");
     expect(archiveTail).not.toContain("overlayOpacity.value = withTiming(1");
+  });
+
+  it("navigates to reply before completion persistence and keeps one guarded background attempt", () => {
+    const handler = sourceBetween(
+      "const handleStartReply = useCallback",
+      "const handleCommitAndSkip = useCallback",
+    );
+
+    expect(handler).toContain("if (!canStartReply || !inboxId) return");
+    expect(handler).toContain("const replySourceArticleId = articleId");
+    expect(handler).toContain("const replyTargetInboxId = inboxId");
+    expect(handler).toContain("router.push({");
+    expect(handler).toContain("launchCompletionAction({");
+    expect(handler).toContain("lock: completionActionRef");
+    expect(handler.indexOf("router.push({")).toBeLessThan(
+      handler.indexOf("await reading.commitCompletion()"),
+    );
+    expect(handler).toContain("await applyAnsweredQuestionCardsToMemo()");
+    expect(handler).toContain("await syncSpaceInboxRead()");
+    expect(handler).toContain("invalidateInbox(queryClient)");
+    expect(handler).toContain("onSuccess: clearActiveSession");
+    expect(handler.indexOf("onSuccess: clearActiveSession")).toBeGreaterThan(
+      handler.indexOf("await syncSpaceInboxRead()"),
+    );
+    expect(handler.slice(0, handler.indexOf("work: async () => {"))).not.toContain(
+      "clearActiveSession()",
+    );
+    expect(handler).toContain("background completion failed");
   });
 
   it("switches one stable action slot from archive to reread and keeps exit last", () => {
@@ -267,6 +301,8 @@ describe("non-blocking completion save", () => {
     expect(screen).toContain("{isAlreadySaved ? (");
     expect(screen).toContain("disabled={isActionBusy || !isCollectionsReady}");
     expect(screen).toContain('accessibilityState={{ disabled: isActionBusy || !isCollectionsReady, busy: isSaving }}');
+    expect(screen).toContain('accessibilityRole="alert"');
+    expect(screen).toContain('testID="reading-complete-save-error"');
     expect(screen).not.toContain('isAlreadySaved ? "보관됨"');
 
     const reread = screen.indexOf('accessibilityLabel="다시 읽기"');
