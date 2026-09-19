@@ -564,16 +564,20 @@ export default function ReadScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isStartingReply, setIsStartingReply] = useState(false);
   const completionActionRef = useRef<"save" | "reply" | "exit" | null>(null);
+  const isInboxEntry = entrySource === "inbox" || !!inboxId;
 
-  // Detect other unread inbox copies of the same article (same article delivered
-  // through multiple team collections). After the user finishes one, we offer
-  // to bulk-mark the rest as read so they don't re-read duplicates.
+  // Load every delivery for the current recipient so a previously-read inbox
+  // item can still be verified as the exact reply source during a reread.
+  // Duplicate prompting continues to filter this list down to unread copies.
+  const inboxQueryParams = {
+    recipientId: userId,
+  } as Parameters<typeof useListInbox>[0];
   const inboxListQuery = useListInbox(
-    { recipientId: userId, isRead: false } as Parameters<typeof useListInbox>[0],
+    inboxQueryParams,
     {
       query: {
-        queryKey: getListInboxQueryKey({ recipientId: userId, isRead: false } as Parameters<typeof getListInboxQueryKey>[0]),
-        enabled: !!userId && !!articleId,
+        queryKey: getListInboxQueryKey(inboxQueryParams),
+        enabled: !!userId && !!articleId && isInboxEntry,
       },
     },
   );
@@ -592,7 +596,6 @@ export default function ReadScreen() {
     ).length;
   }, [inboxListQuery.data, articleId, inboxId]);
 
-  const isInboxEntry = entrySource === "inbox" || !!inboxId;
   const replySourceInbox = inboxId
     ? inboxListQuery.data?.find((item) => item.id === inboxId)
     : undefined;
@@ -3058,35 +3061,38 @@ function ReadingCompleteScreen({
             </View>
           </Pressable>
         ) : null}
-        {/* 다시 읽기 (primary) */}
-        <Pressable
-          style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
-          onPress={onReread}
-          disabled={isActionBusy}
-          accessibilityRole="button"
-          accessibilityLabel="다시 읽기"
-          accessibilityState={{ disabled: isActionBusy }}
-        >
-          <View style={readingCompleteStyles.rereadBtn}>
-            <Text style={readingCompleteStyles.rereadBtnText}>다시 읽기</Text>
-          </View>
-        </Pressable>
-
-        {/* 보관하기 (secondary) */}
-        <Pressable
-          style={[readingCompleteStyles.actionShadow, (isActionBusy || !isCollectionsReady || isAlreadySaved) && readingCompleteStyles.btnDisabled]}
-          onPress={onSave}
-          disabled={isActionBusy || !isCollectionsReady || isAlreadySaved}
-          accessibilityRole="button"
-          accessibilityLabel="보관하기"
-          accessibilityState={{ disabled: isActionBusy || !isCollectionsReady || isAlreadySaved, busy: isSaving }}
-        >
-          <View style={readingCompleteStyles.saveBtn}>
-            <Text style={readingCompleteStyles.saveBtnText}>
-              {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : isAlreadySaved ? "보관됨" : "보관하기"}
-            </Text>
-          </View>
-        </Pressable>
+        {/* 보관 전에는 보관하기, 보관 확인 후에는 같은 슬롯에서 다시 읽기 */}
+        {isAlreadySaved ? (
+          <Pressable
+            style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
+            onPress={onReread}
+            disabled={isActionBusy}
+            accessibilityRole="button"
+            accessibilityLabel="다시 읽기"
+            accessibilityState={{ disabled: isActionBusy }}
+            testID="reading-complete-reread"
+          >
+            <View style={readingCompleteStyles.saveBtn}>
+              <Text style={readingCompleteStyles.saveBtnText}>다시 읽기</Text>
+            </View>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[readingCompleteStyles.actionShadow, (isActionBusy || !isCollectionsReady) && readingCompleteStyles.btnDisabled]}
+            onPress={onSave}
+            disabled={isActionBusy || !isCollectionsReady}
+            accessibilityRole="button"
+            accessibilityLabel="보관하기"
+            accessibilityState={{ disabled: isActionBusy || !isCollectionsReady, busy: isSaving }}
+            testID="reading-complete-save"
+          >
+            <View style={readingCompleteStyles.saveBtn}>
+              <Text style={readingCompleteStyles.saveBtnText}>
+                {isSaving ? "저장 중..." : !isCollectionsReady ? "불러오는 중..." : "보관하기"}
+              </Text>
+            </View>
+          </Pressable>
+        )}
 
         {/* 나가기 (tertiary) */}
         <Pressable
@@ -3196,22 +3202,6 @@ const readingCompleteStyles = StyleSheet.create({
     fontSize: 15,
     fontFamily: ReaderTokens.fontFamily.sans,
     color: Colors.black,
-  },
-  rereadBtn: {
-    width: "100%",
-    height: 52,
-    flexGrow: 0,
-    flexShrink: 0,
-    borderRadius: 12,
-    backgroundColor: Colors.primaryAction,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rereadBtnText: {
-    fontSize: 16,
-    fontFamily: ReaderTokens.fontFamily.sansSemiBold,
-    fontWeight: "600",
-    color: Colors.primaryActionForeground,
   },
   btnDisabled: {
     opacity: 0.5,

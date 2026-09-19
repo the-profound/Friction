@@ -13,6 +13,10 @@ const sendInline = readFileSync(
 describe("reply after reading flow", () => {
   it("only offers reply for a verified inbox delivery and saves before navigation", () => {
     expect(readScreen).toContain("const canStartReply = Boolean(");
+    expect(readScreen).toContain("const inboxQueryParams = {");
+    expect(readScreen).toContain("recipientId: userId,");
+    expect(readScreen).not.toContain("recipientId: userId, isRead: false");
+    expect(readScreen).toContain("item.id === inboxId");
     expect(readScreen).toContain("replySourceInbox.senderId !== userId");
     expect(readScreen).toContain('accessibilityLabel="답글 쓰기"');
     expect(readScreen).toMatch(

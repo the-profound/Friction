@@ -258,21 +258,25 @@ describe("non-blocking completion save", () => {
     expect(archiveTail).not.toContain("overlayOpacity.value = withTiming(1");
   });
 
-  it("keeps safe unavailable states and the requested action order", () => {
+  it("switches one stable action slot from archive to reread and keeps exit last", () => {
     const screen = sourceBetween(
       "function ReadingCompleteScreen({",
       "const readingCompleteStyles = StyleSheet.create",
     );
 
-    expect(screen).toContain("disabled={isActionBusy || !isCollectionsReady || isAlreadySaved}");
-    expect(screen).toContain('accessibilityState={{ disabled: isActionBusy || !isCollectionsReady || isAlreadySaved, busy: isSaving }}');
+    expect(screen).toContain("{isAlreadySaved ? (");
+    expect(screen).toContain("disabled={isActionBusy || !isCollectionsReady}");
+    expect(screen).toContain('accessibilityState={{ disabled: isActionBusy || !isCollectionsReady, busy: isSaving }}');
+    expect(screen).not.toContain('isAlreadySaved ? "보관됨"');
 
     const reread = screen.indexOf('accessibilityLabel="다시 읽기"');
     const save = screen.indexOf('accessibilityLabel="보관하기"');
     const exit = screen.indexOf('accessibilityLabel="나가기"');
     expect(reread).toBeGreaterThanOrEqual(0);
-    expect(save).toBeGreaterThan(reread);
+    expect(save).toBeGreaterThanOrEqual(0);
+    expect(exit).toBeGreaterThan(reread);
     expect(exit).toBeGreaterThan(save);
+    expect(screen.match(/testID="reading-complete-(?:reread|save)"/g)).toHaveLength(2);
   });
 
   it("uses stable full-width button dimensions and brand action colors", () => {
@@ -282,13 +286,12 @@ describe("non-blocking completion save", () => {
     );
 
     expect(styles).toMatch(/actionShadow:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.white[\s\S]*?\.\.\.Shadows\.readingCompletionAction/);
-    expect(styles).toMatch(/rereadBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.primaryAction/);
-    expect(styles).toMatch(/rereadBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryActionForeground/);
     expect(styles).toMatch(/saveBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.noticeAccentSoft/);
     expect(styles).toMatch(/saveBtnText:\s*\{[\s\S]*?color:\s*Colors\.primaryAction/);
+    expect(readScreen).toContain("<Text style={readingCompleteStyles.saveBtnText}>다시 읽기</Text>");
     expect(styles).toMatch(/skipBtn:\s*\{[\s\S]*?width:\s*"100%"[\s\S]*?height:\s*52[\s\S]*?backgroundColor:\s*Colors\.white/);
     expect(styles).toMatch(/skipBtnText:\s*\{[\s\S]*?color:\s*Colors\.black/);
-    expect(styles).not.toMatch(/(?:rereadBtn|saveBtn|skipBtn):\s*\{[\s\S]*?border(?:Width|Color):/);
+    expect(styles).not.toMatch(/(?:saveBtn|skipBtn):\s*\{[\s\S]*?border(?:Width|Color):/);
   });
 
   it("keeps shadow ownership on an opaque outer surface", () => {
@@ -300,8 +303,7 @@ describe("non-blocking completion save", () => {
     expect(screen.match(/style=\{readingCompleteStyles\.actionShadow\}/g)).toBeNull();
     expect(screen.match(/style=\{\[readingCompleteStyles\.actionShadow,/g)).toHaveLength(4);
     expect(screen).toContain("<View style={readingCompleteStyles.replyBtn}>");
-    expect(screen).toContain("<View style={readingCompleteStyles.rereadBtn}>");
-    expect(screen).toContain("<View style={readingCompleteStyles.saveBtn}>");
+    expect(screen.match(/<View style=\{readingCompleteStyles\.saveBtn\}>/g)).toHaveLength(2);
     expect(screen).toContain("<View style={readingCompleteStyles.skipBtn}>");
   });
 
