@@ -121,6 +121,17 @@ export function getCompletionCommitDisposition(
   return "invalid";
 }
 
+/**
+ * Applies a delayed completion response only while it still owns the completed
+ * session. A user may already have started a new reread while the request was
+ * in flight; that newer READING state must remain authoritative.
+ */
+export function settleCompletionCommit(
+  state: ReadingSessionState,
+): ReadingSessionState {
+  return state === "COMPLETED_READY" ? "COMPLETED_COMMITTED" : state;
+}
+
 export function canTransitionSession(
   from: ReadingSessionState,
   to: ReadingSessionState,

@@ -11,7 +11,9 @@ import {
   entersReaderSuspension,
   resumesReaderFromSuspension,
   getCompletionCommitDisposition,
+  settleCompletionCommit,
   transitionSession,
+  type ReadingSessionState,
 } from "./readingPersistence";
 
 describe("reader virtual-page bounds", () => {
@@ -99,5 +101,47 @@ describe("post-archive completion actions", () => {
       allowed: true,
       state: "READING",
     });
+  });
+
+  it("does not let a delayed completion response overwrite a newer reread", async () => {
+    let resolveCommit!: () => void;
+    const pendingCommit = new Promise<void>((resolve) => {
+      resolveCommit = resolve;
+    });
+    let state: ReadingSessionState = "COMPLETED_READY";
+    let activeSessionOwner: "completed" | "reread" | null = "completed";
+
+    const settlement = pendingCommit.then(() => {
+      state = settleCompletionCommit(state);
+      if (state === "COMPLETED_COMMITTED") activeSessionOwner = null;
+    });
+
+    state = "READING";
+    activeSessionOwner = "reread";
+    resolveCommit();
+    await settlement;
+
+    expect(state).toBe("READING");
+    expect(activeSessionOwner).toBe("reread");
+  });
+
+  it("keeps an immediate exit cleared after a delayed completion response", async () => {
+    let resolveCommit!: () => void;
+    const pendingCommit = new Promise<void>((resolve) => {
+      resolveCommit = resolve;
+    });
+    let state: ReadingSessionState = "COMPLETED_READY";
+    let activeSessionOwner: "completed" | null = "completed";
+
+    const settlement = pendingCommit.then(() => {
+      state = settleCompletionCommit(state);
+    });
+
+    activeSessionOwner = null;
+    resolveCommit();
+    await settlement;
+
+    expect(state).toBe("COMPLETED_COMMITTED");
+    expect(activeSessionOwner).toBeNull();
   });
 });

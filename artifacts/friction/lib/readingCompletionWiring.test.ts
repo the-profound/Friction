@@ -5,6 +5,8 @@ import { shouldSyncSpaceInboxRead } from "./spaceInboxReadSync";
 
 const readScreenPath = fileURLToPath(new URL("../app/read.tsx", import.meta.url));
 const readScreen = readFileSync(readScreenPath, "utf8");
+const readingSessionPath = fileURLToPath(new URL("./useReadingSession.ts", import.meta.url));
+const readingSession = readFileSync(readingSessionPath, "utf8");
 const tokensPath = fileURLToPath(new URL("../constants/tokens.ts", import.meta.url));
 const tokens = readFileSync(tokensPath, "utf8");
 const spaceDetailPath = fileURLToPath(new URL("../app/of-space-detail.tsx", import.meta.url));
@@ -26,7 +28,7 @@ describe("rereceived inbox completion wiring", () => {
     );
 
     expect(handler).toContain("shouldCommitCompletionForEntry(mode, inboxId)");
-    expect(handler).toContain("await handleCommitAndSkip()");
+    expect(handler).toContain("handleCommitAndSkip()");
     expect(readScreen).toContain(
       'onSkip={mode === "re_read" ? handleRereadExit : handleCommitAndSkip}',
     );
@@ -40,18 +42,19 @@ describe("rereceived inbox completion wiring", () => {
 
     expect(handler).toContain("const result = await reading.commitCompletion()");
     expect(handler).toContain("invalidateInbox(queryClient)");
-    expect(handler).toContain("promptOrContinue(() => {");
+    expect(handler).toContain("promptOrContinue(navigateBackImmediately)");
   });
 
-  it("keeps non-inbox rereads on the existing fade-only exit", () => {
+  it("navigates non-inbox rereads immediately and saves answers in the background", () => {
     const handler = sourceBetween(
       "const handleRereadExit = useCallback",
       "const handleTextSelect = useCallback",
     );
 
-    expect(handler).toContain("applyAnsweredQuestionCardsToMemo()");
-    expect(handler).toContain("overlayOpacity.value = withTiming(1");
-    expect(handler).toContain("runOnJS(navigateBackDelayed)()");
+    expect(handler).toContain("launchCompletionAction({");
+    expect(handler).toContain("onStart: navigateBackImmediately");
+    expect(handler).toContain("await applyAnsweredQuestionCardsToMemo()");
+    expect(handler).not.toContain("withTiming(");
   });
 });
 
@@ -126,7 +129,7 @@ describe("safe reading exit navigation", () => {
     expect(navigation).toContain('router.replace("/(tabs)/on")');
   });
 
-  it("keeps every delayed reading exit on the shared safe path", () => {
+  it("keeps ordinary back navigation delayed but completion exits immediate", () => {
     const generalExit = sourceBetween(
       "const handleBack = useCallback",
       "useEffect(() => {",
@@ -144,8 +147,11 @@ describe("safe reading exit navigation", () => {
       "const handleTextSelect = useCallback",
     );
 
-    for (const handler of [generalExit, completionExit, rereadExit]) {
-      expect(handler).toContain("runOnJS(navigateBackDelayed)()");
+    expect(generalExit).toContain("runOnJS(navigateBackDelayed)()");
+    for (const handler of [completionExit, rereadExit]) {
+      expect(handler).toContain("navigateBackImmediately");
+      expect(handler).not.toContain("runOnJS(navigateBackDelayed)()");
+      expect(handler).not.toContain("withTiming(");
     }
     expect(saveExit).not.toContain("runOnJS(navigateBackDelayed)()");
   });
@@ -262,6 +268,42 @@ describe("non-blocking completion save", () => {
     const archiveTail = handler.slice(navigationStart, handler.indexOf("const handleStartReply"));
     expect(archiveTail).not.toContain("clearActiveSession()");
     expect(archiveTail).not.toContain("overlayOpacity.value = withTiming(1");
+  });
+
+  it("keeps reread and exit available while archive persistence settles", () => {
+    const screen = sourceBetween(
+      "function ReadingCompleteScreen({",
+      "const readingCompleteStyles = StyleSheet.create",
+    );
+    const restart = sourceBetween(
+      "const handleRestartReading = useCallback",
+      "const finishPageTurnRef = useRef",
+    );
+    const exit = sourceBetween(
+      "const handleCommitAndSkip = useCallback",
+      "const handleRereadExit = useCallback",
+    );
+
+    expect(screen).toContain("const isNavigationBlocked = isActionBusy && !isSaving");
+    expect(screen).toContain("disabled={isNavigationBlocked}");
+    expect(restart).toContain('completionActionRef.current !== "save"');
+    expect(exit).toContain('completionActionRef.current === "save"');
+    expect(exit.indexOf("clearActiveSession()")).toBeLessThan(
+      exit.indexOf("promptOrContinue(navigateBackImmediately)"),
+    );
+    expect(exit).toContain("promptOrContinue(navigateBackImmediately)");
+  });
+
+  it("patches the inbox before completion network work and restores it on failure", () => {
+    const commitStart = readingSession.indexOf("const commitCompletion = useCallback");
+    const commitEnd = readingSession.indexOf("const restartReading = useCallback", commitStart);
+    const commit = readingSession.slice(commitStart, commitEnd);
+
+    expect(commit.indexOf("patchInboxItemInCache(queryClient, inboxId")).toBeLessThan(
+      commit.indexOf("await createArticleRead.mutateAsync"),
+    );
+    expect(commit).toContain("queryClient.getQueriesData({ queryKey: getListInboxQueryKey() })");
+    expect(commit).toContain("queryClient.setQueryData(queryKey, snapshot)");
   });
 
   it("navigates to reply before completion persistence and keeps one guarded background attempt", () => {

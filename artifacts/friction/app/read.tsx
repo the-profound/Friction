@@ -1054,6 +1054,14 @@ export default function ReadScreen() {
     }, 300);
   }, [router]);
 
+  const navigateBackImmediately = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/(tabs)/on");
+  }, [router]);
+
   const handleBack = useCallback(async () => {
     if (isThoughtsOpenRef.current) {
       thoughtsCloseHandleRef.current?.();
@@ -1372,7 +1380,9 @@ export default function ReadScreen() {
   }, []);
 
   const handleRestartReading = useCallback(() => {
-    if (completionActionRef.current) return;
+    // Archiving may still be settling in the background. It does not mutate the
+    // pager, so rereading can start immediately without launching another action.
+    if (completionActionRef.current && completionActionRef.current !== "save") return;
     analyticsSessionIdRef.current = createAnalyticsSessionId();
     const nextReadingQuestionSessionId = createReadingQuestionSessionId(articleId);
     resetReadingQuestionSession(nextReadingQuestionSessionId);
@@ -1929,16 +1939,33 @@ export default function ReadScreen() {
     });
   }, [articleId, applyAnsweredQuestionCardsToMemo, canStartReply, clearActiveSession, inboxId, queryClient, reading, router, showToast, syncSpaceInboxRead]);
 
-  const handleCommitAndSkip = useCallback(async () => {
-    if (completionActionRef.current) return;
-    completionActionRef.current = "exit";
-    setIsDeleting(true);
-    try {
-      const result = await reading.commitCompletion();
-      // 완독 화면을 유지한 채 fade-out — 슬롯을 되돌리면 편지 페이지가
-      // 잠깐 보이는 점프가 생긴다. 실패 시에도 완독 화면에 남아 재시도한다.
-      if (result.success) {
+  const handleCommitAndSkip = useCallback(() => {
+    if (completionActionRef.current === "save") {
+      // The save action already owns every completion persistence step. Leaving
+      // now only navigates; launching a second completion attempt would race it.
+      clearActiveSession();
+      promptOrContinue(navigateBackImmediately);
+      return;
+    }
+    const started = launchCompletionAction({
+      lock: completionActionRef,
+      action: "exit",
+      onStart: () => {
+        setIsDeleting(true);
+        promptOrContinue(navigateBackImmediately);
+      },
+      work: async () => {
+        const result = await reading.commitCompletion();
+        if (!result.success) {
+          throw new Error(result.error ?? "완독 처리에 실패했습니다.");
+        }
         await syncSpaceInboxRead();
+        if (!isListEntry) {
+          invalidateInbox(queryClient);
+        }
+        await applyAnsweredQuestionCardsToMemo();
+      },
+      onSuccess: () => {
         trackArticleAction({
           sessionId: analyticsSessionIdRef.current,
           articleId,
@@ -1946,43 +1973,48 @@ export default function ReadScreen() {
           msSinceComplete: Date.now() - completionTimeRef.current,
           isReread: isAnalyticsReread,
         });
-        if (!isListEntry) {
-          // 수신함 경로: 읽기 완료 후 수신함 목록 갱신
-          invalidateInbox(queryClient);
-        }
         clearActiveSession();
-        await applyAnsweredQuestionCardsToMemo();
-        promptOrContinue(() => {
-          overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
-            if (finished) runOnJS(navigateBackDelayed)();
-          });
-          showToast({ message: "읽기를 완료했어요.", type: "success" });
+        showToast({ message: "읽기를 완료했어요.", type: "success" });
+      },
+      onError: (error) => {
+        console.warn("[handleCommitAndSkip] background completion failed:", error);
+        showToast({
+          message: "읽기 기록 저장에 실패했어요. 읽기 화면으로 돌아가 다시 시도해주세요.",
+          type: "error",
         });
-      } else {
-        showToast({ message: result.error ?? "완독 처리에 실패했습니다.", type: "error" });
-      }
-    } finally {
-      completionActionRef.current = null;
-      setIsDeleting(false);
-    }
-  }, [isDeleting, isListEntry, reading, syncSpaceInboxRead, router, clearActiveSession, queryClient, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo]);
+      },
+      onFinally: () => {
+        setIsDeleting(false);
+      },
+    });
+    if (!started) return;
+  }, [isListEntry, reading, syncSpaceInboxRead, clearActiveSession, queryClient, articleId, promptOrContinue, applyAnsweredQuestionCardsToMemo, navigateBackImmediately, showToast]);
 
-  const handleRereadExit = useCallback(async () => {
+  const handleRereadExit = useCallback(() => {
     if (shouldCommitCompletionForEntry(mode, inboxId)) {
       // Inbox rereads must use the same completion path as first reads. This
       // commits the current delivery, updates its cache entry, and preserves
       // the duplicate-delivery prompt before navigating away.
-      await handleCommitAndSkip();
+      handleCommitAndSkip();
       return;
     }
 
-    // Collection/record rereads have no inbox delivery to acknowledge.
-    // Keep their existing completion-screen fade and navigation behavior.
-    applyAnsweredQuestionCardsToMemo();
-    overlayOpacity.value = withTiming(1, { duration: 700, easing: Easing.in(Easing.ease) }, (finished) => {
-      if (finished) runOnJS(navigateBackDelayed)();
+    launchCompletionAction({
+      lock: completionActionRef,
+      action: "exit",
+      onStart: navigateBackImmediately,
+      work: async () => {
+        await applyAnsweredQuestionCardsToMemo();
+      },
+      onError: (error) => {
+        console.warn("[handleRereadExit] background memo save failed:", error);
+        showToast({ message: "질문 답변 저장에 실패했어요.", type: "error" });
+      },
+      onFinally: () => {
+        setIsDeleting(false);
+      },
     });
-  }, [mode, inboxId, handleCommitAndSkip, applyAnsweredQuestionCardsToMemo, overlayOpacity, navigateBackDelayed]);
+  }, [mode, inboxId, handleCommitAndSkip, applyAnsweredQuestionCardsToMemo, navigateBackImmediately, showToast]);
 
   const handleTextSelect = useCallback((text: string, isEmpty: boolean) => {
     if (!isEmpty && text) {
@@ -3054,6 +3086,7 @@ function ReadingCompleteScreen({
   onReread,
 }: ReadingCompleteScreenProps) {
   const insets = useSafeAreaInsets();
+  const isNavigationBlocked = isActionBusy && !isSaving;
   const message = caseType === "read"
     ? "마지막 장까지\n온전히 닿았습니다."
     : "마지막 장을\n직접 완성했습니다.";
@@ -3092,12 +3125,12 @@ function ReadingCompleteScreen({
         {/* 보관 전에는 보관하기, 보관 확인 후에는 같은 슬롯에서 다시 읽기 */}
         {isAlreadySaved ? (
           <Pressable
-            style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
+            style={[readingCompleteStyles.actionShadow, isNavigationBlocked && readingCompleteStyles.btnDisabled]}
             onPress={onReread}
-            disabled={isActionBusy}
+            disabled={isNavigationBlocked}
             accessibilityRole="button"
             accessibilityLabel="다시 읽기"
-            accessibilityState={{ disabled: isActionBusy }}
+            accessibilityState={{ disabled: isNavigationBlocked }}
             testID="reading-complete-reread"
           >
             <View style={readingCompleteStyles.saveBtn}>
@@ -3133,12 +3166,12 @@ function ReadingCompleteScreen({
 
         {/* 나가기 (tertiary) */}
         <Pressable
-          style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
+          style={[readingCompleteStyles.actionShadow, isNavigationBlocked && readingCompleteStyles.btnDisabled]}
           onPress={onSkip}
-          disabled={isActionBusy}
+          disabled={isNavigationBlocked}
           accessibilityRole="button"
           accessibilityLabel="나가기"
-          accessibilityState={{ disabled: isActionBusy, busy: isDeleting }}
+          accessibilityState={{ disabled: isNavigationBlocked, busy: isDeleting }}
         >
           <View style={readingCompleteStyles.skipBtn}>
             <Text style={readingCompleteStyles.skipBtnText}>

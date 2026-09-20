@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { upsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey } from "@workspace/api-client-react";
+import { upsertReadingRecord, useCreateUserArticleRead, useMarkInboxRead, useGetReadingRecord, useDeleteReadingRecord, getGetReadingRecordQueryKey, getListInboxQueryKey } from "@workspace/api-client-react";
 import { invalidateTeamArticles, patchInboxItemInCache } from "./queryInvalidation";
 import type { ReadingMode } from "./policies";
 import {
@@ -17,6 +17,7 @@ import {
   shouldBlockExit,
   shouldShowExitUI,
   getCompletionCommitDisposition,
+  settleCompletionCommit,
 } from "./readingPersistence";
 import type { ReadingSession, ReadingSessionState } from "./readingPersistence";
 import { createReadingSaveBoundary } from "./readingSaveBoundary";
@@ -327,19 +328,26 @@ export function useReadingSession({
       return { success: false, error: "완독 상태가 아닙니다." };
     }
 
+    const inboxId = inboxIdRef.current;
+    const inboxSnapshots = inboxId
+      ? queryClient.getQueriesData({ queryKey: getListInboxQueryKey() })
+      : [];
+
+    if (inboxId) {
+      // Navigation may happen before persistence settles. Reflect the read state
+      // before the first await so the destination inbox never flashes stale data.
+      patchInboxItemInCache(queryClient, inboxId, {
+        isRead: true,
+        openedAt: new Date().toISOString(),
+      });
+    }
+
     try {
       await createArticleRead.mutateAsync({
         data: { userId, articleId },
       });
 
-      if (inboxIdRef.current) {
-        const inboxId = inboxIdRef.current;
-        // Optimistically mark this inbox row as read so the inbox list 화면
-        // 으로 돌아갔을 때 다시 fetch 하느라 스피너가 뜨지 않는다.
-        patchInboxItemInCache(queryClient, inboxId, {
-          isRead: true,
-          openedAt: new Date().toISOString(),
-        });
+      if (inboxId) {
         await markInboxReadMutation.mutateAsync({ id: inboxId });
       }
 
@@ -347,9 +355,12 @@ export function useReadingSession({
         invalidateTeamArticles(queryClient, teamCollectionIdRef.current);
       }
 
-      setSession((s) => ({ ...s, state: "COMPLETED_COMMITTED" as ReadingSessionState }));
+      setSession((s) => ({ ...s, state: settleCompletionCommit(s.state) }));
       return { success: true };
     } catch (e: unknown) {
+      for (const [queryKey, snapshot] of inboxSnapshots) {
+        queryClient.setQueryData(queryKey, snapshot);
+      }
       const msg = e instanceof Error ? e.message : "완독 기록에 실패했습니다.";
       return { success: false, error: msg };
     }

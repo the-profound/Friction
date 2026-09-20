@@ -69,7 +69,10 @@ describe("reply after reading flow", () => {
     expect(readScreen).toContain(
       'completionActionRef = useRef<"save" | "reply" | "exit" | null>(null)',
     );
-    expect(readScreen).toContain("if (completionActionRef.current) return");
+    expect(readScreen).toContain("lock: completionActionRef");
+    expect(readScreen).toContain(
+      'if (completionActionRef.current && completionActionRef.current !== "save") return',
+    );
     expect(readScreen).toContain(
       "isActionBusy={isSaving || isDeleting || isStartingReply}",
     );
