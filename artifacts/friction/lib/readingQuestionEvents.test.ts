@@ -85,7 +85,15 @@ describe("reading question event identities", () => {
       capture.mock.calls[0]?.[1].$insert_id,
     );
     expect(capture.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ answer_length: 7 }),
+      expect.objectContaining({
+        answer_length: 7,
+        question_surface: "reading_question",
+        question_opportunity_id:
+          "reading_question:persisted-session:1",
+        question_session_id: "reading_question:persisted-session",
+        question_outcome: "save_succeeded",
+        question_aggregation_unit: "question_opportunity",
+      }),
     );
     expect(capture.mock.calls[0]?.[1]).not.toHaveProperty("question");
     expect(capture.mock.calls[0]?.[1]).not.toHaveProperty("answer");

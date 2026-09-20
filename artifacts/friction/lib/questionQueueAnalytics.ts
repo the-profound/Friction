@@ -1,5 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { posthog } from "./posthog";
+import {
+  questionOpportunityProperties,
+  type QuestionOutcome,
+} from "./questionAnswerMetrics";
 
 export type QuestionQueueEvent =
   | "question_queue_card_viewed"
@@ -70,6 +74,12 @@ async function deliverQuestionQueueEvent(
       $insert_id: insertId,
       question_id: params.questionId,
       question_session_key: params.questionId,
+      ...questionOpportunityProperties({
+        surface: "question_queue",
+        opportunityKey: params.questionId,
+        sessionKey: params.questionId,
+        outcome: questionQueueOutcome(params.event),
+      }),
       ...(params.answerLength === undefined
         ? {}
         : { answer_length: Math.max(0, Math.trunc(params.answerLength)) }),
@@ -80,6 +90,23 @@ async function deliverQuestionQueueEvent(
     throw error;
   }
   return true;
+}
+
+function questionQueueOutcome(event: QuestionQueueEvent): QuestionOutcome {
+  switch (event) {
+    case "question_queue_card_viewed":
+      return "exposed";
+    case "question_queue_answer_started":
+      return "answer_started";
+    case "question_queue_answer_save_succeeded":
+      return "save_succeeded";
+    case "question_queue_answer_save_failed":
+      return "save_failed";
+    case "question_queue_activated":
+      return "activated";
+    case "question_queue_activation_failed":
+      return "activation_failed";
+  }
 }
 
 export async function trackQuestionQueueEventOnce(

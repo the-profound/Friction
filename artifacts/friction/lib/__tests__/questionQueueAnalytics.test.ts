@@ -100,6 +100,11 @@ describe("question queue event privacy and deduplication", () => {
         $insert_id: "question-queue:question_queue_answer_save_succeeded:question-private",
         question_id: "question-private",
         question_session_key: "question-private",
+        question_surface: "question_queue",
+        question_opportunity_id: "question_queue:question-private",
+        question_session_id: "question_queue:question-private",
+        question_outcome: "save_succeeded",
+        question_aggregation_unit: "question_opportunity",
         answer_length: 5,
       },
     );

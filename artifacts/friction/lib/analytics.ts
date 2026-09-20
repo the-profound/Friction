@@ -5,6 +5,10 @@ import {
   setRequestTelemetryObserver,
   type ApiRequestTelemetry,
 } from "@workspace/api-client-react";
+import {
+  questionOpportunityProperties,
+  type QuestionOutcome,
+} from "./questionAnswerMetrics";
 
 const capturedOutcomeKeys = new Set<string>();
 
@@ -359,24 +363,33 @@ export function trackInboxLetterOpened(params: {
 export function trackReadingQuestionItemExposed(params: ReadingQuestionBase): void {
   posthog?.capture("reading_question_item_exposed", {
     $insert_id: `reading-question-item-exposed:${params.sessionId}:${params.questionIndex}`,
-    ...readingQuestionProperties(params),
+    ...readingQuestionProperties(params, "exposed"),
   });
 }
 
 export function trackReadingQuestionAnswerStarted(params: ReadingQuestionBase): void {
   posthog?.capture("reading_question_answer_started", {
     $insert_id: `reading-question-answer-started:${params.sessionId}:${params.questionIndex}`,
-    ...readingQuestionProperties(params),
+    ...readingQuestionProperties(params, "answer_started"),
   });
 }
 
-function readingQuestionProperties(params: ReadingQuestionBase) {
+function readingQuestionProperties(
+  params: ReadingQuestionBase,
+  outcome: QuestionOutcome,
+) {
   return {
     article_id: params.articleId,
     reading_question_session_id: params.sessionId,
     question_index: params.questionIndex,
     question_count: params.questionCount,
     event_key: `${params.sessionId}:${params.questionIndex}`,
+    ...questionOpportunityProperties({
+      surface: "reading_question",
+      opportunityKey: `${params.sessionId}:${params.questionIndex}`,
+      sessionKey: params.sessionId,
+      outcome,
+    }),
   };
 }
 
@@ -391,13 +404,17 @@ export function trackReadingQuestionSessionExposed(params: {
     reading_question_session_id: params.sessionId,
     question_count: params.questionCount,
     event_key: params.sessionId,
+    question_surface: "reading_question",
+    question_session_id: `reading_question:${params.sessionId}`,
+    question_outcome: "exposed",
+    question_aggregation_unit: "session",
   });
 }
 
 export function trackReadingQuestionSaveFailed(params: ReadingQuestionBase): void {
   posthog?.capture("reading_question_save_failed", {
     $insert_id: `reading-question-save-failed:${params.sessionId}:${params.questionIndex}`,
-    ...readingQuestionProperties(params),
+    ...readingQuestionProperties(params, "save_failed"),
   });
 }
 
@@ -406,7 +423,7 @@ export function trackReadingQuestionSaveSucceeded(
 ): void {
   posthog?.capture("reading_question_save_succeeded", {
     $insert_id: `reading-question-save-succeeded:${params.thoughtId}`,
-    ...readingQuestionProperties(params),
+    ...readingQuestionProperties(params, "save_succeeded"),
     answer_length: params.answerLength,
   });
 }
