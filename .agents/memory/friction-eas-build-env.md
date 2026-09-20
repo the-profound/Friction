@@ -9,6 +9,8 @@ Replit workspace Secrets and EAS project environment variables are separate stor
 
 **How to apply:** When a value is required by a native/TestFlight bundle, register it in the EAS environment used by the build for each Expo project independently (`friction` and `friction-dev`). Verify with `eas env:list` without printing sensitive values. Do not assume the EAS build profile name selects the same-named EAS environment; inspect the build log.
 
+When a validation command relies on dynamic Expo config to select between those projects, set `EAS_BUILD_PROFILE` before invoking EAS CLI itself. Setting it only inside the command passed to `env:exec` is too late: the CLI may resolve the other project first and produce a convincing fingerprint match against the wrong project's environment.
+
 For mobile API calls, `EXPO_PUBLIC_DOMAIN` must point to a reachable API deployment, not merely exist in EAS. A private Replit deployment blocks native clients, and changing the EAS variable cannot update an already-built IPA; both the deployment and a new native build are required.
 
 Local publish-script checks do not prove the Cloud-built IPA contains the values. Enforce required variables in the dynamic Expo config and inspect the emitted JavaScript/Hermes bundle in an EAS build-success hook without printing the values.

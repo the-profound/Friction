@@ -97,8 +97,8 @@ args = "bash /home/runner/workspace/artifacts/friction/scripts/publish-dev.sh"
 
 [[workflows.workflow]]
 name = "Friction Dev Tunnel"
-author = "agent"
 mode = "sequential"
+author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"

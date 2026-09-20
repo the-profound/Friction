@@ -1,52 +1,162 @@
-# PostHog production delivery verification
+# PostHog release delivery verification
 
-## Reverification result (September 17, 2026)
+## Development verification result (September 18, 2026 KST)
 
-No token values were read or printed. Replit reports both
-`EXPO_PUBLIC_POSTHOG_TOKEN` and `EXPO_PUBLIC_POSTHOG_HOST` as present secrets.
-The local release gate and resolved Expo configuration passed for every release
-profile:
+**Final classification: build and configuration are valid; iOS device delivery
+and PostHog server receipt are not yet confirmed.**
 
-| Build profile | Release track | Local sanitized fingerprint | Local gate |
-| --- | --- | --- | --- |
-| `test` | `production` | `d0a0e4c276117173` | passed |
-| `preview` | `preview` | `26ecdc714cb87103` | passed |
-| `development` | `development` | `0889979680bbac77` | passed |
+No token values were read or printed. The intended development release
+configuration has the following sanitized settings:
 
-The matching EAS Cloud environments were then inspected through `eas env:exec`.
-The cloud gate failed before fingerprint comparison:
-
-| EAS environment | Result |
+| Target | Result |
 | --- | --- |
-| `production` | Missing `EXPO_PUBLIC_POSTHOG_TOKEN` and `EXPO_PUBLIC_POSTHOG_HOST` |
-| `preview` | Missing all five required release variables, including both PostHog variables |
-| `development` | Missing all five required release variables, including both PostHog variables |
+| Build profile / release track | `development` / `development` |
+| PostHog host | `us.i.posthog.com` |
+| PostHog token fingerprint | `32d2d8eaae570a8c` |
+| Configuration fingerprint | `0889979680bbac77` |
 
-The five required variables are `EXPO_PUBLIC_SUPABASE_URL`,
-`EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_DOMAIN`,
-`EXPO_PUBLIC_POSTHOG_TOKEN`, and `EXPO_PUBLIC_POSTHOG_HOST`.
+### Latest corrected recheck and build
 
-Because no matching EAS environment currently passes the pre-build gate, there
-is no newly built iOS or Android target carrying the re-registered PostHog
-configuration. Device initialization, connectivity, explicit probe flush, and
-PostHog Live Events receipt therefore remain blocked rather than failed.
-Release builds stop before compilation while required variables are absent or
-while the PostHog host is not a root HTTPS URL.
+On September 18, 2026 KST, the actual
+`@team-theprofound/friction-dev` project-scoped `development` environment
+passed the corrected preflight:
 
-## Owner action required
+- all five required public variable names were present;
+- release track was `development`;
+- configuration fingerprint was `0889979680bbac77`.
 
-An owner with Expo/EAS environment access must copy the existing release
-variables into each EAS environment used by these profiles. At minimum,
-`production` needs the two PostHog variables; `preview` and `development` need
-all five required release variables.
+After the development-client bundle check was corrected, iOS development build
+37 (`a9b55b1b-fcb0-4500-9774-717d9fbbadab`) completed successfully on September
+18, 2026 KST. EAS reports:
 
-| Build profile | EAS environment | Release track |
+- project `@team-theprofound/friction-dev`;
+- profile `development`, platform iOS, distribution `STORE`;
+- build number `37`;
+- source commit `7a9226278b97cccf16163f8a19d6fc89a365e3e1`;
+- completed application archive;
+- no build error.
+
+The publish workflow scheduled TestFlight submission
+`72f23487-90b0-4075-b62c-c8d19a687fc2`. At the time of this verification the
+workflow was still waiting for an available Apple submitter, so submission
+completion was not yet confirmed.
+
+The current Expo web development logs show PostHog `initialized` and
+`delivery_probe_flushed` with token fingerprint `32d2d8eaae570a8c`. These are
+web/Metro diagnostics, not evidence from build 37 on an iOS device. No build-37
+iOS device diagnostic or matching PostHog Live Events receipt was available.
+
+The current classification is therefore **app build and PostHog configuration
+verified, but iOS device transmission and server receipt unconfirmed**.
+
+### Earlier build 36 failure
+
+The development-only iOS workflow previously created build 36
+(`c651d9df-c93e-4c04-9b26-fb11a8fcea7e`). EAS confirmed project
+`@team-theprofound/friction-dev`, profile `development`, platform iOS, and
+loaded the five required public variables from the `development` environment.
+No general iOS or Android release workflow was run.
+
+Build 36 reached native compilation, then ended with status `ERRORED` in the
+Build success hook. The configured success hook runs
+`validate-eas-bundle.mjs`, which requires a native JavaScript bundle. A
+development client receives JavaScript from Metro rather than embedding a
+release bundle, so this check is not compatible with this build shape. The
+workflow stopped before its completion output and TestFlight submission.
+
+Because build 36 was not submitted or installed:
+
+- there is no build-36 iOS `initialized` diagnostic;
+- there is no build-36 iOS `delivery_probe_flushed` diagnostic;
+- there is no eligible build-36 `$friction_delivery_probe` to match in PostHog
+  Live Events.
+
+That failure was the Build success hook, not the PostHog configuration, and was
+resolved before build 37.
+
+The original `validate-eas-cloud-env.sh development` check reported fingerprint
+`0889979680bbac77`, but that result was a false positive: the script did not set
+`EAS_BUILD_PROFILE=development` until after EAS CLI had resolved the Expo
+project. It therefore checked the general Friction project's `development`
+environment instead of the separate `friction-dev` project used by development
+builds.
+
+The validator now sets the profile before EAS resolves the project, and its
+regression test asserts that project-selection context.
+
+The first corrected check against the actual development project
+(`@team-theprofound/friction-dev`, project ID ending `bfb7f9ff`) found all five
+required release variables absent. Build 35 below records the resulting remote
+failure.
+
+The new iOS development build 35
+(`aceeeb5a-88a2-43c7-be74-f3b097c7fd1f`) was created on September 18 KST for
+the correct `friction-dev` project and `development` profile. It failed in the
+remote `Read app config` phase. The build worker received `APP_VARIANT` and
+`APP_RELEASE_TRACK`, but none of the five public release variables above. The
+post-install and bundle success hooks were never reached.
+
+Because a new development bundle was not produced:
+
+- the EAS bundle success hook could not verify a compiled development bundle;
+- there is no new dev-app `initialized` or `delivery_probe_flushed` diagnostic;
+- there is no eligible `$friction_delivery_probe` to match in PostHog Live
+  Events.
+
+The local Metro web preview did report `initialized` and
+`delivery_probe_flushed` with token fingerprint `32d2d8eaae570a8c`. This proves
+the local web SDK accepted a flush; it is not evidence from the failed iOS
+development build and does not prove PostHog server receipt.
+
+The release publication guard suite, including the corrected development
+project-selection regression, passes. Those checks verify behavior, not
+delivery from the requested physical development build.
+
+### Earlier re-registration check
+
+After the variables were registered again, all five required names were present
+in the project-scoped `development` environment. Four sanitized components
+match the intended development configuration:
+
+- Supabase host: `qirxmktyicqwwfpowzjo.supabase.co`
+- API host: `friction-1.replit.app`
+- PostHog host: `us.i.posthog.com`
+- PostHog token fingerprint: `32d2d8eaae570a8c`
+
+The Supabase anon-key fingerprint does not match:
+
+| Source | Supabase anon-key fingerprint | Full configuration fingerprint |
 | --- | --- | --- |
-| `test` | `production` | `production` |
-| `preview` | `preview` | `preview` |
-| `development` | `development` | `development` |
+| Intended local release configuration | `029d2dfdd64cd799` | `0889979680bbac77` |
+| EAS `friction-dev` development environment | `6f64e3cfb0382044` | `0e4c6e6a6eb774f0` |
 
-Do not paste the token into source files, logs, task comments, or this document.
+A publish was not started while this mismatched configuration was present. The
+`EXPO_PUBLIC_SUPABASE_ANON_KEY` value in the `friction-dev` development
+environment was later corrected, as recorded in the latest recheck above.
+
+## Required next verification
+
+1. Make the bundle-validation success hook aware that a development client has
+   no embedded native JavaScript bundle, while retaining strict checks for
+   profiles that do embed one.
+2. Re-run `bash scripts/validate-eas-cloud-env.sh development`. It must still
+   report track `development` and configuration fingerprint
+   `0889979680bbac77`.
+3. Run the existing `Publish iOS(dev)` workflow. Record the replacement build
+   ID, platform, build number, and completion time. The hooks must pass and
+   TestFlight submission must complete.
+4. Install that exact replacement build on a physical device, connect it to the development
+   Metro server, and filter device logs for `[PostHog diagnostic]`. Confirm
+   `initialized`, then trigger the app's delivery probe and confirm
+   `delivery_probe_flushed`.
+5. In the PostHog project identified by token fingerprint
+   `32d2d8eaae570a8c`, filter Live Events for `$friction_delivery_probe`. Match
+   `release_track=development` and
+   `configuration_fingerprint=0889979680bbac77`. Record only the platform and
+   receipt time.
+
+An explicit flush means the SDK accepted the local send attempt; only the
+matching Live Events record proves server receipt.
 
 ## Repeatable verification
 

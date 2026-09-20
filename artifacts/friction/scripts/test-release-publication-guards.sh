@@ -120,6 +120,12 @@ cat > "$SUCCESS_EAS" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$INVOCATION_LOG"
+if [[ -n "${PROJECT_SELECTION_LOG:-}" ]]; then
+  printf '%s|%s|%s\n' \
+    "${EAS_BUILD_PROFILE:-}" \
+    "${APP_RELEASE_TRACK:-}" \
+    "$*" >> "$PROJECT_SELECTION_LOG"
+fi
 
 if [[ "$1" == "env:exec" ]]; then
   export EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co"
@@ -163,6 +169,22 @@ else
 fi
 EOF
 chmod +x "$SUCCESS_EAS"
+
+PROJECT_SELECTION_LOG="$TMP_DIR/eas-project-selection.log"
+: > "$PROJECT_SELECTION_LOG"
+(
+  cd "$SCRIPT_DIR/.."
+  INVOCATION_LOG="$INVOCATION_LOG" \
+    PROJECT_SELECTION_LOG="$PROJECT_SELECTION_LOG" \
+    EAS_BIN="$SUCCESS_EAS" \
+    EXPO_PUBLIC_SUPABASE_URL="https://release-test.supabase.co" \
+    EXPO_PUBLIC_SUPABASE_ANON_KEY="release-test-anon-key" \
+    EXPO_PUBLIC_DOMAIN="release-test.example" \
+    EXPO_PUBLIC_POSTHOG_TOKEN="phc_release_test_token" \
+    EXPO_PUBLIC_POSTHOG_HOST="https://us.i.posthog.com" \
+    bash scripts/validate-eas-cloud-env.sh development
+) > "$TMP_DIR/development-cloud-env.log"
+grep -q '^development|development|env:exec development ' "$PROJECT_SELECTION_LOG"
 
 run_publish_case() {
   local case_name="$1"

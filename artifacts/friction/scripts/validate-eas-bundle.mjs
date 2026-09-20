@@ -4,6 +4,17 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
+
+// Development 프로필 및 non-release 환경에서는 네이티브 static bundle 검사 스킵
+if (
+  process.env.EAS_BUILD_PROFILE === "development" ||
+  process.env.APP_VARIANT === "development" ||
+  !["preview", "test", "production"].includes(process.env.EAS_BUILD_PROFILE ?? "")
+) {
+  console.log("Skipping EAS bundle validation for development/non-release profile.");
+  process.exit(0);
+}
+
 const expectedValues = [
   process.env.EXPO_PUBLIC_SUPABASE_URL,
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
@@ -11,6 +22,7 @@ const expectedValues = [
   process.env.EXPO_PUBLIC_POSTHOG_HOST,
   process.env.EXPO_PUBLIC_POSTHOG_TOKEN,
 ].filter(Boolean);
+
 const bundleNames = new Set([
   "main.jsbundle",
   "index.android.bundle",
@@ -35,11 +47,6 @@ async function findBundles(directory) {
     }
   }
   return bundles;
-}
-
-if (!["development", "preview", "test"].includes(process.env.EAS_BUILD_PROFILE ?? "")) {
-  console.log("Skipping EAS bundle validation for non-release profile.");
-  process.exit(0);
 }
 
 if (expectedValues.length !== 5) {
