@@ -25,6 +25,21 @@ export interface RecordFocusPosition {
   contentIndex: number;
 }
 
+export interface RecordCardFocusTarget {
+  token: number;
+  dateKey: string;
+  itemKey: string;
+}
+
+export function isSameRecordCardFocusTarget(
+  current: RecordCardFocusTarget | null,
+  next: RecordCardFocusTarget,
+): boolean {
+  return current?.token === next.token
+    && current.dateKey === next.dateKey
+    && current.itemKey === next.itemKey;
+}
+
 export function findRecordFocusPosition<T extends UnifiedRecord>(
   recordId: string,
   cardGroups: readonly RecordDateGroup<T>[],

@@ -85,12 +85,14 @@ import {
   getRecordCardContent,
   getRecordCardTitleLineCount,
   isPendingQueueQuestionThought,
+  isSameRecordCardFocusTarget,
   mergeRecordSession,
   resolveQuestionPlacementAnchors,
   shouldRefetchQuestionQueue,
   shouldShowQuestionErrorToast,
   type QuestionErrorKind,
   type QuestionPlacementAnchors,
+  type RecordCardFocusTarget,
   type RecordDateGroup,
   type RecordView,
   type UnifiedRecord,
@@ -661,6 +663,7 @@ function OnScreenContent() {
     outerVisible: boolean;
     innerApplied: boolean;
   } | null>(null);
+  const pendingCardFocusTargetRef = useRef<RecordCardFocusTarget | null>(null);
   const pendingContentFocusIndexRef = useRef<number | null>(null);
   const recordFocusIntentRef = useRef(recordFocusIntent);
   recordFocusIntentRef.current = recordFocusIntent;
@@ -744,10 +747,15 @@ function OnScreenContent() {
     if (view === "card") {
       if (position.groupIndex < 0 || position.cardIndex < 0) return;
       const group = cardGroups[position.groupIndex];
-      setCardFocus({
+      const target = {
         token: recordFocusIntent.token,
         dateKey: group.dateKey,
         itemKey: cardRecordKey(group.records[position.cardIndex]),
+      };
+      if (isSameRecordCardFocusTarget(pendingCardFocusTargetRef.current, target)) return;
+      pendingCardFocusTargetRef.current = target;
+      setCardFocus({
+        ...target,
         outerVisible: visibleCardGroupKeysRef.current.has(group.dateKey),
         innerApplied: false,
       });
@@ -776,9 +784,18 @@ function OnScreenContent() {
     view,
     visibleRecords,
   ]);
+  useEffect(() => {
+    const hasMatchingCardIntent =
+      view === "card"
+      && recordFocusIntent?.kind === kind
+      && pendingCardFocusTargetRef.current?.token === recordFocusIntent.token;
+    if (hasMatchingCardIntent) return;
+    pendingCardFocusTargetRef.current = null;
+    setCardFocus((current) => current === null ? current : null);
+  }, [kind, recordFocusIntent, view]);
   const handleCardFocusApplied = useCallback((itemKey: string) => {
     setCardFocus((current) => {
-      if (!current || current.itemKey !== itemKey) return current;
+      if (!current || current.itemKey !== itemKey || current.innerApplied) return current;
       return { ...current, innerApplied: true };
     });
   }, []);
@@ -800,7 +817,9 @@ function OnScreenContent() {
       trackQuestionExposure(activeCardByDateKeyRef.current.get(dateKey));
     }
     setCardFocus((current) =>
-      current && visibleCardGroupKeysRef.current.has(current.dateKey)
+      current
+      && !current.outerVisible
+      && visibleCardGroupKeysRef.current.has(current.dateKey)
         ? { ...current, outerVisible: true }
         : current);
   });

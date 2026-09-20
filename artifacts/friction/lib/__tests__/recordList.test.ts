@@ -18,6 +18,7 @@ import {
   getRecordCardTitleLineCount,
   getThoughtCardContent,
   isPendingQueueQuestionThought,
+  isSameRecordCardFocusTarget,
   mergeRecordSession,
   normalizePreviewTitle,
   normalizePreviewText,
@@ -70,6 +71,15 @@ describe("record list model", () => {
       { id: "existing", kind: "letter", updatedAt: "2026-01-01T00:00:00.000Z", article: { createdAt: "2026-01-01T00:00:00.000Z" } as never },
     ];
     expect(findRecordFocusPosition("late-result", buildRecordDateGroups(records), records)).toBeNull();
+  });
+
+  it("recognizes the same card focus target across unstable render objects", () => {
+    const pending = { token: 7, dateKey: "2026-01-02", itemKey: "editing:converted-id" };
+
+    expect(isSameRecordCardFocusTarget(pending, { ...pending })).toBe(true);
+    expect(isSameRecordCardFocusTarget(pending, { ...pending, token: 8 })).toBe(false);
+    expect(isSameRecordCardFocusTarget(pending, { ...pending, dateKey: "2026-01-03" })).toBe(false);
+    expect(isSameRecordCardFocusTarget(pending, { ...pending, itemKey: "editing:replacement" })).toBe(false);
   });
 
   it("keeps every queued question out of ordinary thought records", () => {
@@ -488,6 +498,20 @@ describe("on.tsx converted-record focus wiring", () => {
     expect(screen).toContain("token.item.id === intent.recordId");
     expect(screen).toContain("onFocusItemApplied={handleCardFocusApplied}");
     expect(screen).toContain("consumeRecordFocusIntent(cardFocus.token)");
+  });
+
+  it("starts one card focus per intent and calculated target even when effect dependencies rerender", () => {
+    const screen = readScreen();
+    expect(screen).toContain(
+      "isSameRecordCardFocusTarget(pendingCardFocusTargetRef.current, target)",
+    );
+    expect(screen).toContain("pendingCardFocusTargetRef.current = target;");
+    expect(screen).toContain("current.itemKey !== itemKey || current.innerApplied");
+    expect(screen).toContain("&& !current.outerVisible");
+    expect(screen).toContain("pendingCardFocusTargetRef.current = null;");
+    expect(screen).not.toMatch(
+      /if \(cardFocus\?\.outerVisible[\s\S]*?pendingCardFocusTargetRef\.current = null;[\s\S]*?consumeRecordFocusIntent\(cardFocus\.token\)/,
+    );
   });
 
   it("keeps retrying virtualized content rows and does not restore an old offset over focus", () => {
