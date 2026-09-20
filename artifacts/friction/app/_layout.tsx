@@ -584,7 +584,11 @@ export default function RootLayout() {
     return () => clearTimeout(timeoutId);
   }, [fontsLoaded, fontError]);
 
-  const startupReady = fontsLoaded || fontError || fontLoadTimedOut;
+  // Web font loading can be delayed by the proxied preview asset path. It is
+  // safe to render the app with system fallbacks while those fonts finish
+  // loading; native startup still waits for the bundled font contract.
+  const startupReady =
+    Platform.OS === "web" || fontsLoaded || fontError || fontLoadTimedOut;
 
   useEffect(() => {
     if (startupReady) {
