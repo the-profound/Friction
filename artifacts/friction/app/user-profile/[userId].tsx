@@ -50,6 +50,13 @@ import type {
 import { spaceStatusLabel, spaceStatusStyle } from "@/lib/spaceStatusStyle";
 import { useSelectionScrollRestoration } from "@/hooks/useSelectionScrollRestoration";
 import {
+  createAnalyticsSessionId,
+  trackNeighborRequestAttempted,
+  trackNeighborRequestOutcome,
+  trackNeighborRequestSucceeded,
+  trackRelationshipProfileViewed,
+} from "@/lib/analytics";
+import {
   buildSentLetterSourceMetadataByArticleId,
   isPubliclyEligibleNonSpaceSendRecord,
   shouldDisplaySentLetter,
@@ -122,6 +129,16 @@ export default function UserProfileScreen() {
   const removeNeighbor = useRemoveNeighbor();
   const [optimisticPending, setOptimisticPending] = useState(false);
   const [cancelConfirmVisible, setCancelConfirmVisible] = useState(false);
+  const profileViewSessionIdRef = useRef(createAnalyticsSessionId());
+
+  useEffect(() => {
+    if (!currentUserId || !profileUserId || isOwnProfile) return;
+    trackRelationshipProfileViewed({
+      viewerId: currentUserId,
+      profileUserId,
+      viewSessionId: profileViewSessionIdRef.current,
+    });
+  }, [currentUserId, profileUserId, isOwnProfile]);
 
   const refetchArticles = articlesQuery.refetch;
   const refetchSpaces = spacesQuery.refetch;
@@ -231,10 +248,23 @@ export default function UserProfileScreen() {
 
   const handleSendNeighborRequest = useCallback(async () => {
     if (!profileUserId || createNeighborRequest.isPending) return;
+    const attemptId = createAnalyticsSessionId();
+    trackNeighborRequestAttempted({
+      requesterId: currentUserId,
+      recipientId: profileUserId,
+      attemptId,
+      source: "profile",
+    });
     setOptimisticPending(true);
     try {
-      await createNeighborRequest.mutateAsync({
+      const request = await createNeighborRequest.mutateAsync({
         data: { requesterId: currentUserId, recipientId: profileUserId },
+      });
+      trackNeighborRequestSucceeded({
+        requesterId: currentUserId,
+        recipientId: profileUserId,
+        requestId: request.id,
+        source: "profile",
       });
       sentRequestsQuery.refetch();
       showToast({ message: "이웃 요청을 보냈어요!", type: "success" });
@@ -262,13 +292,19 @@ export default function UserProfileScreen() {
     setCancelConfirmVisible(false);
     try {
       await deleteNeighborRequest.mutateAsync({ id: pendingRequestId });
+      trackNeighborRequestOutcome({
+        actorId: currentUserId,
+        otherUserId: profileUserId,
+        requestId: pendingRequestId,
+        outcome: "cancelled",
+      });
       setOptimisticPending(false);
       sentRequestsQuery.refetch();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "취소에 실패했습니다.";
       showToast({ message: msg, type: "error" });
     }
-  }, [pendingRequestId, deleteNeighborRequest, sentRequestsQuery, showToast]);
+  }, [pendingRequestId, deleteNeighborRequest, sentRequestsQuery, showToast, currentUserId, profileUserId]);
 
   const handleRemoveNeighborConfirm = useCallback(async () => {
     if (!existingNeighbor || removeNeighbor.isPending) return;

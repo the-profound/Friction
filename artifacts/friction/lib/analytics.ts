@@ -12,6 +12,7 @@ import {
 
 const capturedOutcomeKeys = new Set<string>();
 
+const capturedRelationshipKeys = new Set<string>();
 function appContext() {
   return {
     platform: Platform.OS,
@@ -425,5 +426,107 @@ export function trackReadingQuestionSaveSucceeded(
     $insert_id: `reading-question-save-succeeded:${params.thoughtId}`,
     ...readingQuestionProperties(params, "save_succeeded"),
     answer_length: params.answerLength,
+  });
+}
+
+function relationshipKey(userAId: string, userBId: string): string | null {
+  if (!userAId || !userBId || userAId === userBId) return null;
+  const canonicalPair = [userAId, userBId].sort().join(":");
+  // FNV-1a keeps account IDs out of analytics while preserving one stable,
+  // direction-independent key for funnel joins. This is an analytics
+  // pseudonym, not an authentication or security primitive.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < canonicalPair.length; index += 1) {
+    hash ^= canonicalPair.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `rel_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+export function trackNeighborRequestAttempted(params: {
+  requesterId: string;
+  recipientId: string;
+  attemptId: string;
+  source: "profile" | "neighbor_search";
+}): void {
+  captureRelationshipEvent("neighbor_request_attempted", {
+    actorId: params.requesterId,
+    otherUserId: params.recipientId,
+    eventKey: params.attemptId,
+    source: params.source,
+  });
+}
+
+export function trackNeighborRequestSucceeded(params: {
+  requesterId: string;
+  recipientId: string;
+  requestId: string;
+  source: "profile" | "neighbor_search";
+}): void {
+  captureRelationshipEvent("neighbor_request_succeeded", {
+    actorId: params.requesterId,
+    otherUserId: params.recipientId,
+    eventKey: params.requestId,
+    source: params.source,
+  });
+}
+
+export function trackNeighborRequestOutcome(params: {
+  actorId: string;
+  otherUserId: string;
+  requestId: string;
+  outcome: "accepted" | "rejected" | "cancelled";
+}): void {
+  const event = {
+    accepted: "neighbor_request_accepted",
+    rejected: "neighbor_request_rejected",
+    cancelled: "neighbor_request_cancelled",
+  } as const;
+  captureRelationshipEvent(event[params.outcome], {
+    actorId: params.actorId,
+    otherUserId: params.otherUserId,
+    eventKey: params.requestId,
+    source: "neighbor_list",
+  });
+}
+
+export function trackRelationshipProfileViewed(params: {
+  viewerId: string;
+  profileUserId: string;
+  viewSessionId: string;
+}): void {
+  captureRelationshipEvent("relationship_profile_viewed", {
+    actorId: params.viewerId,
+    otherUserId: params.profileUserId,
+    eventKey: `${params.viewSessionId}:${params.profileUserId}`,
+    source: "profile",
+  });
+}
+
+function captureRelationshipEvent(
+  event:
+    | "relationship_profile_viewed"
+    | "neighbor_request_attempted"
+    | "neighbor_request_succeeded"
+    | "neighbor_request_accepted"
+    | "neighbor_request_rejected"
+    | "neighbor_request_cancelled",
+  params: {
+    actorId: string;
+    otherUserId: string;
+    eventKey: string;
+    source: "profile" | "neighbor_search" | "neighbor_list";
+  },
+): void {
+  const pairKey = relationshipKey(params.actorId, params.otherUserId);
+  if (!pairKey || !posthog) return;
+  const dedupeKey = `${event}:${params.eventKey}`;
+  if (capturedRelationshipKeys.has(dedupeKey)) return;
+  capturedRelationshipKeys.add(dedupeKey);
+  posthog.capture(event, {
+    $insert_id: dedupeKey,
+    relationship_key: pairKey,
+    source: params.source,
+    ...appContext(),
   });
 }

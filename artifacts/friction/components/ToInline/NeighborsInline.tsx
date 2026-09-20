@@ -46,6 +46,12 @@ import type {
   NeighborWithUser,
   UserSearchResult,
 } from "@workspace/api-client-react";
+import {
+  createAnalyticsSessionId,
+  trackNeighborRequestAttempted,
+  trackNeighborRequestOutcome,
+  trackNeighborRequestSucceeded,
+} from "@/lib/analytics";
 
 /**
  * Surface server-side validation messages from ApiError when present, falling
@@ -164,37 +170,62 @@ export function NeighborsInline({
   );
 
   const handleAccept = useCallback(
-    async (requestId: string) => {
+    async (requestId: string, requesterId: string) => {
       try {
         await acceptRequest.mutateAsync({ id: requestId });
+        trackNeighborRequestOutcome({
+          actorId: userId,
+          otherUserId: requesterId,
+          requestId,
+          outcome: "accepted",
+        });
         requestsQuery.refetch();
         neighborsQuery.refetch();
       } catch (e: unknown) {
         showToast({ message: describeApiError(e, "수락에 실패했습니다."), type: "error" });
       }
     },
-    [acceptRequest, requestsQuery, neighborsQuery],
+    [acceptRequest, requestsQuery, neighborsQuery, userId],
   );
 
   const handleReject = useCallback(
-    async (requestId: string) => {
+    async (requestId: string, requesterId: string) => {
       try {
         await rejectRequest.mutateAsync({ id: requestId });
+        trackNeighborRequestOutcome({
+          actorId: userId,
+          otherUserId: requesterId,
+          requestId,
+          outcome: "rejected",
+        });
         requestsQuery.refetch();
       } catch (e: unknown) {
         showToast({ message: describeApiError(e, "거절에 실패했습니다."), type: "error" });
       }
     },
-    [rejectRequest, requestsQuery],
+    [rejectRequest, requestsQuery, userId],
   );
 
   const handleSendRequestToUser = useCallback(
     async (targetUser: UserSearchResult) => {
       if (targetUser.status !== "none") return;
+      const attemptId = createAnalyticsSessionId();
+      trackNeighborRequestAttempted({
+        requesterId: userId,
+        recipientId: targetUser.id,
+        attemptId,
+        source: "neighbor_search",
+      });
       setSendingToUserId(targetUser.id);
       try {
-        await createRequest.mutateAsync({
+        const request = await createRequest.mutateAsync({
           data: { requesterId: userId, recipientId: targetUser.id },
+        });
+        trackNeighborRequestSucceeded({
+          requesterId: userId,
+          recipientId: targetUser.id,
+          requestId: request.id,
+          source: "neighbor_search",
         });
         searchResults.refetch();
         sentRequestsQuery.refetch();
@@ -221,10 +252,16 @@ export function NeighborsInline({
   );
 
   const handleCancelRequest = useCallback(
-    async (requestId: string) => {
+    async (requestId: string, recipientId: string) => {
       if (deleteNeighborRequest.isPending) return;
       try {
         await deleteNeighborRequest.mutateAsync({ id: requestId });
+        trackNeighborRequestOutcome({
+          actorId: userId,
+          otherUserId: recipientId,
+          requestId,
+          outcome: "cancelled",
+        });
         searchResults.refetch();
         sentRequestsQuery.refetch();
       } catch (e: unknown) {
@@ -233,7 +270,7 @@ export function NeighborsInline({
         setCancelTarget(null);
       }
     },
-    [deleteNeighborRequest, searchResults, sentRequestsQuery],
+    [deleteNeighborRequest, searchResults, sentRequestsQuery, userId],
   );
 
   const handleNeighborPress = useCallback(
@@ -300,7 +337,7 @@ export function NeighborsInline({
           style={styles.acceptButton}
           disabledStyle={styles.buttonDisabled}
           textStyle={styles.acceptText}
-          onPress={() => handleAccept(item.id)}
+          onPress={() => handleAccept(item.id, item.requesterId)}
           pending={acceptRequest.isPending}
           disabled={rejectRequest.isPending}
           label="수락"
@@ -638,7 +675,8 @@ export function NeighborsInline({
         destructive
         onConfirm={() => {
           if (rejectTarget) {
-            handleReject(rejectTarget.id);
+            const request = pendingRequests.find((item) => item.id === rejectTarget.id);
+            if (request) handleReject(rejectTarget.id, request.requesterId);
           }
           setRejectTarget(null);
         }}
@@ -654,7 +692,8 @@ export function NeighborsInline({
         destructive
         onConfirm={() => {
           if (cancelTarget) {
-            handleCancelRequest(cancelTarget.id);
+            const request = sentRequests.find((item) => item.id === cancelTarget.id);
+            if (request) handleCancelRequest(cancelTarget.id, request.recipientId);
           }
         }}
         onCancel={() => setCancelTarget(null)}

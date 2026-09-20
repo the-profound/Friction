@@ -1,9 +1,37 @@
 import { Router, type IRouter } from "express";
 import { and, eq, or } from "drizzle-orm";
-import { db, neighborsTable, neighborRequestsTable, usersTable } from "@workspace/db";
+import { db, inboxTable, neighborsTable, neighborRequestsTable, sendRecordsTable, usersTable } from "@workspace/db";
 import { CreateNeighborRequestBody } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth";
+import { calculateRelationshipMetrics } from "../lib/relationshipMetrics";
 
 const router: IRouter = Router();
+
+router.get("/relationship-metrics", requireAuth, async (_req, res) => {
+  const [neighbors, sends, inboxRows] = await Promise.all([
+    db.select({
+      userAId: neighborsTable.userAId,
+      userBId: neighborsTable.userBId,
+      createdAt: neighborsTable.createdAt,
+      acceptedAt: neighborsTable.acceptedAt,
+    }).from(neighborsTable),
+    db.select({
+      id: sendRecordsTable.id,
+      senderId: sendRecordsTable.senderId,
+      recipientId: sendRecordsTable.recipientId,
+      inboxId: sendRecordsTable.inboxId,
+      replyToInboxId: sendRecordsTable.replyToInboxId,
+      targetType: sendRecordsTable.targetType,
+      deliverySlot: sendRecordsTable.deliverySlot,
+      sentAt: sendRecordsTable.sentAt,
+    }).from(sendRecordsTable),
+    db.select({
+      id: inboxTable.id,
+      openedAt: inboxTable.openedAt,
+    }).from(inboxTable),
+  ]);
+  res.json(calculateRelationshipMetrics(neighbors, sends, inboxRows));
+});
 
 router.get("/neighbors", async (req, res) => {
   const { userId } = req.query;
@@ -202,6 +230,8 @@ router.post("/neighbor-requests/:id/accept", async (req, res) => {
     const [n] = await tx.insert(neighborsTable).values({
       userAId: aId,
       userBId: bId,
+      createdAt: request.createdAt,
+      acceptedAt: new Date(),
     }).returning();
 
     await tx.delete(neighborRequestsTable).where(eq(neighborRequestsTable.id, req.params.id));
