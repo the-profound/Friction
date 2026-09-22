@@ -12,6 +12,7 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
+  resolveThoughtEditorLayout,
   resolveThoughtEditorCardMinHeight,
   resolveThoughtInputHeight,
   shouldShowReadingThoughtToolbar,
@@ -43,8 +44,8 @@ describe("inline reading thought lifecycle", () => {
       "utf8",
     );
 
-    expect(source.match(/onFocus=\{\(\) => setEditorFocused\(true\)\}/g)).toHaveLength(2);
-    expect(source.match(/onBlur=\{\(\) => setEditorFocused\(false\)\}/g)).toHaveLength(2);
+    expect(source.match(/onFocus=\{\(\) => setEditorFocused\(true\)\}/g)).toHaveLength(1);
+    expect(source.match(/onBlur=\{\(\) => setEditorFocused\(false\)\}/g)).toHaveLength(1);
     expect(source).toContain('mode="restricted"');
     expect(source).toContain("inputRef.current?.blur();");
     expect(source.indexOf("{showKeyboardToolbar && (")).toBeLessThan(
@@ -186,6 +187,7 @@ describe("inline reading thought lifecycle", () => {
       measurement: {
         editorKey: "quoted",
         width: 320,
+        layoutGeneration: 0,
         contentHeight: 148,
       },
     })).toBe(148);
@@ -195,6 +197,7 @@ describe("inline reading thought lifecycle", () => {
     const measurement = {
       editorKey: "previous",
       width: 320,
+      layoutGeneration: 0,
       contentHeight: 148,
     };
     expect(resolveThoughtInputHeight({
@@ -220,6 +223,7 @@ describe("inline reading thought lifecycle", () => {
     const staleMeasurement = {
       editorKey: "previous",
       width: 320,
+      layoutGeneration: 0,
       contentHeight: 148,
     };
     expect(resolveThoughtInputHeight({
@@ -247,12 +251,12 @@ describe("inline reading thought lifecycle", () => {
     expect(resolveThoughtInputHeight({
       ...native,
       width: 320,
-      measurement: { editorKey: "editor", width: 320, contentHeight: 196 },
+      measurement: { editorKey: "editor", width: 320, layoutGeneration: 0, contentHeight: 196 },
     })).toBe(196);
     expect(resolveThoughtInputHeight({
       ...native,
       width: 280,
-      measurement: { editorKey: "editor", width: 280, contentHeight: 224 },
+      measurement: { editorKey: "editor", width: 280, layoutGeneration: 0, contentHeight: 224 },
     })).toBe(224);
   });
 
@@ -260,11 +264,11 @@ describe("inline reading thought lifecycle", () => {
     const base = { editorKey: "editor", width: 320, minHeight: 72 };
     expect(resolveThoughtInputHeight({
       ...base,
-      measurement: { editorKey: "editor", width: 320, contentHeight: 196 },
+      measurement: { editorKey: "editor", width: 320, layoutGeneration: 0, contentHeight: 196 },
     })).toBe(196);
     expect(resolveThoughtInputHeight({
       ...base,
-      measurement: { editorKey: "editor", width: 320, contentHeight: 45 },
+      measurement: { editorKey: "editor", width: 320, layoutGeneration: 0, contentHeight: 45 },
     })).toBe(72);
   });
 
@@ -283,6 +287,56 @@ describe("inline reading thought lifecycle", () => {
     })).toBe(104);
   });
 
+  it("moves the card surface and following row together when native content grows and shrinks", () => {
+    const layout = (contentHeight: number) => resolveThoughtEditorLayout({
+      editorKey: "existing",
+      width: 320,
+      minHeight: 72,
+      layoutGeneration: 4,
+      measurement: {
+        editorKey: "existing",
+        width: 320,
+        layoutGeneration: 4,
+        contentHeight,
+      },
+      cardVerticalPadding: 32,
+      rowTop: 40,
+      rowGap: 10,
+    });
+
+    expect(layout(196)).toEqual({
+      inputHeight: 196,
+      cardMinHeight: 228,
+      nextRowTop: 278,
+    });
+    expect(layout(45)).toEqual({
+      inputHeight: 72,
+      cardMinHeight: 104,
+      nextRowTop: 154,
+    });
+  });
+
+  it("rejects delayed measurements after an editor or width layout generation changes", () => {
+    expect(resolveThoughtEditorLayout({
+      editorKey: "same-editor",
+      width: 320,
+      minHeight: 72,
+      layoutGeneration: 8,
+      measurement: {
+        editorKey: "same-editor",
+        width: 320,
+        layoutGeneration: 7,
+        contentHeight: 260,
+      },
+      unmeasuredHeight: "intrinsic",
+      cardVerticalPadding: 32,
+    })).toEqual({
+      inputHeight: undefined,
+      cardMinHeight: undefined,
+      nextRowTop: undefined,
+    });
+  });
+
   it("keeps DOM height measurement web-only while retaining native content-size events", () => {
     const source = readFileSync(
       join(__dirname, "../../components/ThoughtsBottomSheet/ThoughtsBottomSheet.tsx"),
@@ -291,11 +345,11 @@ describe("inline reading thought lifecycle", () => {
     expect(source).toContain('if (Platform.OS !== "web") return;');
     expect(source).toContain('if (Platform.OS === "web") {');
     expect(source).toContain('element.style.height = "0px";');
-    expect(source.match(/onContentSizeChange=\{/g)).toHaveLength(2);
+    expect(source.match(/onContentSizeChange=\{/g)).toHaveLength(1);
     expect(source).toContain(
       "scrollEditorBottomIntoView(key, cardLayoutRevisionRef.current);",
     );
-    expect(source.match(/minHeight: editorCardMinHeight/g)).toHaveLength(2);
+    expect(source.match(/minHeight: editorCardMinHeight/g)).toHaveLength(1);
     expect(source).toContain("cardLayoutRevisionRef.current !== layoutRevision");
     expect(source).toContain("reconcileEditorVisibilityRef.current();");
     expect(source).toContain(
@@ -304,7 +358,7 @@ describe("inline reading thought lifecycle", () => {
     expect(source).toContain(
       'unmeasuredHeight: Platform.OS === "web" ? "minimum" : "intrinsic"',
     );
-    expect(source.match(/scrollEnabled=\{false\}/g)).toHaveLength(2);
+    expect(source.match(/scrollEnabled=\{false\}/g)).toHaveLength(1);
   });
 
   const optimistic = (

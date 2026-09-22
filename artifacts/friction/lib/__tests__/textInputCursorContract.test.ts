@@ -43,7 +43,7 @@ describe("editable React Native input cursor contract", () => {
       }
     }
 
-    expect(editableInputCount).toBe(37);
+    expect(editableInputCount).toBe(36);
   });
 
   it("keeps stored sentence selection feedback opaque with the cursor token", () => {
@@ -130,9 +130,9 @@ describe("editable React Native input cursor contract", () => {
     expect(source).toContain("lineHeight: fontSize * THOUGHT_LINE_HEIGHT_RATIO");
     expect(source).toContain("event.nativeEvent.contentSize.height");
     expect(source).toContain("{ minHeight: inputMinHeight, height: inputHeight }");
-    expect(source.match(/scrollEnabled=\{false\}/g)).toHaveLength(2);
+    expect(source.match(/scrollEnabled=\{false\}/g)).toHaveLength(1);
     expect(source.match(/thoughtTypography/g)?.length).toBeGreaterThanOrEqual(5);
-    expect(source.match(/selectionColor=\{Colors\.cursorAccent\}/g)).toHaveLength(2);
+    expect(source.match(/selectionColor=\{Colors\.cursorAccent\}/g)).toHaveLength(1);
   });
 
   it("starts every reading thought card with its body and keeps retry recovery", () => {

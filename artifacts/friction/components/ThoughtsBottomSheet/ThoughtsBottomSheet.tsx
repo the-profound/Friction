@@ -49,8 +49,7 @@ import {
   normalizeThoughtLineBreaks,
   reconcileConfirmedThoughts,
   reconcileDeletedThoughtIds,
-  resolveThoughtEditorCardMinHeight,
-  resolveThoughtInputHeight,
+  resolveThoughtEditorLayout,
   shouldShowReadingThoughtToolbar,
   startImmediateClose,
   type ThoughtInputHeightMeasurement,
@@ -232,8 +231,19 @@ export default function ThoughtsBottomSheet({
   const [thoughtCardWidth, setThoughtCardWidth] = useState(
     Math.max(0, screenWidth - Spacing.screenPx * 2),
   );
+  const thoughtCardWidthRef = useRef(thoughtCardWidth);
+  thoughtCardWidthRef.current = thoughtCardWidth;
   const [inputHeightMeasurement, setInputHeightMeasurement] =
     useState<ThoughtInputHeightMeasurement>();
+  const [editorLayoutGeneration, setEditorLayoutGeneration] = useState(0);
+  const editorLayoutGenerationRef = useRef(0);
+  editorLayoutGenerationRef.current = editorLayoutGeneration;
+  const invalidateEditorLayout = useCallback(() => {
+    const nextGeneration = editorLayoutGenerationRef.current + 1;
+    editorLayoutGenerationRef.current = nextGeneration;
+    setInputHeightMeasurement(undefined);
+    setEditorLayoutGeneration(nextGeneration);
+  }, []);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef<EditorState | null>(null);
   editorRef.current = editor;
@@ -247,21 +257,20 @@ export default function ThoughtsBottomSheet({
   const inputMinHeight =
     thoughtTypography.lineHeight * THOUGHT_INPUT_MIN_LINES +
     THOUGHT_INPUT_VERTICAL_PADDING;
-  const inputHeight = resolveThoughtInputHeight({
+  const editorLayout = resolveThoughtEditorLayout({
     editorKey: editor?.key,
     width: thoughtCardWidth,
     minHeight: inputMinHeight,
+    layoutGeneration: editorLayoutGeneration,
     measurement: inputHeightMeasurement,
     // A native multiline TextInput must be allowed to lay itself out before its
     // first content-size event (and again after editor/width invalidation).
     // Forcing the minimum height during that window makes the measured viewport
     // feed back as the content height and leaves long content clipped.
     unmeasuredHeight: Platform.OS === "web" ? "minimum" : "intrinsic",
+    cardVerticalPadding: THOUGHT_CARD_VERTICAL_PADDING,
   });
-  const editorCardMinHeight = resolveThoughtEditorCardMinHeight({
-    inputHeight,
-    verticalPadding: THOUGHT_CARD_VERTICAL_PADDING,
-  });
+  const { inputHeight, cardMinHeight: editorCardMinHeight } = editorLayout;
   const showKeyboardToolbar = shouldShowReadingThoughtToolbar({
     visible,
     editorActive: editor != null,
@@ -293,6 +302,7 @@ export default function ThoughtsBottomSheet({
     setInputHeightMeasurement({
       editorKey: key,
       width: thoughtCardWidth,
+      layoutGeneration: editorLayoutGenerationRef.current,
       contentHeight,
     });
   }, [thoughtCardWidth]);
@@ -881,6 +891,7 @@ export default function ThoughtsBottomSheet({
     if (openSession !== sessionTokenRef.current) return;
     const key = thought?.id ?? createClientId();
     const text = normalizeThoughtLineBreaks(thought?.content ?? "");
+    invalidateEditorLayout();
     setEditor({
       key,
       thought,
@@ -898,7 +909,7 @@ export default function ThoughtsBottomSheet({
       }
       else scrollRef.current?.scrollToEnd({ animated: true });
     }, 80);
-  }, [commitEditor]);
+  }, [commitEditor, invalidateEditorLayout]);
 
   const scrollEditorBottomIntoView = useCallback((key: string, layoutRevision: number) => {
     setTimeout(() => {
@@ -929,9 +940,11 @@ export default function ThoughtsBottomSheet({
   ) => {
     const previous = cardLayoutRef.current[key];
     cardLayoutRef.current[key] = { y: layout.y, height: layout.height };
-    setThoughtCardWidth((current) =>
-      Math.abs(current - layout.width) < 0.5 ? current : layout.width,
-    );
+    if (Math.abs(thoughtCardWidthRef.current - layout.width) >= 0.5) {
+      thoughtCardWidthRef.current = layout.width;
+      invalidateEditorLayout();
+      setThoughtCardWidth(layout.width);
+    }
     if (
       editorRef.current?.key === key
       && (!previous || Math.abs(previous.height - layout.height) >= 0.5)
@@ -939,7 +952,7 @@ export default function ThoughtsBottomSheet({
       cardLayoutRevisionRef.current += 1;
       scrollEditorBottomIntoView(key, cardLayoutRevisionRef.current);
     }
-  }, [scrollEditorBottomIntoView]);
+  }, [invalidateEditorLayout, scrollEditorBottomIntoView]);
 
   const handleEditorContentSizeChange = useCallback((
     key: string,
@@ -953,16 +966,76 @@ export default function ThoughtsBottomSheet({
       const next = {
         editorKey: key,
         width: thoughtCardWidth,
+        layoutGeneration: editorLayoutGenerationRef.current,
         contentHeight,
       };
       return current
         && current.editorKey === next.editorKey
+        && current.layoutGeneration === next.layoutGeneration
         && Math.abs(current.width - next.width) < 0.5
         && Math.abs(current.contentHeight - next.contentHeight) < 0.5
         ? current
         : next;
     });
   }, [measureWebInputHeight, thoughtCardWidth]);
+
+  const renderEditorCard = (accessibilityLabel: string) => {
+    if (!editor) return null;
+    return (
+      <View
+        onLayout={(event) => {
+          updateThoughtCardLayout(editor.key, event.nativeEvent.layout);
+        }}
+        style={[styles.editorCard, { minHeight: editorCardMinHeight }]}
+      >
+        <TextInput
+          ref={inputRef}
+          value={editor.text}
+          onChangeText={(text) => setEditor((value) => value ? {
+            ...value,
+            text: normalizeThoughtLineBreaks(text),
+            error: undefined,
+          } : value)}
+          editable={!editor.pending}
+          style={[
+            styles.cardInput,
+            thoughtTypography,
+            { minHeight: inputMinHeight, height: inputHeight },
+          ]}
+          multiline
+          underlineColorAndroid="transparent"
+          scrollEnabled={false}
+          textAlignVertical="top"
+          placeholder="단상을 적어보세요"
+          placeholderTextColor={Colors.zinc400}
+          cursorColor={Colors.cursorAccent}
+          selectionColor={Colors.cursorAccent}
+          accessibilityLabel={accessibilityLabel}
+          onFocus={() => setEditorFocused(true)}
+          onBlur={() => setEditorFocused(false)}
+          onContentSizeChange={(event) =>
+            handleEditorContentSizeChange(
+              editor.key,
+              event.nativeEvent.contentSize.height,
+            )
+          }
+        />
+        {editor.error && (
+          <View style={styles.errorRow}>
+            <Text style={styles.errorText}>{editor.error}</Text>
+            <Pressable
+              onPress={() => void commitEditor()}
+              style={({ pressed }) => [styles.retryButton, pressed && styles.buttonPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="단상 저장 다시 시도"
+            >
+              <Text style={styles.retryText}>다시 시도</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   // 모든 닫기 경로(배경 탭, 핸들 드래그, 외부 ref)는 동일한 저장 수명주기를 거친다.
   // 최신 스냅샷 저장을 시작한 직후 결과를 기다리지 않고 닫기 애니메이션을 시작한다.
@@ -1182,59 +1255,9 @@ export default function ThoughtsBottomSheet({
                       )}
                     </View>
                   ) : editor?.thought?.id === t.id ? (
-                    <View
-                      key={t.id}
-                      onLayout={(event) => {
-                        updateThoughtCardLayout(t.id, event.nativeEvent.layout);
-                      }}
-                      style={[styles.editorCard, { minHeight: editorCardMinHeight }]}
-                    >
-                      <TextInput
-                        ref={inputRef}
-                        value={editor.text}
-                        onChangeText={(text) => setEditor((value) => value ? {
-                          ...value,
-                          text: normalizeThoughtLineBreaks(text),
-                          error: undefined,
-                        } : value)}
-                        editable={!editor.pending}
-                        style={[
-                          styles.cardInput,
-                          thoughtTypography,
-                          { minHeight: inputMinHeight, height: inputHeight },
-                        ]}
-                        multiline
-                        underlineColorAndroid="transparent"
-                        scrollEnabled={false}
-                        textAlignVertical="top"
-                        placeholder="단상을 적어보세요"
-                        placeholderTextColor={Colors.zinc400}
-                        cursorColor={Colors.cursorAccent}
-                        selectionColor={Colors.cursorAccent}
-                        accessibilityLabel="단상 내용"
-                        onFocus={() => setEditorFocused(true)}
-                        onBlur={() => setEditorFocused(false)}
-                        onContentSizeChange={(event) =>
-                          handleEditorContentSizeChange(
-                            editor.key,
-                            event.nativeEvent.contentSize.height,
-                          )
-                        }
-                      />
-                      {editor.error && (
-                        <View style={styles.errorRow}>
-                          <Text style={styles.errorText}>{editor.error}</Text>
-                          <Pressable
-                            onPress={() => void commitEditor()}
-                            style={({ pressed }) => [styles.retryButton, pressed && styles.buttonPressed]}
-                            accessibilityRole="button"
-                            accessibilityLabel="단상 저장 다시 시도"
-                          >
-                            <Text style={styles.retryText}>다시 시도</Text>
-                          </Pressable>
-                        </View>
-                      )}
-                    </View>
+                    <React.Fragment key={t.id}>
+                      {renderEditorCard("단상 내용")}
+                    </React.Fragment>
                   ) : (
                     <Pressable
                       key={t.id}
@@ -1248,58 +1271,7 @@ export default function ThoughtsBottomSheet({
                     </Pressable>
                   ))}
                 {editor && !editor.thought && (
-                  <View
-                    onLayout={(event) => {
-                      updateThoughtCardLayout(editor.key, event.nativeEvent.layout);
-                    }}
-                    style={[styles.editorCard, { minHeight: editorCardMinHeight }]}
-                  >
-                    <TextInput
-                      ref={inputRef}
-                      value={editor.text}
-                      onChangeText={(text) => setEditor((value) => value ? {
-                        ...value,
-                        text: normalizeThoughtLineBreaks(text),
-                        error: undefined,
-                      } : value)}
-                      editable={!editor.pending}
-                      style={[
-                        styles.cardInput,
-                        thoughtTypography,
-                        { minHeight: inputMinHeight, height: inputHeight },
-                      ]}
-                      multiline
-                      underlineColorAndroid="transparent"
-                      scrollEnabled={false}
-                      textAlignVertical="top"
-                      placeholder="단상을 적어보세요"
-                      placeholderTextColor={Colors.zinc400}
-                      cursorColor={Colors.cursorAccent}
-                      selectionColor={Colors.cursorAccent}
-                      accessibilityLabel="새 단상 내용"
-                      onFocus={() => setEditorFocused(true)}
-                      onBlur={() => setEditorFocused(false)}
-                      onContentSizeChange={(event) =>
-                        handleEditorContentSizeChange(
-                          editor.key,
-                          event.nativeEvent.contentSize.height,
-                        )
-                      }
-                    />
-                    {editor.error && (
-                      <View style={styles.errorRow}>
-                        <Text style={styles.errorText}>{editor.error}</Text>
-                        <Pressable
-                          onPress={() => void commitEditor()}
-                          style={({ pressed }) => [styles.retryButton, pressed && styles.buttonPressed]}
-                          accessibilityRole="button"
-                          accessibilityLabel="단상 저장 다시 시도"
-                        >
-                          <Text style={styles.retryText}>다시 시도</Text>
-                        </Pressable>
-                      </View>
-                    )}
-                  </View>
+                  renderEditorCard("새 단상 내용")
                 )}
                 <Pressable
                   onPress={() => {

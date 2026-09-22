@@ -25,33 +25,71 @@ export interface KeyedSingleFlight<TResult> {
 export interface ThoughtInputHeightMeasurement {
   editorKey: string;
   width: number;
+  layoutGeneration: number;
   contentHeight: number;
+}
+
+export function resolveThoughtEditorLayout(input: {
+  editorKey?: string;
+  width: number;
+  minHeight: number;
+  layoutGeneration: number;
+  measurement?: ThoughtInputHeightMeasurement;
+  unmeasuredHeight?: "minimum" | "intrinsic";
+  cardVerticalPadding: number;
+  rowGap?: number;
+  rowTop?: number;
+}): {
+  inputHeight: number | undefined;
+  cardMinHeight: number | undefined;
+  nextRowTop: number | undefined;
+} {
+  const {
+    editorKey,
+    width,
+    minHeight,
+    layoutGeneration,
+    measurement,
+    unmeasuredHeight = "minimum",
+    cardVerticalPadding,
+    rowGap = 0,
+    rowTop = 0,
+  } = input;
+  const hasFreshMeasurement = !(
+    !editorKey
+    || !measurement
+    || measurement.editorKey !== editorKey
+    || measurement.layoutGeneration !== layoutGeneration
+    || Math.abs(measurement.width - width) >= 0.5
+    || !Number.isFinite(measurement.contentHeight)
+  );
+  const inputHeight = hasFreshMeasurement
+    ? Math.max(minHeight, measurement.contentHeight)
+    : unmeasuredHeight === "intrinsic" ? undefined : minHeight;
+  const cardMinHeight = resolveThoughtEditorCardMinHeight({
+    inputHeight,
+    verticalPadding: cardVerticalPadding,
+  });
+  return {
+    inputHeight,
+    cardMinHeight,
+    nextRowTop: cardMinHeight === undefined ? undefined : rowTop + cardMinHeight + rowGap,
+  };
 }
 
 export function resolveThoughtInputHeight(input: {
   editorKey?: string;
   width: number;
   minHeight: number;
+  layoutGeneration?: number;
   measurement?: ThoughtInputHeightMeasurement;
   unmeasuredHeight?: "minimum" | "intrinsic";
 }): number | undefined {
-  const {
-    editorKey,
-    width,
-    minHeight,
-    measurement,
-    unmeasuredHeight = "minimum",
-  } = input;
-  if (
-    !editorKey
-    || !measurement
-    || measurement.editorKey !== editorKey
-    || Math.abs(measurement.width - width) >= 0.5
-    || !Number.isFinite(measurement.contentHeight)
-  ) {
-    return unmeasuredHeight === "intrinsic" ? undefined : minHeight;
-  }
-  return Math.max(minHeight, measurement.contentHeight);
+  return resolveThoughtEditorLayout({
+    ...input,
+    layoutGeneration: input.layoutGeneration ?? 0,
+    cardVerticalPadding: 0,
+  }).inputHeight;
 }
 
 export function resolveThoughtEditorCardMinHeight(input: {
