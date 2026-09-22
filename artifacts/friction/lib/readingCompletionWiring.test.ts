@@ -312,7 +312,9 @@ describe("non-blocking completion save", () => {
       "const handleCommitAndSkip = useCallback",
     );
 
-    expect(handler).toContain("if (!canStartReply || !inboxId) return");
+    expect(handler).toContain(
+      "if (!canStartReply || !inboxId || isStartingReplyRef.current) return",
+    );
     expect(handler).toContain("const replySourceArticleId = articleId");
     expect(handler).toContain("const replyTargetInboxId = inboxId");
     expect(handler).toContain("router.push({");
@@ -332,6 +334,51 @@ describe("non-blocking completion save", () => {
       "clearActiveSession()",
     );
     expect(handler).toContain("background completion failed");
+  });
+
+  it("keeps the verified inbox reply target available after an in-screen reread", () => {
+    const restart = sourceBetween(
+      "const handleRestartReading = useCallback",
+      "const finishPageTurnRef = useRef",
+    );
+    const replySetup = sourceBetween(
+      "const isInboxEntry =",
+      "const promptOrContinue = useCallback",
+    );
+
+    expect(restart).toContain("inboxId,");
+    expect(restart).toContain("entrySource,");
+    expect(restart).toContain("reading.restartReading()");
+    expect(replySetup).toContain("Load every delivery for the current recipient");
+    expect(replySetup).toContain("item.id === inboxId");
+    expect(replySetup).not.toContain("isRead: false");
+    expect(readScreen).toContain("canReply={canStartReply}");
+  });
+
+  it("allows reply navigation during archive while preserving the archive owner", () => {
+    const handler = sourceBetween(
+      "const handleStartReply = useCallback",
+      "const handleCommitAndSkip = useCallback",
+    );
+    const archiveBranchStart = handler.indexOf(
+      'if (completionActionRef.current === "save")',
+    );
+    const launchStart = handler.indexOf("launchCompletionAction({");
+    const archiveBranch = handler.slice(archiveBranchStart, launchStart);
+    const screen = sourceBetween(
+      "function ReadingCompleteScreen({",
+      "const readingCompleteStyles = StyleSheet.create",
+    );
+
+    expect(archiveBranchStart).toBeGreaterThanOrEqual(0);
+    expect(archiveBranch).toContain("navigateToReply()");
+    expect(archiveBranch).toContain("return");
+    expect(archiveBranch).not.toContain("reading.commitCompletion()");
+    expect(screen).toContain("const isReplyBlocked = isDeleting || isStartingReply");
+    expect(screen).toContain("disabled={isReplyBlocked}");
+    expect(screen).toContain(
+      "accessibilityState={{ disabled: isReplyBlocked, busy: isStartingReply }}",
+    );
   });
 
   it("switches one stable action slot from archive to reread and keeps exit last", () => {

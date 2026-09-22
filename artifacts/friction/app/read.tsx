@@ -565,6 +565,7 @@ export default function ReadScreen() {
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isStartingReply, setIsStartingReply] = useState(false);
+  const isStartingReplyRef = useRef(false);
   const completionActionRef = useRef<"save" | "reply" | "exit" | null>(null);
   const isInboxEntry = entrySource === "inbox" || !!inboxId;
 
@@ -1885,6 +1886,8 @@ export default function ReadScreen() {
       onFinally: () => {
         isSavingRef.current = false;
         setIsSaving(false);
+        isStartingReplyRef.current = false;
+        setIsStartingReply(false);
       },
     });
     if (!started) return;
@@ -1899,14 +1902,13 @@ export default function ReadScreen() {
   }, [isCollectionsReady, isAlreadySaved, reading, applyAnsweredQuestionCardsToMemo, syncSpaceInboxRead, selectedCollectionId, collectionsQuery.data, articleId, userId, createCollection, addToCollection, updateRecentCollection, queryClient, showToast]);
 
   const handleStartReply = useCallback(() => {
-    if (!canStartReply || !inboxId) return;
+    if (!canStartReply || !inboxId || isStartingReplyRef.current) return;
     const replySourceArticleId = articleId;
     const replyTargetInboxId = inboxId;
-    launchCompletionAction({
-      lock: completionActionRef,
-      action: "reply",
-      onStart: () => {
-        setIsStartingReply(true);
+    const navigateToReply = () => {
+      isStartingReplyRef.current = true;
+      setIsStartingReply(true);
+      try {
         router.push({
           pathname: "/on-01a",
           params: {
@@ -1915,7 +1917,24 @@ export default function ReadScreen() {
             replyToInboxId: replyTargetInboxId,
           },
         });
-      },
+      } catch (error) {
+        isStartingReplyRef.current = false;
+        setIsStartingReply(false);
+        throw error;
+      }
+    };
+
+    if (completionActionRef.current === "save") {
+      // Archive already owns completion persistence. Keep that single background
+      // attempt running and open the reply with the verified original delivery.
+      navigateToReply();
+      return;
+    }
+
+    launchCompletionAction({
+      lock: completionActionRef,
+      action: "reply",
+      onStart: navigateToReply,
       work: async () => {
         const result = await reading.commitCompletion();
         if (!result.success) {
@@ -1934,6 +1953,7 @@ export default function ReadScreen() {
         });
       },
       onFinally: () => {
+        isStartingReplyRef.current = false;
         setIsStartingReply(false);
       },
     });
@@ -3087,6 +3107,7 @@ function ReadingCompleteScreen({
 }: ReadingCompleteScreenProps) {
   const insets = useSafeAreaInsets();
   const isNavigationBlocked = isActionBusy && !isSaving;
+  const isReplyBlocked = isDeleting || isStartingReply;
   const message = caseType === "read"
     ? "마지막 장까지\n온전히 닿았습니다."
     : "마지막 장을\n직접 완성했습니다.";
@@ -3107,12 +3128,12 @@ function ReadingCompleteScreen({
       <View style={[readingCompleteStyles.bottom, { paddingBottom: Platform.OS === "web" ? 34 : Math.max(insets.bottom, 24) }]}>
         {canReply ? (
           <Pressable
-            style={[readingCompleteStyles.actionShadow, isActionBusy && readingCompleteStyles.btnDisabled]}
+            style={[readingCompleteStyles.actionShadow, isReplyBlocked && readingCompleteStyles.btnDisabled]}
             onPress={onReply}
-            disabled={isActionBusy}
+            disabled={isReplyBlocked}
             accessibilityRole="button"
             accessibilityLabel="답글 쓰기"
-            accessibilityState={{ disabled: isActionBusy, busy: isStartingReply }}
+            accessibilityState={{ disabled: isReplyBlocked, busy: isStartingReply }}
             testID="reading-complete-reply"
           >
             <View style={readingCompleteStyles.replyBtn}>

@@ -76,7 +76,30 @@ describe("reply after reading flow", () => {
     expect(readScreen).toContain(
       "isActionBusy={isSaving || isDeleting || isStartingReply}",
     );
-    expect(readScreen).toContain("disabled={isActionBusy}");
+    expect(readScreen).toContain("const isReplyBlocked = isDeleting || isStartingReply");
+    expect(readScreen).toContain("disabled={isReplyBlocked}");
+    expect(readScreen).toContain(
+      "accessibilityState={{ disabled: isReplyBlocked, busy: isStartingReply }}",
+    );
+  });
+
+  it("opens one reply during archive without starting duplicate completion work", () => {
+    const handlerStart = readScreen.indexOf("const handleStartReply = useCallback");
+    const handlerEnd = readScreen.indexOf("const handleCommitAndSkip = useCallback", handlerStart);
+    const handler = readScreen.slice(handlerStart, handlerEnd);
+    const archiveBranchStart = handler.indexOf(
+      'if (completionActionRef.current === "save")',
+    );
+    const launchStart = handler.indexOf("launchCompletionAction({");
+    const archiveBranch = handler.slice(archiveBranchStart, launchStart);
+
+    expect(handler).toContain("isStartingReplyRef.current");
+    expect(archiveBranchStart).toBeGreaterThanOrEqual(0);
+    expect(archiveBranch).toContain("navigateToReply()");
+    expect(archiveBranch).toContain("return");
+    expect(archiveBranch).not.toContain("commitCompletion");
+    expect(handler).toContain("sourceArticleId: replySourceArticleId");
+    expect(handler).toContain("replyToInboxId: replyTargetInboxId");
   });
 
   it("requires the exact reply target to be verified on the send screen", () => {
